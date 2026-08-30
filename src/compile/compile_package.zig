@@ -340,7 +340,7 @@ fn importedTypeModule(sibling_env: *const ModuleEnv) ?ImportedTypeModule {
     const type_node_idx = sibling_env.getExposedTypeNodeIndexById(type_ident_in_module) orelse return null;
     return .{
         .source_ident = type_ident_in_module,
-        .statement_idx = @enumFromInt(type_node_idx),
+        .statement_idx = @fromBackingInt(@intCast(type_node_idx)),
     };
 }
 
@@ -356,7 +356,7 @@ pub fn resolveSelectedType(
 ) ?can.CIR.Statement.Idx {
     const source_ident = sibling_env.common.findIdent(qualified_name) orelse return null;
     const type_node_idx = sibling_env.getExposedTypeNodeIndexById(source_ident) orelse return null;
-    return @enumFromInt(type_node_idx);
+    return @fromBackingInt(@intCast(type_node_idx));
 }
 
 /// Canonicalize one module of a package.

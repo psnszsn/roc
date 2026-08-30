@@ -15,7 +15,7 @@ const is_freestanding = @import("../threading.zig").is_freestanding;
 fn countProcsNaming(store: *const lir.LirStore, fragment: []const u8) usize {
     var count: usize = 0;
     for (0..store.procSpecCount()) |index| {
-        const name = store.procDebugName(@enumFromInt(index)) orelse continue;
+        const name = store.procDebugName(@fromBackingInt(@intCast(index))) orelse continue;
         if (std.mem.find(u8, name, fragment) != null) count += 1;
     }
     return count;

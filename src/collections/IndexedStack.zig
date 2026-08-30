@@ -32,7 +32,7 @@ pub fn IndexedStack(comptime K: type) type {
         fn index(key: K) usize {
             return switch (@typeInfo(K)) {
                 .int => @intCast(key),
-                .@"enum" => @intCast(@intFromEnum(key)),
+                .@"enum" => @intCast(@backingInt(key)),
                 .type,
                 .void,
                 .bool,

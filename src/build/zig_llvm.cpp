@@ -228,8 +228,15 @@ LLVMTargetMachineRef ZigLLVMCreateTargetMachine(LLVMTargetRef T, const char *Tri
         opt.EmulatedTLS = true;
     }
 
-    TargetMachine *TM = reinterpret_cast<Target*>(T)->createTargetMachine(Triple, CPU, Features, opt, RM, CM,
-            OL, JIT);
+    TargetMachine *TM = reinterpret_cast<Target*>(T)->createTargetMachine(
+        llvm::Triple(Triple),
+        CPU,
+        Features,
+        opt,
+        RM,
+        CM,
+        OL,
+        JIT);
     return reinterpret_cast<LLVMTargetMachineRef>(TM);
 }
 
@@ -573,7 +580,7 @@ ZIG_EXTERN_C void ZigLLVMFreeEmittedObject(char *bytes) {
 
 void ZigLLVMSetOptBisectLimit(LLVMContextRef context_ref, int limit) {
     static OptBisect opt_bisect;
-    opt_bisect.setLimit(limit);
+    opt_bisect.setIntervals({0, limit});
     unwrap(context_ref)->setOptPassGate(opt_bisect);
 }
 

@@ -59,6 +59,9 @@ pub fn currentBytes() ?u64 {
         .watchos,
         .uefi,
         .@"3ds",
+        .wiiu,
+        .@"switch",
+        .psx,
         .ps3,
         .ps4,
         .ps5,
@@ -74,6 +77,8 @@ pub fn currentBytes() ?u64 {
         .opencl,
         .opengl,
         .vulkan,
+        .tios,
+        .ashetos,
         => return null,
     }
 }

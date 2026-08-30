@@ -40,6 +40,11 @@ fn classifyPlatformOs(os: std.Target.Os.Tag) PlatformOs {
         .ps4,
         .ps5,
         .psp,
+        .wiiu,
+        .@"switch",
+        .psx,
+        .tios,
+        .ashetos,
         .vita,
         .emscripten,
         .wasi,
@@ -248,7 +253,7 @@ pub fn getSystemPageSize() PageSizeError!usize {
             break :blk page_size_c;
         },
         .freebsd, .netbsd, .openbsd, .dragonfly => blk: {
-            const result = std.c.sysconf(@intFromEnum(std.c._SC.PAGESIZE));
+            const result = std.c.sysconf(@backingInt(std.c._SC.PAGESIZE));
             if (result <= 0) return error.PageSizeQueryFailed;
             break :blk @intCast(result);
         },
@@ -329,7 +334,7 @@ fn createUnlinkedTempFileMapping(io: std.Io, size: usize) SharedMemoryError!Hand
     const random_val = std.mem.readInt(u64, &random_buf, .little);
 
     var file_path_buf: [std.fmt.count("/tmp/roc_shm_{}", .{@as(u64, std.math.maxInt(u64))}) + 1]u8 = undefined;
-    const file_path = std.fmt.bufPrintZ(&file_path_buf, "/tmp/roc_shm_{}", .{random_val}) catch unreachable;
+    const file_path = std.mem.printSentinel(&file_path_buf, "/tmp/roc_shm_{}", .{random_val}, 0) catch unreachable;
     const fd = std.c.open(
         file_path,
         std.c.O{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true },
@@ -358,7 +363,7 @@ fn createPosixShmMapping(io: std.Io, size: usize) SharedMemoryError!Handle {
     // The name is "/roc_shm_" + a u64, so size the buffer to the longest
     // possible such name (largest u64) plus a NUL - it can never overflow.
     var shm_name_buf: [std.fmt.count("/roc_shm_{}", .{@as(u64, std.math.maxInt(u64))}) + 1]u8 = undefined;
-    const shm_name_null_terminated = std.fmt.bufPrintZ(&shm_name_buf, "/roc_shm_{}", .{random_val}) catch unreachable;
+    const shm_name_null_terminated = std.mem.printSentinel(&shm_name_buf, "/roc_shm_{}", .{random_val}, 0) catch unreachable;
     const fd = posix.shm_open(
         shm_name_null_terminated,
         @as(u32, @bitCast(std.posix.O{ .ACCMODE = .RDWR, .CREAT = true, .EXCL = true })),
@@ -589,7 +594,7 @@ fn unmapWindowsMemory(ptr: *anyopaque) void {
 fn unmapLinuxMemory(ptr: *anyopaque, size: usize) void {
     const errno = linux.errno(linux.munmap(@ptrCast(ptr), size));
     if (errno != .SUCCESS) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("munmap failed with errno {t}", .{errno});
         }
         unreachable;
@@ -599,7 +604,7 @@ fn unmapLinuxMemory(ptr: *anyopaque, size: usize) void {
 fn unmapPosixMemory(ptr: *anyopaque, size: usize) void {
     const rc = posix.munmap(ptr, size);
     if (rc != 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("munmap failed with errno {d}", .{std.c._errno().*});
         }
         unreachable;
@@ -630,7 +635,7 @@ fn closeLinuxHandle(handle: Handle) void {
     // POSIX always closes the fd
     const errno = linux.errno(linux.close(handle));
     if (errno != .SUCCESS) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("close failed with errno {t}", .{errno});
         }
         unreachable;
@@ -641,7 +646,7 @@ fn closePosixHandle(handle: Handle) void {
     // POSIX always closes the fd
     const rc = posix.close(handle);
     if (rc != 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("close failed with errno {d}", .{std.c._errno().*});
         }
         unreachable;

@@ -153,13 +153,13 @@ pub fn write(allocator: Allocator, set: *const ProcArtifact.Set, specs: []const 
                 },
                 .data => |data_kind| {
                     try writer.byte(1);
-                    try writer.byte(@intFromEnum(data_kind));
+                    try writer.byte(@backingInt(data_kind));
                 },
             }
             try writer.str(names.of(relocation.name));
             // A reference to carried program data now names it by content.
             const scope: ProcArtifact.SymbolScope = if (names.renames(relocation.name)) .shared else relocation.scope;
-            try writer.byte(@intFromEnum(scope));
+            try writer.byte(@backingInt(scope));
         }
         try writer.word(@intCast(artifact.data.len));
         for (artifact.data) |item| {
@@ -540,7 +540,7 @@ test "pack bytes round-trip every artifact field and spec entry" {
     defer set.deinit();
     const specs = [_]SpecEntry{
         .{
-            .key = [_]u8{0xab} ** 32,
+            .key = @as([32]u8, @splat(0xab)),
             .artifact = 0,
             .rc_borrowed_params = 0b101,
             .rc_ret_borrowed = true,

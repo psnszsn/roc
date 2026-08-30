@@ -53,6 +53,11 @@ pub const Format = enum {
             .ps4,
             .ps5,
             .psp,
+            .wiiu,
+            .@"switch",
+            .psx,
+            .tios,
+            .ashetos,
             .vita,
             .emscripten,
             .wasi,
@@ -99,7 +104,7 @@ pub fn link(
 
     const c_args = try arena.alloc([*:0]const u8, args.len);
     for (args, 0..) |arg, i| {
-        c_args[i] = (try arena.dupeZ(u8, arg)).ptr;
+        c_args[i] = (try arena.dupeSentinel(u8, arg, 0)).ptr;
     }
 
     const success = switch (format) {

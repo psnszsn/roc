@@ -431,7 +431,7 @@ test "imported checked bodies restore their module's hoisted constants" {
         check.CheckedArtifact.CompileTimeRootKind.hoisted_constant,
         app_artifact.compile_time_roots.root(app_imported_const_use.root).kind,
     );
-    try std.testing.expect(@intFromEnum(forty_one.root) < @intFromEnum(forty_two.root));
+    try std.testing.expect(@backingInt(forty_one.root) < @backingInt(forty_two.root));
 
     const lir_roots = try lir.CheckedPipeline.selectPlatformEntrypointRoots(gpa, root.root_requests.runtime_requests);
     defer gpa.free(lir_roots);
@@ -538,10 +538,10 @@ test "hoisted list constants lower to internal static data in request order" {
     const second_body = second_initializer.body orelse return error.StaticDataLiteralNotFound;
     // Reachable roots form a barrier before queued initializers, whose request
     // order must then determine their body order.
-    if (@intFromEnum(first_body) >= @intFromEnum(second_body)) return error.StaticDataInitializerRequestOrderMismatch;
+    if (@backingInt(first_body) >= @backingInt(second_body)) return error.StaticDataInitializerRequestOrderMismatch;
     for (lowered.lir_result.root_procs.items) |root_proc| {
         const root_body = lowered.lir_result.store.getProcSpec(root_proc).body orelse return error.StaticDataLiteralNotFound;
-        if (@intFromEnum(root_body) >= @intFromEnum(first_body)) return error.StaticDataInitializerPrecededRootBody;
+        if (@backingInt(root_body) >= @backingInt(first_body)) return error.StaticDataInitializerPrecededRootBody;
     }
     try expectStaticDataLiteralPresent(&lowered.lir_result);
 
@@ -558,7 +558,7 @@ test "hoisted list constants lower to internal static data in request order" {
     defer static_data_exports.deinitStaticData(gpa, exports);
 
     for (lowered.lir_result.static_data_values.items, 0..) |_, index| {
-        const static_data_id: lir.LIR.StaticDataId = @enumFromInt(@as(u32, @intCast(index)));
+        const static_data_id: lir.LIR.StaticDataId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
         const expected_symbol = try lir.Program.staticDataSymbolName(gpa, static_data_id);
         defer gpa.free(expected_symbol);
 

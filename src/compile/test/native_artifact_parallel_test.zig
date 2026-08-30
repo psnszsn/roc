@@ -253,7 +253,7 @@ fn inspectFallible(lowered: *const lir.CheckedPipeline.LoweredProgram) Inspectio
     const demand = try allocator.alloc(lir.LIR.LirProcSpecId, program.store.getProcSpecs().len);
     defer allocator.free(demand);
     try std.testing.expect(demand.len >= 4);
-    for (demand, 0..) |*id, i| id.* = @enumFromInt(i);
+    for (demand, 0..) |*id, i| id.* = @fromBackingInt(@intCast(i));
     var root: ?lir.LIR.LirProcSpecId = null;
     for (program.root_procs.items) |id| {
         const proc = program.store.getProcSpec(id);

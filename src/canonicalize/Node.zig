@@ -1291,7 +1291,7 @@ pub const Payload = extern union {
     pub const DiagInternalBuiltinType = extern struct {
         parent_name: u32, // @bitCast(Ident.Idx)
         nested_name: u32, // @bitCast(Ident.Idx)
-        kind: u32, // @intFromEnum(Diagnostic.InternalBuiltinTypeKind)
+        kind: u32, // @backingInt(Diagnostic.InternalBuiltinTypeKind)
         _reserved: [4]u8 = .{ 0, 0, 0, 0 },
     };
 
@@ -1406,7 +1406,7 @@ test "Payload: assigning a variant defines all 16 bytes, whatever the memory hel
 
         try std.testing.expectEqualSlices(u8, &over_ones, &over_fives);
         // A zeroed variant value writes zeros, so any surviving poison byte shows up.
-        try std.testing.expectEqualSlices(u8, &[_]u8{0} ** @sizeOf(Payload), &over_ones);
+        try std.testing.expectEqualSlices(u8, &@as([@sizeOf(Payload)]u8, @splat(0)), &over_ones);
     }
 }
 
@@ -1543,7 +1543,7 @@ test "Node.List: serialization round-trips full-width payloads and ignores alloc
     const var_node = loaded.get(grown.var_node);
     try std.testing.expectEqual(Tag.expr_var, var_node.tag);
     try std.testing.expectEqual(@as(u32, 0x55555555), var_node.getPayload().expr_var.pattern_idx);
-    try std.testing.expectEqualSlices(u8, &[_]u8{0} ** 12, &var_node.getPayload().expr_var._padding);
+    try std.testing.expectEqualSlices(u8, &@as([12]u8, @splat(0)), &var_node.getPayload().expr_var._padding);
 
     const annotation = loaded.get(grown.annotation);
     try std.testing.expectEqual(Tag.annotation, annotation.tag);

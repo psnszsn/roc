@@ -15,7 +15,7 @@ const CheckedArtifact = check.CheckedArtifact;
 
 /// Names one module's canonicalization output in the canonicalized-module cache.
 pub const CanonicalizedModuleCacheKey = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Every input canonicalization reads, and nothing else.
@@ -56,8 +56,8 @@ pub fn canonicalizedModuleCacheKey(input: CanonicalizedCacheKeyInput) Canonicali
     hashLengthPrefixed(&hasher, input.module_basename);
     hashLengthPrefixed(&hasher, input.source);
     hasher.update(&[_]u8{@intFromBool(input.is_entry_module)});
-    hasher.update(&[_]u8{@intFromEnum(input.validation)});
-    hasher.update(&[_]u8{@intFromEnum(input.module_role)});
+    hasher.update(&[_]u8{@backingInt(input.validation)});
+    hasher.update(&[_]u8{@backingInt(input.module_role)});
 
     var key = CanonicalizedModuleCacheKey{};
     hasher.final(&key.bytes);
@@ -118,16 +118,16 @@ pub fn eql(a: CheckedModuleArtifactKey, b: CheckedModuleArtifactKey) bool {
 }
 
 fn hashWithByte(byte: u8) [32]u8 {
-    return [_]u8{byte} ** 32;
+    return @as([32]u8, @splat(byte));
 }
 
 fn moduleIdentity(byte: u8) CheckedArtifact.ModuleIdentity {
     return .{
         .stable_hash = hashWithByte(byte),
         .module_idx = byte,
-        .module_name = @enumFromInt(@as(u32, byte)),
-        .display_module_name = @enumFromInt(@as(u32, byte + 1)),
-        .qualified_module_name = @enumFromInt(@as(u32, byte + 2)),
+        .module_name = @fromBackingInt(@intCast(@as(u32, byte))),
+        .display_module_name = @fromBackingInt(@intCast(@as(u32, byte + 1))),
+        .qualified_module_name = @fromBackingInt(@intCast(@as(u32, byte + 2))),
         .kind = .app,
     };
 }
@@ -186,16 +186,16 @@ test "checked artifact cache key changes for semantic inputs" {
 }
 
 test "checked artifact cache key input has no target or layout ABI fields" {
-    const fields = @typeInfo(CacheKeyInput).@"struct".fields;
-    inline for (fields) |field| {
-        try std.testing.expect(!std.mem.eql(u8, field.name, "target"));
-        try std.testing.expect(!std.mem.eql(u8, field.name, "target_config"));
-        try std.testing.expect(!std.mem.eql(u8, field.name, "layout"));
-        try std.testing.expect(!std.mem.eql(u8, field.name, "layout_abi"));
-        try std.testing.expect(!std.mem.eql(u8, field.name, "backend"));
+    const field_names = @typeInfo(CacheKeyInput).@"struct".field_names;
+    inline for (field_names) |field_name| {
+        try std.testing.expect(!std.mem.eql(u8, field_name, "target"));
+        try std.testing.expect(!std.mem.eql(u8, field_name, "target_config"));
+        try std.testing.expect(!std.mem.eql(u8, field_name, "layout"));
+        try std.testing.expect(!std.mem.eql(u8, field_name, "layout_abi"));
+        try std.testing.expect(!std.mem.eql(u8, field_name, "backend"));
     }
 
-    try std.testing.expectEqual(@as(usize, 4), fields.len);
+    try std.testing.expectEqual(@as(usize, 4), field_names.len);
     _ = checkedModuleArtifactKey(testInput());
 }
 

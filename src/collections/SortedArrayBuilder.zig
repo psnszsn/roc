@@ -54,6 +54,7 @@ pub fn SortedArrayBuilder(comptime K: type, comptime V: type) type {
             .@"anyframe",
             .vector,
             .enum_literal,
+            .spirv,
             => false,
         };
 
@@ -157,7 +158,7 @@ pub fn SortedArrayBuilder(comptime K: type, comptime V: type) type {
         /// Get value by key without mutating. The builder must already be sorted
         /// and deduplicated.
         pub fn getFinalized(self: *const Self, key: K) ?V {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.assert(self.sorted);
                 std.debug.assert(self.deduplicated);
             }
@@ -204,7 +205,7 @@ pub fn SortedArrayBuilder(comptime K: type, comptime V: type) type {
             var i: usize = 1;
             while (i < self.entries.items.len) : (i += 1) {
                 if (!keyEql(self.entries.items[i - 1].key, self.entries.items[i].key)) continue;
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic("SortedArrayBuilder invariant violated: duplicate key reached unique finalization", .{});
                 }
                 @trap();

@@ -150,7 +150,7 @@ fn expectForwardedSchemeDictionaries(plan: *const postcheck.Boxy.Plan.ProgramPla
         for (plan.directCallHiddenDictionaryArgSlice(call.hidden_dict_args)) |arg| {
             if (arg.source != .bound_dictionaries) continue;
             const source = arg.source.bound_dictionaries;
-            const caller = plan.workers.items[@intFromEnum(call.caller)];
+            const caller = plan.workers.items[@backingInt(call.caller)];
             for (plan.hiddenDictionaryParamSlice(caller.hidden_dicts)) |param| {
                 if (param.scheme_param != null and param.dictionaries.start == source.start) {
                     forwarded += 1;

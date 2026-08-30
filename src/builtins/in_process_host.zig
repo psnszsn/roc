@@ -309,7 +309,7 @@ pub const Symbol = enum(u8) {
     /// The symbol named `symbol_name`, if it is one of these.
     pub fn fromName(symbol_name: []const u8) ?Symbol {
         inline for (@typeInfo(Symbol).@"enum".fields) |field| {
-            const candidate: Symbol = @enumFromInt(field.value);
+            const candidate: Symbol = @fromBackingInt(@intCast(field.value));
             if (eql(candidate.name(), symbol_name)) return candidate;
         }
         return null;

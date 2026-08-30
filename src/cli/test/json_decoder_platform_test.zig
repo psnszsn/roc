@@ -22,7 +22,6 @@ const TestError = util.RocRunError ||
         Unexpected,
         SkipZigTest,
         JsonDecoderFailed,
-        RocBuildFailed,
         BinaryContainsOriginalFieldName,
     };
 
@@ -74,46 +73,13 @@ const OptionalField = struct {
 };
 
 test "JSON parsing platform derives structural parser without runtime allocations" {
-    const target_name = nativeRunnableTargetName() orelse return error.SkipZigTest;
+    if (nativeRunnableTargetName() == null) return error.SkipZigTest;
 
     const allocator = testing.allocator;
-
-    var tmp_dir = testing.tmpDir(.{});
-    defer tmp_dir.cleanup();
-
-    const tmp_path = try tmp_dir.dir.realPathFileAlloc(io, ".", allocator);
-    defer allocator.free(tmp_path);
-
-    const prebuilt_path = try getEnvVarOwnedOrNull(allocator, "ROC_JSON_DECODER_PREBUILT_EXE");
-    const exe_name = if (builtin.os.tag == .windows) "json_decoder.exe" else "json_decoder";
-    const output_path = if (prebuilt_path) |path|
-        path
-    else
-        try std.fs.path.join(allocator, &.{ tmp_path, exe_name });
-    defer allocator.free(output_path);
-
-    const camel_prebuilt_path = try getEnvVarOwnedOrNull(allocator, "ROC_JSON_DECODER_CAMEL_PREBUILT_EXE");
-    const camel_exe_name = if (builtin.os.tag == .windows) "json_decoder_camel.exe" else "json_decoder_camel";
-    const camel_output_path = if (camel_prebuilt_path) |path|
-        path
-    else
-        try std.fs.path.join(allocator, &.{ tmp_path, camel_exe_name });
-    defer allocator.free(camel_output_path);
-
-    const camel_direct_prebuilt_path = try getEnvVarOwnedOrNull(allocator, "ROC_JSON_DECODER_CAMEL_DIRECT_PREBUILT_EXE");
-    const camel_direct_exe_name = if (builtin.os.tag == .windows) "json_decoder_camel_direct.exe" else "json_decoder_camel_direct";
-    const camel_direct_output_path = if (camel_direct_prebuilt_path) |path|
-        path
-    else
-        try std.fs.path.join(allocator, &.{ tmp_path, camel_direct_exe_name });
-    defer allocator.free(camel_direct_output_path);
-
-    var env = try util.buildIsolatedTestEnvMap(io, allocator, null);
-    defer env.deinit(io, allocator);
-
-    if (prebuilt_path == null) {
-        try buildRocApp(allocator, &env.env_map, target_name, output_path, "test/json-decoder/app.roc");
-    }
+    const options = @import("json_decoder_test_options");
+    const output_path = options.prebuilt_exe_path;
+    const camel_output_path = options.camel_prebuilt_exe_path;
+    const camel_direct_output_path = options.camel_direct_prebuilt_exe_path;
 
     try runJsonDecoderAndCheckOutput(allocator, output_path, "42", "42\n");
     try runJsonDecoderAndCheckOutput(allocator, output_path, " \t42\r\n", "42\n");
@@ -168,9 +134,6 @@ test "JSON parsing platform derives structural parser without runtime allocation
 
     try runJsonDecoderAndCheckInvalidUtf8(allocator, output_path);
 
-    if (camel_prebuilt_path == null) {
-        try buildRocApp(allocator, &env.env_map, target_name, camel_output_path, "test/json-decoder/camel_app.roc");
-    }
     try expectBinaryOmits(allocator, camel_output_path, &.{ "cache_control", "first_value", "inner_value", "nested_record", "second_value", "user_id" });
     try runJsonDecoderAndCheckOutput(
         allocator,
@@ -179,73 +142,12 @@ test "JSON parsing platform derives structural parser without runtime allocation
         "23\n",
     );
 
-    if (camel_direct_prebuilt_path == null) {
-        try buildRocApp(allocator, &env.env_map, target_name, camel_direct_output_path, "test/json-decoder/camel_direct_app.roc");
-    }
     try runJsonDecoderAndCheckOutput(
         allocator,
         camel_direct_output_path,
         "{ \"cacheControl\" : \"no-cache\", \"userId\" : \"abc\" }\n",
         "11\n",
     );
-}
-
-fn getEnvVarOwnedOrNull(allocator: std.mem.Allocator, key: []const u8) TestError!?[]u8 {
-    const key_z = try allocator.dupeZ(u8, key);
-    defer allocator.free(key_z);
-    const value = std.c.getenv(key_z) orelse return null;
-    return try allocator.dupe(u8, value[0..std.mem.len(value)]);
-}
-
-fn buildRocApp(
-    allocator: std.mem.Allocator,
-    env_map: *const std.process.Environ.Map,
-    target_name: []const u8,
-    output_path: []const u8,
-    roc_file: []const u8,
-) TestError!void {
-    const target_arg = try std.fmt.allocPrint(allocator, "--target={s}", .{target_name});
-    defer allocator.free(target_arg);
-
-    const output_arg = try std.fmt.allocPrint(allocator, "--output={s}", .{output_path});
-    defer allocator.free(output_arg);
-
-    const build_result = try util.runChildWithTimeout(io, allocator, &.{
-        util.roc_binary_path,
-        "build",
-        "--opt=speed",
-        target_arg,
-        output_arg,
-        roc_file,
-    }, .{
-        .env_map = env_map,
-        .max_output_bytes = 10 * 1024 * 1024,
-    });
-    defer allocator.free(build_result.stdout);
-    defer allocator.free(build_result.stderr);
-
-    switch (build_result.term) {
-        .exited => |code| {
-            if (code != 0) {
-                std.debug.print("roc build failed for {s} with exit code {}\nSTDOUT:\n{s}\nSTDERR:\n{s}\n", .{
-                    roc_file,
-                    code,
-                    build_result.stdout,
-                    build_result.stderr,
-                });
-                return error.RocBuildFailed;
-            }
-        },
-        .signal, .stopped, .unknown => {
-            std.debug.print("roc build for {s} terminated unexpectedly: {}\nSTDOUT:\n{s}\nSTDERR:\n{s}\n", .{
-                roc_file,
-                build_result.term,
-                build_result.stdout,
-                build_result.stderr,
-            });
-            return error.RocBuildFailed;
-        },
-    }
 }
 
 fn expectBinaryOmits(allocator: std.mem.Allocator, exe_path: []const u8, needles: []const []const u8) TestError!void {
@@ -511,6 +413,11 @@ fn nativeRunnableTargetName() ?[]const u8 {
         .ps4,
         .ps5,
         .psp,
+        .wiiu,
+        .@"switch",
+        .psx,
+        .tios,
+        .ashetos,
         .vita,
         .emscripten,
         .wasi,

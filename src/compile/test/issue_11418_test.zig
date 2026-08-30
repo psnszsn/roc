@@ -13,7 +13,7 @@ const is_freestanding = @import("../threading.zig").is_freestanding;
 fn countNamedProcs(store: *const lir.LirStore, expected: []const u8) usize {
     var count: usize = 0;
     for (0..store.procSpecCount()) |index| {
-        const name = store.procDebugName(@enumFromInt(index)) orelse continue;
+        const name = store.procDebugName(@fromBackingInt(@intCast(index))) orelse continue;
         if (std.mem.eql(u8, name, expected)) count += 1;
     }
     return count;

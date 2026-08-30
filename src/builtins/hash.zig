@@ -2,6 +2,12 @@
 //!
 //! Adapted from the Zig compiler at https://codeberg.org/ziglang/zig and licensed under the MIT license. Thanks, Zig team!
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const str = @import("str.zig");
 const float_bits = @import("float_bits.zig");
 const mem = std.mem;
@@ -30,7 +36,7 @@ const primes = [_]u64{
 };
 
 fn read_bytes(comptime bytes: u8, data: []const u8) u64 {
-    const T = std.meta.Int(.unsigned, 8 * bytes);
+    const T = @Int(.unsigned, 8 * bytes);
     return mem.readInt(T, data[0..bytes], .little);
 }
 
@@ -256,7 +262,7 @@ pub fn hasher_write_f32_bits(seed: u64, bits: u32) callconv(.c) u64 {
         0
     else
         float_bits.normalizeF32NanBits(bits);
-    return hasher_write_u64(seed, @intFromEnum(HasherDomain.f32), normalized, 4);
+    return hasher_write_u64(seed, @backingInt(HasherDomain.f32), normalized, 4);
 }
 
 /// Mix F64 bits into a builtin Hasher state after normalizing both zero and NaN.
@@ -265,7 +271,7 @@ pub fn hasher_write_f64_bits(seed: u64, bits: u64) callconv(.c) u64 {
         0
     else
         float_bits.normalizeF64NanBits(bits);
-    return hasher_write_u64(seed, @intFromEnum(HasherDomain.f64), normalized, 8);
+    return hasher_write_u64(seed, @backingInt(HasherDomain.f64), normalized, 8);
 }
 
 /// Mix a byte slice into a builtin Hasher state.
@@ -279,7 +285,7 @@ pub fn hasher_write_bytes(seed: u64, domain: u8, bytes: ?[*]const u8, length: us
 
 /// Finalize a builtin Hasher state into a hash value.
 pub fn hasher_finish(seed: u64) callconv(.c) u64 {
-    return hasherFeed(seed, @intFromEnum(HasherDomain.finish), &.{});
+    return hasherFeed(seed, @backingInt(HasherDomain.finish), &.{});
 }
 
 test "float hashing collapses signed zero and every NaN representation" {
@@ -320,7 +326,8 @@ test "test vectors streaming" {
     const pattern = "1234567890";
     const count = 8;
     const result = 0x829e9c148b75970e;
-    try std.testing.expectEqual(Wyhash.hash(6, pattern ** 8), result);
+    const repeated_pattern = repeatBytes(pattern, 8);
+    try std.testing.expectEqual(Wyhash.hash(6, &repeated_pattern), result);
 
     wh = Wyhash.init(6);
     var i: u32 = 0;

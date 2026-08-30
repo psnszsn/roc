@@ -311,7 +311,9 @@ fn initProxiesFromEnv(client: *std.http.Client, arena: Allocator) DownloadError!
         error.InvalidPort,
         error.UnexpectedCharacter,
         error.UriMissingHost,
+        error.NameTooLong,
         => return error.InvalidProxyUrl,
+        error.Canceled => return error.NetworkError,
         error.OutOfMemory => return error.OutOfMemory,
     };
 }

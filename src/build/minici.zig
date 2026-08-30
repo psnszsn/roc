@@ -1641,7 +1641,7 @@ const workflow_shard_key = "minici_shard:";
 fn workflowShardProblems(allocator: std.mem.Allocator, text: []const u8) ![]const []const u8 {
     var problems = std.ArrayList([]const u8).empty;
     errdefer problems.deinit(allocator);
-    var counts = [_]usize{0} ** shards.len;
+    var counts = @as([shards.len]usize, @splat(0));
 
     var lines = std.mem.splitScalar(u8, text, '\n');
     while (lines.next()) |raw_line| {

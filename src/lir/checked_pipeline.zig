@@ -1033,7 +1033,7 @@ pub const RuntimeValueSchemaStore = struct {
         for (self.records.items) |schema| {
             if (std.mem.eql(u8, schema.type_name, type_name)) return schema;
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("runtime schema invariant violated: missing record schema for {s}", .{type_name});
         }
         unreachable;
@@ -1043,7 +1043,7 @@ pub const RuntimeValueSchemaStore = struct {
         for (self.tag_unions.items) |schema| {
             if (std.mem.eql(u8, schema.type_name, type_name)) return schema;
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("runtime schema invariant violated: missing tag union schema for {s}", .{type_name});
         }
         unreachable;
@@ -1100,7 +1100,7 @@ pub fn adoptReachableCompletedComptimeValues(lowered: *LoweredProgram) Allocator
     result.comptime_value_guards.clearRetainingCapacity();
     for (result.static_data_values.items) |*value| value.first_comptime_guard = null;
     for (lowered.frozen_static_data.?.exports) |item| {
-        if (item.value_id) |id| result.static_data_values.items[@intFromEnum(id)].initializer = null;
+        if (item.value_id) |id| result.static_data_values.items[@backingInt(id)].initializer = null;
     }
     for (result.static_data_values.items) |*value| value.compile_time_root = null;
 }
@@ -1116,7 +1116,7 @@ fn completeComptimeValueSlots(lowered: *LoweredProgram) Allocator.Error!void {
     for (result.static_data_values.items) |*value| value.first_comptime_guard = null;
     if (lowered.frozen_static_data) |*frozen| {
         for (frozen.exports) |item| {
-            if (item.value_id) |id| result.static_data_values.items[@intFromEnum(id)].initializer = null;
+            if (item.value_id) |id| result.static_data_values.items[@backingInt(id)].initializer = null;
         }
         for (result.static_data_values.items) |*value| value.compile_time_root = null;
         try ReachableProcs.runWithFrozen(result, frozen);
@@ -1713,11 +1713,11 @@ fn finishLoweredOutput(
         var seen = try allocator.alloc(bool, lowered.lir_result.store.procSpecCount());
         defer allocator.free(seen);
         @memset(seen, false);
-        for (arc_roots.items) |proc| seen[@intFromEnum(proc)] = true;
+        for (arc_roots.items) |proc| seen[@backingInt(proc)] = true;
         for (data.exports) |export_| for (export_.relocations) |relocation| {
             const proc = relocation.procedure orelse continue;
-            if (seen[@intFromEnum(proc)]) continue;
-            seen[@intFromEnum(proc)] = true;
+            if (seen[@backingInt(proc)]) continue;
+            seen[@backingInt(proc)] = true;
             try arc_roots.append(allocator, proc);
         };
     }
@@ -1859,7 +1859,7 @@ pub fn prepareBoxyCheckedModules(
 }
 
 fn verifyArithmeticBoundary(store: *const core.LirStore, before_prover: bool) void {
-    if (builtin.mode != .Debug) return;
+    if (builtin.mode != .debug) return;
     for (store.getCFStmts()) |stmt| {
         if (stmt != .assign_low_level) continue;
         const op = stmt.assign_low_level.op;
@@ -1877,7 +1877,7 @@ fn verifyArithmeticBoundary(store: *const core.LirStore, before_prover: bool) vo
 }
 
 fn verifyCheckedBoundary(modules: CheckedModuleSet, target: TargetConfig) Allocator.Error!void {
-    if (builtin.mode != .Debug) return;
+    if (builtin.mode != .debug) return;
     switch (target.checked_module_state) {
         .complete => try modules.root.module.verifyComplete(),
         .checking_finalization => modules.root.module.verifyReadyForCompileTimeLowering(),
@@ -2046,7 +2046,7 @@ fn convertRuntimeSchemas(
 }
 
 fn checkedPipelineInvariant(comptime message: []const u8) noreturn {
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         std.debug.panic("checked pipeline invariant violated: {s}", .{message});
     }
     unreachable;
@@ -2079,7 +2079,7 @@ const LirDump = if (builtin.os.tag == .freestanding) struct {
         const store = &result.store;
         const layouts = &result.layouts;
         for (0..store.procSpecCount()) |index| {
-            const proc_id: LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(index)));
+            const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const name = store.procDebugName(proc_id);
             if (name_filter.len != 0) {
                 const named = name orelse continue;
@@ -2126,8 +2126,8 @@ test "runtime extraction consumes producer root positions and preserves their or
     try std.testing.expectEqual(@as(usize, 2), lowered.lir_result.store.procSpecCount());
     try std.testing.expectEqual(@as(u32, 2), lowered.lir_result.root_metadata.items[0].order);
     try std.testing.expectEqual(@as(u32, 1), lowered.lir_result.root_metadata.items[1].order);
-    try std.testing.expectEqual(@as(u32, 1), @intFromEnum(lowered.lir_result.root_procs.items[0]));
-    try std.testing.expectEqual(@as(u32, 0), @intFromEnum(lowered.lir_result.root_procs.items[1]));
+    try std.testing.expectEqual(@as(u32, 1), @backingInt(lowered.lir_result.root_procs.items[0]));
+    try std.testing.expectEqual(@as(u32, 0), @backingInt(lowered.lir_result.root_procs.items[1]));
     try std.testing.expectEqual(lowered.lir_result.root_procs.items[0], lowered.main_proc.?);
 }
 
@@ -2161,7 +2161,7 @@ test "adopting completed compile-time values drops their initializers and identi
         .abi = .roc,
         .exposure = .private,
     });
-    const completed_slot: LIR.StaticDataId = @enumFromInt(lowered.lir_result.static_data_values.items.len);
+    const completed_slot: LIR.StaticDataId = @fromBackingInt(@intCast(lowered.lir_result.static_data_values.items.len));
     try lowered.lir_result.static_data_values.append(allocator, .{
         .initializer = procs[1],
         .layout_idx = .zst,
@@ -2222,9 +2222,9 @@ const SpecCensus = if (builtin.os.tag == .freestanding) struct {
         // Bodies are appended in lowering order, so consecutive body ids
         // bound each function's expression count from above.
         for (0..lifted.fnCount()) |index| {
-            const lifted_fn = lifted.getFn(@enumFromInt(@as(u32, @intCast(index))));
+            const lifted_fn = lifted.getFn(@fromBackingInt(@intCast(@as(u32, @intCast(index)))));
             const body: usize = switch (lifted_fn.body) {
-                .roc => |body| @intFromEnum(body),
+                .roc => |body| @backingInt(body),
                 .hosted => 0,
             };
             const name = if (lifted.procDebugName(lifted_fn.symbol)) |id| lifted.names.exportNameText(id) else "?";
@@ -2245,10 +2245,10 @@ const SpecCensus = if (builtin.os.tag == .freestanding) struct {
     };
 
     fn defName(info: *const ModuleInfo, proc_base: u32) []const u8 {
-        const key = info.names.procBase(@enumFromInt(proc_base));
+        const key = info.names.procBase(@fromBackingInt(@intCast(proc_base)));
         if (key.export_name) |export_name| return info.names.exportNameText(export_name);
         const def_idx = key.source_def_idx orelse return "?";
-        const def = info.env.store.getDef(@enumFromInt(def_idx));
+        const def = info.env.store.getDef(@fromBackingInt(@intCast(def_idx)));
         return switch (info.env.store.getPattern(def.pattern)) {
             .assign => |assign| info.env.getIdent(assign.ident),
             .var_assign => |assign| info.env.getIdent(assign.ident),
@@ -2601,7 +2601,7 @@ const SpecCensus = if (builtin.os.tag == .freestanding) struct {
                     callable_name = defName(info, proc_base);
                     if (callable_kind_is_template and sub < info.templates.templates.items.len) {
                         const source_fn_ty = info.templates.templates.items[sub].checked_fn_root;
-                        if (@intFromEnum(source_fn_ty) < info.types.stored_payloads.len) {
+                        if (@backingInt(source_fn_ty) < info.types.stored_payloads.len) {
                             poly = if (try checkedTypeHasVariable(allocator, info.types, source_fn_ty)) 1 else 0;
                         }
                     }
@@ -2638,7 +2638,7 @@ const SpecCensus = if (builtin.os.tag == .freestanding) struct {
         std.debug.print("CENSUS_STATIC\t{d}\t{d}\n", .{ result.static_data_values.items.len, result.const_plans.items.len });
         const store = &result.store;
         for (0..store.procSpecCount()) |index| {
-            const proc_id: LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(index)));
+            const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const spec = store.getProcSpec(proc_id);
             const name = store.procDebugName(proc_id) orelse "?";
             if (spec.body == null) {
