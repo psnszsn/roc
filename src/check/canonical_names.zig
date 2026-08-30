@@ -58,7 +58,7 @@ pub const EntryWrapperId = enum(u32) { _ };
 
 /// Public `ArtifactRef` declaration.
 pub const ArtifactRef = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Digest for checked module identity at post-check boundaries.
@@ -191,7 +191,7 @@ pub const ProcedureCallableRef = struct {
 
 /// Public `CanonicalExecValueTypeKey` declaration.
 pub const CanonicalExecValueTypeKey = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Public `procedureCallableRefEql` function.
@@ -218,17 +218,17 @@ pub fn liftedProcedureTemplateRefEql(a: LiftedProcedureTemplateRef, b: LiftedPro
 
 /// Public `CanonicalTypeKey` declaration.
 pub const CanonicalTypeKey = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Public `CanonicalTypeTemplateKey` declaration.
 pub const CanonicalTypeTemplateKey = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Public `CanonicalTypeSchemeKey` declaration.
 pub const CanonicalTypeSchemeKey = struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Public `ProcBaseKind` declaration.
@@ -361,7 +361,7 @@ pub const CanonicalNameStore = struct {
     };
 
     pub fn internModuleName(self: *CanonicalNameStore, text: []const u8) Allocator.Error!ModuleNameId {
-        return @enumFromInt(try self.module_names.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.module_names.insert(self.allocator, text)));
     }
 
     pub fn internModuleIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!ModuleNameId {
@@ -370,7 +370,7 @@ pub const CanonicalNameStore = struct {
 
     /// Intern a 32-byte deep module content identity, returning its dense id.
     pub fn internModuleIdentity(self: *CanonicalNameStore, hash: *const [32]u8) Allocator.Error!ModuleIdentityId {
-        return @enumFromInt(try self.module_identities.insert(self.allocator, hash));
+        return @fromBackingInt(@intCast(try self.module_identities.insert(self.allocator, hash)));
     }
 
     /// Look up a module content identity without inserting. This is the single
@@ -378,12 +378,12 @@ pub const CanonicalNameStore = struct {
     /// distinct identity, comparing full 256-bit values.
     pub fn lookupModuleIdentity(self: *const CanonicalNameStore, hash: *const [32]u8) ?ModuleIdentityId {
         const id = self.module_identities.lookup(hash) orelse return null;
-        return @enumFromInt(id);
+        return @fromBackingInt(@intCast(id));
     }
 
     /// The 32-byte content identity for a dense id in this store.
     pub fn moduleIdentityBytes(self: *const CanonicalNameStore, id: ModuleIdentityId) *const [32]u8 {
-        const bytes = self.module_identities.getText(@intFromEnum(id));
+        const bytes = self.module_identities.getText(@backingInt(id));
         std.debug.assert(bytes.len == 32);
         return @ptrCast(bytes.ptr);
     }
@@ -393,7 +393,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internTypeName(self: *CanonicalNameStore, text: []const u8) Allocator.Error!TypeNameId {
-        return @enumFromInt(try self.type_names.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.type_names.insert(self.allocator, text)));
     }
 
     pub fn internMethodIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!MethodNameId {
@@ -401,7 +401,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internMethodName(self: *CanonicalNameStore, text: []const u8) Allocator.Error!MethodNameId {
-        return @enumFromInt(try self.method_names.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.method_names.insert(self.allocator, text)));
     }
 
     pub fn internRecordFieldIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!RecordFieldLabelId {
@@ -409,7 +409,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internRecordFieldLabel(self: *CanonicalNameStore, text: []const u8) Allocator.Error!RecordFieldLabelId {
-        return @enumFromInt(try self.record_field_labels.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.record_field_labels.insert(self.allocator, text)));
     }
 
     pub fn internTagIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!TagLabelId {
@@ -417,7 +417,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internTagLabel(self: *CanonicalNameStore, text: []const u8) Allocator.Error!TagLabelId {
-        return @enumFromInt(try self.tag_labels.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.tag_labels.insert(self.allocator, text)));
     }
 
     pub fn internExportIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!ExportNameId {
@@ -425,7 +425,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internExportName(self: *CanonicalNameStore, text: []const u8) Allocator.Error!ExportNameId {
-        return @enumFromInt(try self.export_names.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.export_names.insert(self.allocator, text)));
     }
 
     pub fn internExternalSymbolIdent(self: *CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) Allocator.Error!ExternalSymbolNameId {
@@ -433,11 +433,11 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn internExternalSymbolName(self: *CanonicalNameStore, text: []const u8) Allocator.Error!ExternalSymbolNameId {
-        return @enumFromInt(try self.external_symbol_names.insert(self.allocator, text));
+        return @fromBackingInt(@intCast(try self.external_symbol_names.insert(self.allocator, text)));
     }
 
     fn lookupId(comptime Id: type, it: *const NameInterner, text: []const u8) ?Id {
-        return if (it.lookup(text)) |id| @as(Id, @enumFromInt(id)) else null;
+        return if (it.lookup(text)) |id| @as(Id, @fromBackingInt(@intCast(id))) else null;
     }
 
     pub fn lookupModuleIdent(self: *const CanonicalNameStore, idents: *const Ident.Store, ident: Ident.Idx) ?ModuleNameId {
@@ -491,9 +491,9 @@ pub const CanonicalNameStore = struct {
     pub fn internProcBase(self: *CanonicalNameStore, key: ProcBaseKey) Allocator.Error!ProcBaseKeyRef {
         self.scratch_key.clearRetainingCapacity();
         try self.scratch_key.print(self.allocator, "proc:{d}:{s}:{d}:{d}:{d}|", .{
-            @intFromEnum(key.module_name),
+            @backingInt(key.module_name),
             @tagName(key.kind),
-            if (key.export_name) |name| @intFromEnum(name) else std.math.maxInt(u32),
+            if (key.export_name) |name| @backingInt(name) else std.math.maxInt(u32),
             key.ordinal,
             key.source_def_idx orelse std.math.maxInt(u32),
         });
@@ -502,7 +502,7 @@ pub const CanonicalNameStore = struct {
 
         if (self.proc_base_by_key.get(self.scratch_key.items)) |existing| return existing;
 
-        const id: ProcBaseKeyRef = @enumFromInt(@as(u32, @intCast(self.proc_bases.items.items.len)));
+        const id: ProcBaseKeyRef = @fromBackingInt(@intCast(@as(u32, @intCast(self.proc_bases.items.items.len))));
         const owned_key = try self.allocator.dupe(u8, self.scratch_key.items);
         errdefer self.allocator.free(owned_key);
 
@@ -512,34 +512,34 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn procBase(self: *const CanonicalNameStore, id: ProcBaseKeyRef) ProcBaseKey {
-        return self.proc_bases.items.items[@intFromEnum(id)];
+        return self.proc_bases.items.items[@backingInt(id)];
     }
 
     pub fn exportNameText(self: *const CanonicalNameStore, id: ExportNameId) []const u8 {
-        return self.export_names.getText(@intFromEnum(id));
+        return self.export_names.getText(@backingInt(id));
     }
 
     pub fn moduleNameText(self: *const CanonicalNameStore, id: ModuleNameId) []const u8 {
-        return self.module_names.getText(@intFromEnum(id));
+        return self.module_names.getText(@backingInt(id));
     }
 
     pub fn typeNameText(self: *const CanonicalNameStore, id: TypeNameId) []const u8 {
-        return self.type_names.getText(@intFromEnum(id));
+        return self.type_names.getText(@backingInt(id));
     }
 
     pub fn methodNameText(self: *const CanonicalNameStore, id: MethodNameId) []const u8 {
-        return self.method_names.getText(@intFromEnum(id));
+        return self.method_names.getText(@backingInt(id));
     }
 
     pub fn recordFieldLabelText(self: *const CanonicalNameStore, id: RecordFieldLabelId) []const u8 {
-        return self.record_field_labels.getText(@intFromEnum(id));
+        return self.record_field_labels.getText(@backingInt(id));
     }
 
     /// Whether a record field label id has interned text. Real compilation
     /// always interns every label; minimal test fixtures may reference label
     /// ids without registering their text.
     pub fn recordFieldLabelTextInterned(self: *const CanonicalNameStore, id: RecordFieldLabelId) bool {
-        return @intFromEnum(id) < self.record_field_labels.count();
+        return @backingInt(id) < self.record_field_labels.count();
     }
 
     pub fn recordFieldLabelCount(self: *const CanonicalNameStore) u32 {
@@ -557,7 +557,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn tagLabelText(self: *const CanonicalNameStore, id: TagLabelId) []const u8 {
-        return self.tag_labels.getText(@intFromEnum(id));
+        return self.tag_labels.getText(@backingInt(id));
     }
 
     pub fn tagLabelCount(self: *const CanonicalNameStore) u32 {
@@ -575,7 +575,7 @@ pub const CanonicalNameStore = struct {
     }
 
     pub fn externalSymbolNameText(self: *const CanonicalNameStore, id: ExternalSymbolNameId) []const u8 {
-        return self.external_symbol_names.getText(@intFromEnum(id));
+        return self.external_symbol_names.getText(@backingInt(id));
     }
 };
 
@@ -587,7 +587,7 @@ fn appendOptionalNestedProcSiteKey(
     if (maybe_key) |key| {
         try scratch.append(allocator, 1);
         try appendProcedureTemplateRef(scratch, key.owner_template, allocator);
-        try scratch.print(allocator, "site:{d}|", .{@intFromEnum(key.site)});
+        try scratch.print(allocator, "site:{d}|", .{@backingInt(key.site)});
     } else {
         try scratch.append(allocator, 0);
     }
@@ -622,8 +622,8 @@ fn appendProcedureTemplateRef(
     allocator: Allocator,
 ) Allocator.Error!void {
     try scratch.print(allocator, "template:{d}:{d}:", .{
-        @intFromEnum(ref.proc_base),
-        @intFromEnum(ref.template),
+        @backingInt(ref.proc_base),
+        @backingInt(ref.template),
     });
     try scratch.appendSlice(allocator, ref.artifact.bytes[0..]);
     try scratch.append(allocator, '|');
@@ -657,9 +657,9 @@ test "proc base identity includes nested owner mono specialization" {
     });
     const first_template_index: u32 = 0;
     const owner_template = ProcedureTemplateRef{
-        .artifact = .{ .bytes = [_]u8{1} ** 32 },
+        .artifact = .{ .bytes = @as([32]u8, @splat(1)) },
         .proc_base = owner_base,
-        .template = @enumFromInt(first_template_index),
+        .template = @fromBackingInt(@intCast(first_template_index)),
     };
 
     var i64_key = CanonicalTypeKey{};
@@ -670,7 +670,7 @@ test "proc base identity includes nested owner mono specialization" {
     const first_site_index: u32 = 0;
     const nested_site = NestedProcSiteKey{
         .owner_template = owner_template,
-        .site = @enumFromInt(first_site_index),
+        .site = @fromBackingInt(@intCast(first_site_index)),
     };
     const lifted_i64 = try names.internProcBase(.{
         .module_name = module_name,

@@ -1081,7 +1081,7 @@ pub const Statement = union(enum) {
                     const header = tree.beginNode();
                     try tree.pushStaticAtom("header");
                     // Check if the type header node is malformed before calling getTypeHeader
-                    const header_node = ast.store.nodes.get(@enumFromInt(@intFromEnum(a.header)));
+                    const header_node = ast.store.nodes.get(@fromBackingInt(@intCast(@backingInt(a.header))));
                     if (header_node.tag == .malformed) {
                         // Handle malformed type header by creating a placeholder
                         try ast.appendRegionInfoToSexprTree(env, tree, header_node.region);

@@ -112,7 +112,7 @@ pub fn collectReferencedProcs(
     for (exports) |data_export| {
         for (data_export.relocations) |relocation| {
             const proc = relocation.procedure orelse continue;
-            const gop = try seen.getOrPut(@intFromEnum(proc));
+            const gop = try seen.getOrPut(@backingInt(proc));
             if (gop.found_existing) continue;
             try result.append(allocator, proc);
         }
@@ -256,15 +256,15 @@ const StaticInitializerMachine = struct {
         if (result.bytes.len != source.bytes.len) {
             const target_layout = self.layoutValue(layout_idx);
             if (target_layout.tag == .box_of_zst) return result;
-            if (@import("builtin").mode == .Debug) {
+            if (@import("builtin").mode == .debug) {
                 const source_layout = self.layoutValue(source.layout_idx);
                 std.debug.panic(
                     "static data invariant violated: static initializer explicit reinterpret changed target byte size from layout {d} ({s}, {d} bytes) to layout {d} ({s}, {d} bytes)",
                     .{
-                        @intFromEnum(source.layout_idx),
+                        @backingInt(source.layout_idx),
                         @tagName(source_layout.tag),
                         source.bytes.len,
-                        @intFromEnum(layout_idx),
+                        @backingInt(layout_idx),
                         @tagName(target_layout.tag),
                         result.bytes.len,
                     },
@@ -278,7 +278,7 @@ const StaticInitializerMachine = struct {
     }
 
     fn local(locals: []const ?*SymbolicValue, id: lir.LIR.LocalId) *SymbolicValue {
-        return locals[@intFromEnum(id)] orelse
+        return locals[@backingInt(id)] orelse
             staticDataInvariant("static initializer read an uninitialized local");
     }
 
@@ -287,11 +287,11 @@ const StaticInitializerMachine = struct {
         id: lir.LIR.LocalId,
         value: *SymbolicValue,
     ) void {
-        locals[@intFromEnum(id)] = value;
+        locals[@backingInt(id)] = value;
     }
 
     fn evaluateStatic(self: *StaticInitializerMachine, id: lir.LIR.StaticDataId) MaterializationError!*SymbolicValue {
-        const raw = @intFromEnum(id);
+        const raw = @backingInt(id);
         if (raw >= self.static_roots.len) staticDataInvariant("static initializer referenced an unknown static data value");
         if (self.static_roots[raw]) |root| return root;
         if (self.static_active[raw]) staticDataInvariant("static initializer data dependency graph contained a cycle");
@@ -542,7 +542,7 @@ const StaticInitializerMachine = struct {
             .contains_refcounted = contains_refcounted,
             .list_element_count = list_element_count,
         };
-        const id: SymbolicAllocationId = @enumFromInt(@as(u32, @intCast(self.allocations.items.len)));
+        const id: SymbolicAllocationId = @fromBackingInt(@intCast(@as(u32, @intCast(self.allocations.items.len))));
         try self.allocations.append(self.allocator(), allocation);
         return .{ .id = id, .payload = &allocation.payload };
     }
@@ -1086,7 +1086,7 @@ const StaticDataBuilder = struct {
 
     fn buildInternalStaticValues(self: *StaticDataBuilder) MaterializationError!void {
         for (0..self.lowered.lir_result.static_data_values.items.len) |index| {
-            const static_data_id: lir.LIR.StaticDataId = @enumFromInt(@as(u32, @intCast(index)));
+            const static_data_id: lir.LIR.StaticDataId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const symbol_name = try lir.Program.staticDataSymbolName(self.allocator, static_data_id);
             errdefer self.allocator.free(symbol_name);
 
@@ -1188,7 +1188,7 @@ const StaticDataBuilder = struct {
         id: SymbolicAllocationId,
     ) MaterializationError!PointerTarget {
         if (self.frozen_allocations.get(id)) |target| return target;
-        const raw = @intFromEnum(id);
+        const raw = @backingInt(id);
         if (raw >= self.initializer_machine.allocations.items.len) {
             staticDataInvariant("static initializer relocation referenced an unknown allocation");
         }
@@ -1314,7 +1314,7 @@ fn alignForwardU32(value: u32, alignment: u32) u32 {
 }
 
 fn staticDataInvariant(comptime message: []const u8) noreturn {
-    if (@import("builtin").mode == .Debug) {
+    if (@import("builtin").mode == .debug) {
         std.debug.panic("static data invariant violated: {s}", .{message});
     }
     unreachable;

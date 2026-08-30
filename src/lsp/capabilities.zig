@@ -38,7 +38,7 @@ pub const ServerCapabilities = struct {
 
     pub const TextDocumentSyncOptions = struct {
         openClose: bool = false,
-        change: u32 = @intFromEnum(TextDocumentSyncKind.none),
+        change: u32 = @backingInt(TextDocumentSyncKind.none),
     };
 
     pub const TextDocumentSyncKind = enum(u32) {
@@ -75,7 +75,7 @@ pub fn buildCapabilities() ServerCapabilities {
     return .{
         .textDocumentSync = .{
             .openClose = true,
-            .change = @intFromEnum(ServerCapabilities.TextDocumentSyncKind.incremental),
+            .change = @backingInt(ServerCapabilities.TextDocumentSyncKind.incremental),
         },
         .semanticTokensProvider = .{
             .legend = .{

@@ -435,13 +435,13 @@ pub const ConstTypeStore = struct {
     }
 
     pub fn reserve(self: *ConstTypeStore) Allocator.Error!ConstTypeId {
-        const id: ConstTypeId = @enumFromInt(@as(u32, @intCast(self.types.items.len)));
+        const id: ConstTypeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.types.items.len))));
         try self.types.append(self.allocator, .zst);
         return id;
     }
 
     pub fn fill(self: *ConstTypeStore, id: ConstTypeId, ty: ConstType) void {
-        self.types.items[@intFromEnum(id)] = ty;
+        self.types.items[@backingInt(id)] = ty;
     }
 
     pub fn append(self: *ConstTypeStore, ty: ConstType) Allocator.Error!ConstTypeId {
@@ -467,7 +467,7 @@ pub const ConstTypeStore = struct {
     }
 
     pub fn get(self: *const ConstTypeStore, id: ConstTypeId) ConstType {
-        return self.types.items[@intFromEnum(id)];
+        return self.types.items[@backingInt(id)];
     }
 
     pub fn typeSpan(self: *const ConstTypeStore, range: ConstRange) []const ConstTypeId {
@@ -742,7 +742,7 @@ pub const ConstStore = struct {
     }
 
     pub fn reserve(self: *ConstStore) Allocator.Error!ConstNodeId {
-        const id: ConstNodeId = @enumFromInt(@as(u32, @intCast(self.values.items.len)));
+        const id: ConstNodeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.values.items.len))));
         try self.values.append(self.allocator, .pending);
         return id;
     }
@@ -750,7 +750,7 @@ pub const ConstStore = struct {
     /// Store `value` at `id`. Any slices in `value` are copied into the store's
     /// pools; the caller retains ownership of the input slices and frees them.
     pub fn fill(self: *ConstStore, id: ConstNodeId, value: ConstValue) void {
-        const slot = &self.values.items[@intFromEnum(id)];
+        const slot = &self.values.items[@backingInt(id)];
         if (slot.* != .pending) constStoreInvariant("const node filled more than once");
         slot.* = self.storeValue(value) catch constStoreInvariant("out of memory storing const value");
     }
@@ -791,7 +791,7 @@ pub const ConstStore = struct {
     /// retains ownership of the input `captures` slice and frees it.
     pub fn appendFn(self: *ConstStore, fn_value: ConstFn) Allocator.Error!ConstFnId {
         validateEvidenceFrames(fn_value);
-        const id: ConstFnId = @enumFromInt(@as(u32, @intCast(self.fns.items.len)));
+        const id: ConstFnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.fns.items.len))));
         const captures_range = try artifact_serialize.appendSpan(ConstRange, ConstCapture, &self.capture_pool, self.allocator, fn_value.captures);
         const evidence_range = try artifact_serialize.appendSpan(ConstRange, ConstFnEvidence, &self.evidence_pool, self.allocator, fn_value.evidence);
         const evidence_frames = try artifact_serialize.appendSpan(ConstRange, ConstFnEvidenceFrame, &self.evidence_frame_pool, self.allocator, fn_value.evidence_frames);
@@ -884,7 +884,7 @@ pub const ConstStore = struct {
         if (self.serialized) constStoreInvariant("cannot add blob data to a serialized const store");
         if (self.blob_index.get(bytes)) |existing| return existing;
 
-        const id: ConstBlobDataId = @enumFromInt(@as(u32, @intCast(self.blob_views.items.len)));
+        const id: ConstBlobDataId = @fromBackingInt(@intCast(@as(u32, @intCast(self.blob_views.items.len))));
         const view = try artifact_serialize.appendSpan(ConstRange, u8, &self.blob_backing, self.allocator, bytes);
         try self.blob_views.append(self.allocator, view);
 
@@ -901,7 +901,7 @@ pub const ConstStore = struct {
     }
 
     pub fn get(self: *const ConstStore, id: ConstNodeId) ConstValue {
-        return switch (self.values.items[@intFromEnum(id)]) {
+        return switch (self.values.items[@backingInt(id)]) {
             .pending => .pending,
             .zst => .zst,
             .scalar => |s| .{ .scalar = s },
@@ -924,7 +924,7 @@ pub const ConstStore = struct {
     }
 
     pub fn getFn(self: *const ConstStore, id: ConstFnId) ConstFn {
-        const stored = self.fns.items[@intFromEnum(id)];
+        const stored = self.fns.items[@backingInt(id)];
         return .{
             .fn_def = stored.fn_def,
             .source_fn_ty = stored.source_fn_ty,
@@ -937,8 +937,8 @@ pub const ConstStore = struct {
     }
 
     pub fn blobData(self: *const ConstStore, id: ConstBlobDataId) []const u8 {
-        const index = @intFromEnum(id);
-        if (@import("builtin").mode == .Debug and index >= self.blob_views.items.len) {
+        const index = @backingInt(id);
+        if (@import("builtin").mode == .debug and index >= self.blob_views.items.len) {
             constStoreInvariant("blob backing id is out of range");
         }
         const view = self.blob_views.items[index];
@@ -978,14 +978,14 @@ pub const ConstStore = struct {
         const backing = self.blobData(blob.data);
         const offset: usize = blob.offset;
         const len: usize = blob.len;
-        if (@import("builtin").mode == .Debug and (offset > backing.len or len > backing.len - offset)) {
+        if (@import("builtin").mode == .debug and (offset > backing.len or len > backing.len - offset)) {
             constStoreInvariant("blob view is outside backing data");
         }
         return backing[offset..][0..len];
     }
 
     pub fn verifyComplete(self: *const ConstStore) Allocator.Error!void {
-        if (@import("builtin").mode != .Debug) return;
+        if (@import("builtin").mode != .debug) return;
         for (self.values.items) |value| {
             if (value == .pending) std.debug.panic("const store invariant violated: completed store contains a pending node", .{});
         }
@@ -1007,7 +1007,7 @@ pub const ConstStore = struct {
 
         for (self.values.items, 0..) |_, index| {
             self.verifyGraph(
-                @enumFromInt(@as(u32, @intCast(index))),
+                @fromBackingInt(@intCast(@as(u32, @intCast(index)))),
                 value_state,
                 fn_state,
                 value_delayed_depth,
@@ -1016,9 +1016,9 @@ pub const ConstStore = struct {
             );
         }
         for (self.fns.items, 0..) |_, index| {
-            validateEvidenceFrames(self.getFn(@enumFromInt(@as(u32, @intCast(index)))));
+            validateEvidenceFrames(self.getFn(@fromBackingInt(@intCast(@as(u32, @intCast(index))))));
             self.verifyFnGraph(
-                @enumFromInt(@as(u32, @intCast(index))),
+                @fromBackingInt(@intCast(@as(u32, @intCast(index)))),
                 value_state,
                 fn_state,
                 value_delayed_depth,
@@ -1056,7 +1056,7 @@ pub const ConstStore = struct {
         fn_delayed_depth: []usize,
         delayed_depth: usize,
     ) void {
-        const index = @intFromEnum(id);
+        const index = @backingInt(id);
         if (index >= self.values.items.len) constStoreInvariant("completed store contains an out-of-range value id");
         switch (value_state[index]) {
             .done => return,
@@ -1111,7 +1111,7 @@ pub const ConstStore = struct {
         fn_delayed_depth: []usize,
         delayed_depth: usize,
     ) void {
-        const index = @intFromEnum(id);
+        const index = @backingInt(id);
         if (index >= self.fns.items.len) constStoreInvariant("completed store contains an out-of-range function id");
         switch (fn_state[index]) {
             .done => return,
@@ -1125,7 +1125,7 @@ pub const ConstStore = struct {
         fn_state[index] = .active;
         fn_delayed_depth[index] = delayed_depth;
         for (self.getFn(id).captures) |capture| {
-            if (@intFromEnum(capture.ty) >= self.type_store.types.items.len) {
+            if (@backingInt(capture.ty) >= self.type_store.types.items.len) {
                 constStoreInvariant("completed store contains an out-of-range capture type id");
             }
             self.verifyGraph(capture.value, value_state, fn_state, value_delayed_depth, fn_delayed_depth, delayed_depth + 1);
@@ -1135,7 +1135,7 @@ pub const ConstStore = struct {
 };
 
 fn constStoreInvariant(comptime message: []const u8) noreturn {
-    if (@import("builtin").mode == .Debug) {
+    if (@import("builtin").mode == .debug) {
         std.debug.panic("const store invariant violated: {s}", .{message});
     }
     unreachable;
@@ -1178,8 +1178,8 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
     const capture_ty = try store.type_store.append(.{ .primitive = .u64 });
     const private_backing_ty = try store.type_store.append(.{ .record = .{} });
     const private_named_ty = try store.type_store.append(.{ .named = .{
-        .named_type = .{ .module = .{}, .ty = @enumFromInt(8) },
-        .def = .{ .module = @enumFromInt(9), .type_name = @enumFromInt(10) },
+        .named_type = .{ .module = .{}, .ty = @fromBackingInt(@intCast(8)) },
+        .def = .{ .module = @fromBackingInt(@intCast(9)), .type_name = @fromBackingInt(@intCast(10)) },
         .kind = .@"opaque",
         .args = .{},
         .backing = .{
@@ -1189,8 +1189,8 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
         },
     } });
     const caps = try gpa.dupe(ConstCapture, &.{
-        .{ .id = CaptureId.fromBinder(@enumFromInt(1)), .ty = capture_ty, .value = a },
-        .{ .id = CaptureId.fromBinder(@enumFromInt(2)), .ty = capture_ty, .value = a },
+        .{ .id = CaptureId.fromBinder(@fromBackingInt(@intCast(1))), .ty = capture_ty, .value = a },
+        .{ .id = CaptureId.fromBinder(@fromBackingInt(@intCast(2))), .ty = capture_ty, .value = a },
     });
     defer gpa.free(caps);
     var target_view: names.CheckedModuleDigest = .{};
@@ -1206,19 +1206,19 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
             .view = target_view,
             .method = .{
                 .module_idx = 4,
-                .def_idx = @enumFromInt(5),
+                .def_idx = @fromBackingInt(@intCast(5)),
                 .kind = .{ .local_proc = .{
-                    .binder = @enumFromInt(8),
-                    .expr = @enumFromInt(9),
-                    .context_anchor = @enumFromInt(10),
+                    .binder = @fromBackingInt(@intCast(8)),
+                    .expr = @fromBackingInt(@intCast(9)),
+                    .context_anchor = @fromBackingInt(@intCast(10)),
                 } },
-                .callable_ty = @enumFromInt(6),
+                .callable_ty = @fromBackingInt(@intCast(6)),
             },
             .method_callable_key = method_callable_key,
             .instantiation = .{
                 .view = instantiation_view,
                 .callable_key = instantiation_callable_key,
-                .callable_ty = @enumFromInt(7),
+                .callable_ty = @fromBackingInt(@intCast(7)),
             },
             .nested = .{ .resolved = .{ .count = 1, .subtree_len = 1 } },
         } },
@@ -1232,8 +1232,8 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
     const fn_id = try store.appendFn(.{
         // Distinct non-zero ids: this test asserts captures round-trip; the fn_def
         // fields just need to survive, not be specific values.
-        .fn_def = .{ .local_template = .{ .proc_base = @enumFromInt(1), .template = @enumFromInt(2) } },
-        .source_fn_ty = @enumFromInt(3),
+        .fn_def = .{ .local_template = .{ .proc_base = @fromBackingInt(@intCast(1)), .template = @fromBackingInt(@intCast(2)) } },
+        .source_fn_ty = @fromBackingInt(@intCast(3)),
         .source_fn_key = .{},
         .captures = caps,
         .evidence = &evidence,
@@ -1284,14 +1284,14 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
     const loaded_target = loaded_fn.evidence[0].target;
     try std.testing.expectEqualSlices(u8, &target_view.bytes, &loaded_target.view.bytes);
     try std.testing.expectEqual(@as(u32, 4), loaded_target.method.module_idx);
-    try std.testing.expectEqual(@as(u32, 5), @intFromEnum(loaded_target.method.def_idx));
+    try std.testing.expectEqual(@as(u32, 5), @backingInt(loaded_target.method.def_idx));
     try std.testing.expectEqual(evidence[0].target.method.kind, loaded_target.method.kind);
-    try std.testing.expectEqual(@as(checked_ids.CheckedTypeId, @enumFromInt(6)), loaded_target.method.callable_ty);
+    try std.testing.expectEqual(@as(checked_ids.CheckedTypeId, @fromBackingInt(@intCast(6))), loaded_target.method.callable_ty);
     try std.testing.expectEqual(method_callable_key, loaded_target.method_callable_key);
     const loaded_instantiation = loaded_target.instantiation.?;
     try std.testing.expectEqualSlices(u8, &instantiation_view.bytes, &loaded_instantiation.view.bytes);
     try std.testing.expectEqual(instantiation_callable_key, loaded_instantiation.callable_key);
-    try std.testing.expectEqual(@as(checked_ids.CheckedTypeId, @enumFromInt(7)), loaded_instantiation.callable_ty);
+    try std.testing.expectEqual(@as(checked_ids.CheckedTypeId, @fromBackingInt(@intCast(7))), loaded_instantiation.callable_ty);
     const loaded_nested = loaded_target.nested.resolved;
     try std.testing.expectEqual(@as(u32, 1), loaded_nested.count);
     try std.testing.expectEqual(@as(u32, 1), loaded_nested.subtree_len);
@@ -1319,8 +1319,8 @@ test "ConstStore: build, serialize/relocate, and read back values, fns, strings"
     try std.testing.expect(!ConstStore.evidenceFramesValid(absent_chain));
 
     absent_chain.fn_def = .{ .parser_runtime = .{
-        .owner = .{ .proc_base = @enumFromInt(1), .template = @enumFromInt(2) },
-        .expr = @enumFromInt(11),
+        .owner = .{ .proc_base = @fromBackingInt(@intCast(1)), .template = @fromBackingInt(@intCast(2)) },
+        .expr = @fromBackingInt(@intCast(11)),
     } };
     try std.testing.expect(ConstStore.evidenceFramesValid(absent_chain));
 
@@ -1352,7 +1352,7 @@ test "ConstStore: exact function capture back-edge survives serialization" {
     const fn_ty = try store.type_store.append(.{ .func = .{ .args = .{}, .ret = unit_ty } });
     const fn_node = try store.reserve();
     const captures = [_]ConstCapture{.{
-        .id = CaptureId.fromBinder(@enumFromInt(1)),
+        .id = CaptureId.fromBinder(@fromBackingInt(@intCast(1))),
         .ty = fn_ty,
         .value = fn_node,
     }};
@@ -1360,8 +1360,8 @@ test "ConstStore: exact function capture back-edge survives serialization" {
         ConstFnEvidenceFrame.init(.root, null, 0, 0),
     };
     const fn_id = try store.appendFn(.{
-        .fn_def = .{ .local_template = .{ .proc_base = @enumFromInt(1), .template = @enumFromInt(2) } },
-        .source_fn_ty = @enumFromInt(3),
+        .fn_def = .{ .local_template = .{ .proc_base = @fromBackingInt(@intCast(1)), .template = @fromBackingInt(@intCast(2)) } },
+        .source_fn_ty = @fromBackingInt(@intCast(3)),
         .source_fn_key = .{},
         .captures = &captures,
         .evidence_frames = &evidence_frames,
@@ -1402,16 +1402,16 @@ test "ConstStore.appendFn: no leak or double-free under allocation failure" {
             const a = try store.append(.{ .scalar = .{ .u64 = 7 } });
             const capture_ty = try store.type_store.append(.{ .primitive = .u64 });
             const caps = try allocator.dupe(ConstCapture, &.{
-                .{ .id = CaptureId.fromBinder(@enumFromInt(1)), .ty = capture_ty, .value = a },
-                .{ .id = CaptureId.fromBinder(@enumFromInt(2)), .ty = capture_ty, .value = a },
+                .{ .id = CaptureId.fromBinder(@fromBackingInt(@intCast(1))), .ty = capture_ty, .value = a },
+                .{ .id = CaptureId.fromBinder(@fromBackingInt(@intCast(2))), .ty = capture_ty, .value = a },
             });
             defer allocator.free(caps);
             const evidence_frames = [_]ConstFnEvidenceFrame{
                 ConstFnEvidenceFrame.init(.root, null, 0, 0),
             };
             _ = try store.appendFn(.{
-                .fn_def = .{ .local_template = .{ .proc_base = @enumFromInt(1), .template = @enumFromInt(2) } },
-                .source_fn_ty = @enumFromInt(3),
+                .fn_def = .{ .local_template = .{ .proc_base = @fromBackingInt(@intCast(1)), .template = @fromBackingInt(@intCast(2)) } },
+                .source_fn_ty = @fromBackingInt(@intCast(3)),
                 .source_fn_key = .{},
                 .captures = caps,
                 .evidence_frames = &evidence_frames,

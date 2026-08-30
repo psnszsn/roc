@@ -15,7 +15,7 @@ const Slot = ModuleEnv.SchemeUseRecord.Slot;
 fn recordsWithSlot(env: *const ModuleEnv, slot: Slot) usize {
     var count: usize = 0;
     for (env.scheme_uses.items.items) |record| {
-        if (record.slot_kind == @intFromEnum(slot)) count += 1;
+        if (record.slot_kind == @backingInt(slot)) count += 1;
     }
     return count;
 }
@@ -45,11 +45,11 @@ test "value use of a where-clause generic records instantiation evidence" {
     // settled, resolved to the concrete `Thing` nominal.
     var found_resolved_pair = false;
     for (env.scheme_uses.items.items) |record| {
-        if (record.slot_kind != @intFromEnum(Slot.value_use)) continue;
+        if (record.slot_kind != @backingInt(Slot.value_use)) continue;
         try std.testing.expect(record.pairs_len >= 1);
         const pairs = env.scheme_use_pairs.items.items[record.pairs_start .. record.pairs_start + record.pairs_len];
         for (pairs) |pair| {
-            const resolved = env.types.resolveVar(@enumFromInt(pair.fresh_var));
+            const resolved = env.types.resolveVar(@fromBackingInt(@intCast(pair.fresh_var)));
             if (resolved.desc.content == .structure) found_resolved_pair = true;
         }
     }
@@ -82,7 +82,7 @@ test "source-forward annotated recursive use records the complete body scheme" {
         const pattern = env.store.getPattern(def.pattern);
         if (pattern != .assign) continue;
         if (std.mem.eql(u8, idents.getText(pattern.assign.ident), "f")) {
-            f_expr_var = @intFromEnum(ModuleEnv.varFrom(def.expr));
+            f_expr_var = @backingInt(ModuleEnv.varFrom(def.expr));
             break;
         }
     }
@@ -90,7 +90,7 @@ test "source-forward annotated recursive use records the complete body scheme" {
 
     var found_complete_forward_use = false;
     for (env.scheme_uses.items.items) |record| {
-        if (record.slot_kind != @intFromEnum(Slot.value_use)) continue;
+        if (record.slot_kind != @backingInt(Slot.value_use)) continue;
         if (record.scheme_root != f_expr_var.?) continue;
         try std.testing.expect(record.pairs_len > 0);
         found_complete_forward_use = true;
@@ -125,12 +125,12 @@ test "discharging a dispatch constraint onto a constrained method target records
     // concrete `Thing` nominal.
     var found_resolved_pair = false;
     for (env.scheme_uses.items.items) |record| {
-        if (record.slot_kind != @intFromEnum(Slot.dispatch_target)) continue;
+        if (record.slot_kind != @backingInt(Slot.dispatch_target)) continue;
         if (record.pairs_len == 0) continue;
         try std.testing.expect(record.slot_data != 0);
         const pairs = env.scheme_use_pairs.items.items[record.pairs_start .. record.pairs_start + record.pairs_len];
         for (pairs) |pair| {
-            const resolved = env.types.resolveVar(@enumFromInt(pair.fresh_var));
+            const resolved = env.types.resolveVar(@fromBackingInt(@intCast(pair.fresh_var)));
             if (resolved.desc.content == .structure) found_resolved_pair = true;
         }
     }
@@ -164,7 +164,7 @@ test "block-local attached procedures record their dispatch target edges" {
     const env = test_env.module_env;
     var zero_pair_targets: usize = 0;
     for (env.scheme_uses.items.items) |record| {
-        if (record.slot_kind != @intFromEnum(Slot.dispatch_target)) continue;
+        if (record.slot_kind != @backingInt(Slot.dispatch_target)) continue;
         if (record.pairs_len == 0) zero_pair_targets += 1;
     }
     try std.testing.expect(zero_pair_targets >= 2);

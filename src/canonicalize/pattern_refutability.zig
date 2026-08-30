@@ -90,7 +90,7 @@ const TestAdapter = struct {
     pub const PatternId = TestPatternId;
 
     fn pattern(id: PatternId) TestPattern {
-        return test_patterns[@intFromEnum(id)];
+        return test_patterns[@backingInt(id)];
     }
 
     pub fn patternClass(_: @This(), id: PatternId) PatternClass {

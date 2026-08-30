@@ -2640,15 +2640,15 @@ test "typed method definition entries expose finalized owner-method keys" {
 
     const method_ident = try env.insertIdent(Ident.for_text("get"));
     const other_method_ident = try env.insertIdent(Ident.for_text("set"));
-    const owner: can.CIR.Statement.Idx = @enumFromInt(1);
+    const owner: can.CIR.Statement.Idx = @fromBackingInt(@intCast(1));
 
     try env.registerMethodDefForOwner(owner, method_ident, .{
-        .type_node_idx = @enumFromInt(1),
-        .def_idx = @enumFromInt(1),
+        .type_node_idx = @fromBackingInt(@intCast(1)),
+        .def_idx = @fromBackingInt(@intCast(1)),
     });
     try env.registerMethodDefForOwner(owner, other_method_ident, .{
-        .type_node_idx = @enumFromInt(2),
-        .def_idx = @enumFromInt(2),
+        .type_node_idx = @fromBackingInt(@intCast(2)),
+        .def_idx = @fromBackingInt(@intCast(2)),
     });
 
     const source_modules = [_]TypedCIR.Modules.SourceModule{
@@ -9233,8 +9233,8 @@ test "check type - generated principality under optional exact annotations" {
     // an independent TestEnv.
     for (0..8) |raw_combination| {
         const combination: u3 = @intCast(raw_combination);
-        const weak: GeneratedWeakLiteral = @enumFromInt(combination & 0b001);
-        const wrapper: GeneratedResultWrapper = @enumFromInt((combination >> 1) & 0b001);
+        const weak: GeneratedWeakLiteral = @fromBackingInt(@intCast(combination & 0b001));
+        const wrapper: GeneratedResultWrapper = @fromBackingInt(@intCast((combination >> 1) & 0b001));
         const transitive = combination & 0b100 != 0;
 
         const inferred_source = try generatedPrincipalitySource(

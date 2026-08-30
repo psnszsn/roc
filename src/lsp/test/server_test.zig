@@ -129,7 +129,7 @@ test "server rejects re-initialization requests" {
     var parsed_error = try std.json.parseFromSlice(std.json.Value, allocator, responses[1], .{});
     defer parsed_error.deinit();
     const error_obj = parsed_error.value.object.get("error") orelse return error.ExpectedError;
-    try std.testing.expect(error_obj.object.get("code").?.integer == @intFromEnum(protocol.ErrorCode.invalid_request));
+    try std.testing.expect(error_obj.object.get("code").?.integer == @backingInt(protocol.ErrorCode.invalid_request));
 }
 
 test "server tracks documents on didOpen/didChange" {

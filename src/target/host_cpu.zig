@@ -77,7 +77,7 @@ const hwcap_asimddp = 1 << 20;
 fn detectedX86Features() std.Target.Cpu.Feature.Set {
     var detected = std.Target.Cpu.Feature.Set.empty;
     for (x86_64_default_level_features) |required| {
-        detected.addFeature(@intFromEnum(required.feature));
+        detected.addFeature(@backingInt(required.feature));
     }
     detected.populateDependencies(std.Target.Cpu.Arch.x86_64.allFeaturesList());
     return detected;
@@ -85,8 +85,8 @@ fn detectedX86Features() std.Target.Cpu.Feature.Set {
 
 fn detectedAarch64Features() std.Target.Cpu.Feature.Set {
     var detected = std.Target.Cpu.Feature.Set.empty;
-    detected.addFeature(@intFromEnum(std.Target.aarch64.Feature.aes));
-    detected.addFeature(@intFromEnum(std.Target.aarch64.Feature.dotprod));
+    detected.addFeature(@backingInt(std.Target.aarch64.Feature.aes));
+    detected.addFeature(@backingInt(std.Target.aarch64.Feature.dotprod));
     detected.populateDependencies(std.Target.Cpu.Arch.aarch64.allFeaturesList());
     return detected;
 }
@@ -134,12 +134,12 @@ fn getauxval(index: usize) usize {
 var cached_level = std.atomic.Value(u8).init(0);
 
 fn encode(level_value: CpuLevel) u8 {
-    return @as(u8, @intFromEnum(level_value)) + 1;
+    return @as(u8, @backingInt(level_value)) + 1;
 }
 
 fn decode(cached: u8) ?CpuLevel {
     if (cached == 0) return null;
-    return @enumFromInt(cached - 1);
+    return @fromBackingInt(@intCast(cached - 1));
 }
 
 /// The highest CPU level this machine executes.
@@ -351,7 +351,7 @@ test "CPUID reports every feature this binary was built to use" {
     const cpu = X86Cpuid.query();
 
     for (x86_64_default_level_features) |required| {
-        if (!builtin.cpu.features.isEnabled(@intFromEnum(required.feature))) continue;
+        if (!builtin.cpu.features.isEnabled(@backingInt(required.feature))) continue;
         try std.testing.expect(cpu.reports(required));
     }
 }

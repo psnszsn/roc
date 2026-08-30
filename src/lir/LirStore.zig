@@ -174,14 +174,14 @@ pub const no_local_name: u32 = std.math.maxInt(u32);
 pub fn setLocalName(self: *Self, id: LocalId, name: []const u8) Allocator.Error!void {
     if (name.len == 0) return;
     const idx = try self.insertString(name);
-    self.local_names.set(@intFromEnum(id), @intFromEnum(idx));
+    self.local_names.set(@backingInt(id), @backingInt(idx));
 }
 
 /// Source-level name of a local, or null for compiler-generated temporaries.
 pub fn localName(self: *const Self, id: LocalId) ?[]const u8 {
-    const raw = self.local_names.get(@intFromEnum(id));
+    const raw = self.local_names.get(@backingInt(id));
     if (raw == no_local_name) return null;
-    return self.getString(@enumFromInt(raw));
+    return self.getString(@fromBackingInt(@intCast(raw)));
 }
 
 /// Record the source-level debug name of a proc.
@@ -192,7 +192,7 @@ pub fn setProcDebugName(self: *Self, id: LirProcSpecId, name: []const u8) Alloca
 
 /// Copy proc source metadata from one proc to another, for compiler-generated variants.
 pub fn copyProcDebugInfo(self: *Self, dst: LirProcSpecId, src: LirProcSpecId) Allocator.Error!void {
-    self.proc_locs.set(@intFromEnum(dst), self.proc_locs.get(@intFromEnum(src)));
+    self.proc_locs.set(@backingInt(dst), self.proc_locs.get(@backingInt(src)));
     if (self.procDebugNameIndex(src)) |idx| {
         try self.setProcDebugNameIndex(dst, idx);
     }
@@ -205,7 +205,7 @@ pub fn procDebugName(self: *const Self, id: LirProcSpecId) ?[]const u8 {
 }
 
 fn procDebugNameIndex(self: *const Self, id: LirProcSpecId) ?base.StringLiteral.Idx {
-    const proc = @intFromEnum(id);
+    const proc = @backingInt(id);
     for (self.proc_debug_names.unsafeRawItemsForView()) |entry| {
         if (entry.proc == proc) return entry.string;
     }
@@ -213,7 +213,7 @@ fn procDebugNameIndex(self: *const Self, id: LirProcSpecId) ?base.StringLiteral.
 }
 
 fn setProcDebugNameIndex(self: *Self, id: LirProcSpecId, string: base.StringLiteral.Idx) Allocator.Error!void {
-    const proc = @intFromEnum(id);
+    const proc = @backingInt(id);
     for (self.proc_debug_names.unsafeRawItemsMutForStore()) |*entry| {
         if (entry.proc == proc) {
             entry.string = string;
@@ -246,17 +246,17 @@ pub fn sourceFileName(self: *const Self, file: u32) []const u8 {
 
 /// Source location of a statement.
 pub fn stmtLoc(self: *const Self, id: CFStmtId) base.SourceLoc {
-    return self.cf_stmt_locs.get(@intFromEnum(id));
+    return self.cf_stmt_locs.get(@backingInt(id));
 }
 
 /// Virtual source frame associated with a statement.
 pub fn stmtInlineScope(self: *const Self, id: CFStmtId) InlineScopeId {
-    return self.cf_stmt_inline_scopes.get(@intFromEnum(id));
+    return self.cf_stmt_inline_scopes.get(@backingInt(id));
 }
 
 /// Retrieve one virtual source frame.
 pub fn inlineScope(self: *const Self, id: InlineScopeId) InlineScope {
-    return self.inline_scopes.get(@intFromEnum(id));
+    return self.inline_scopes.get(@backingInt(id));
 }
 
 /// Number of virtual source frames.
@@ -266,31 +266,31 @@ pub fn inlineScopeCount(self: *const Self) usize {
 
 /// Intern one virtual source frame and return its identifier.
 pub fn addInlineScope(self: *Self, scope: InlineScope) Allocator.Error!InlineScopeId {
-    const id: InlineScopeId = @enumFromInt(@as(u32, @intCast(self.inline_scopes.len())));
+    const id: InlineScopeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.inline_scopes.len()))));
     try self.inline_scopes.append(self.allocator, scope);
     return id;
 }
 
 /// Checked source region of a statement.
 pub fn stmtRegion(self: *const Self, id: CFStmtId) base.Region {
-    return self.cf_stmt_regions.get(@intFromEnum(id));
+    return self.cf_stmt_regions.get(@backingInt(id));
 }
 
 /// Source location of a proc.
 pub fn procLoc(self: *const Self, id: LirProcSpecId) base.SourceLoc {
-    return self.proc_locs.get(@intFromEnum(id));
+    return self.proc_locs.get(@backingInt(id));
 }
 
 /// Appends a pattern and returns its id.
 pub fn addPattern(self: *Self, pattern: LirPattern) Allocator.Error!LirPatternId {
-    const id: LirPatternId = @enumFromInt(self.patterns.len());
+    const id: LirPatternId = @fromBackingInt(@intCast(self.patterns.len()));
     try self.patterns.append(self.allocator, pattern);
     return id;
 }
 
 /// Returns the pattern for a given id.
 pub fn getPattern(self: *const Self, id: LirPatternId) LirPattern {
-    return self.patterns.get(@intFromEnum(id));
+    return self.patterns.get(@backingInt(id));
 }
 
 /// Number of stored patterns.
@@ -355,7 +355,7 @@ pub fn insertStringViewAligned(
     const offset_usize: usize = offset;
     const len_usize: usize = len;
     if (offset_usize > backing.len or len_usize > backing.len - offset_usize) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("LirStore invariant violated: string literal view exceeded backing bytes", .{});
         }
         unreachable;
@@ -379,7 +379,7 @@ pub fn getStringLiteral(self: *const Self, literal: lir_defs.StrLiteral) []const
     const offset: usize = literal.offset;
     const len: usize = literal.len;
     if (offset > backing.len or len > backing.len - offset) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("LirStore invariant violated: string literal view exceeded stored backing bytes", .{});
         }
         unreachable;
@@ -395,7 +395,7 @@ pub fn getStringLiteralBacking(self: *const Self, literal: lir_defs.StrLiteral) 
 fn assertStringsInsertable(self: *const Self) void {
     if (self.strings_insertable) return;
 
-    if (comptime builtin.mode == .Debug) {
+    if (comptime builtin.mode == .debug) {
         std.debug.panic("LirStore invariant violated: attempted to insert into frozen string literal store", .{});
     }
     unreachable;
@@ -406,7 +406,7 @@ pub fn addLocal(self: *Self, local: Local) Allocator.Error!LocalId {
     const idx = self.locals.len();
     try self.locals.append(self.allocator, local);
     try self.local_names.append(self.allocator, no_local_name);
-    return @enumFromInt(@as(u32, @intCast(idx)));
+    return @fromBackingInt(@intCast(@as(u32, @intCast(idx))));
 }
 
 /// Number of stored LIR locals.
@@ -421,12 +421,12 @@ pub fn getLocals(self: *const Self) []const Local {
 
 /// Returns one stored LIR local.
 pub fn getLocal(self: *const Self, id: LocalId) Local {
-    return self.locals.get(@intFromEnum(id));
+    return self.locals.get(@backingInt(id));
 }
 
 /// Returns a mutable pointer to one stored LIR local.
 pub fn getLocalPtr(self: *Self, id: LocalId) *Local {
-    return self.locals.getPtrImmediate(@intFromEnum(id));
+    return self.locals.getPtrImmediate(@backingInt(id));
 }
 
 /// Records the boxy descriptor governing a local's runtime payload.
@@ -436,7 +436,7 @@ pub fn setLocalBoxyDesc(self: *Self, id: LocalId, desc: lir_defs.BoxyDescRef) vo
         if (!std.meta.eql(existing, desc)) {
             std.debug.panic(
                 "LIR store invariant violated: local {d} was assigned two different boxy descriptors: existing={any} new={any}",
-                .{ @intFromEnum(id), existing, desc },
+                .{ @backingInt(id), existing, desc },
             );
         }
         return;
@@ -502,11 +502,11 @@ pub fn internErasedCallArgsPlan(
             existing.alignment == metrics.alignment and
             std.mem.eql(u32, existing_offsets, offsets))
         {
-            return @enumFromInt(@as(u32, @intCast(index)));
+            return @fromBackingInt(@intCast(@as(u32, @intCast(index))));
         }
     }
 
-    const id: ErasedCallArgsPlanId = @enumFromInt(@as(u32, @intCast(self.erased_call_arg_plans.len())));
+    const id: ErasedCallArgsPlanId = @fromBackingInt(@intCast(@as(u32, @intCast(self.erased_call_arg_plans.len()))));
     try self.erased_call_arg_plans.append(self.allocator, .{
         .offsets = try self.addU32Span(offsets),
         .size = metrics.size,
@@ -517,7 +517,7 @@ pub fn internErasedCallArgsPlan(
 
 /// Return an interned erased-call argument layout plan.
 pub fn getErasedCallArgsPlan(self: *const Self, id: ErasedCallArgsPlanId) ErasedCallArgsPlan {
-    return self.erased_call_arg_plans.get(@intFromEnum(id));
+    return self.erased_call_arg_plans.get(@backingInt(id));
 }
 
 /// Return the number of interned erased-call argument layout plans.
@@ -590,7 +590,7 @@ pub fn addCFStmt(self: *Self, stmt: CFStmt) Allocator.Error!CFStmtId {
     try self.cf_stmt_locs.append(self.allocator, loc);
     try self.cf_stmt_regions.append(self.allocator, region);
     try self.cf_stmt_inline_scopes.append(self.allocator, inline_scope);
-    return @enumFromInt(@as(u32, @intCast(idx)));
+    return @fromBackingInt(@intCast(@as(u32, @intCast(idx))));
 }
 
 /// Number of stored control-flow statements.
@@ -626,18 +626,18 @@ pub fn getCFStmtRegions(self: *const Self) []const base.Region {
 /// Returns the stored statement for the given id.
 pub fn getCFStmt(self: *const Self, id: CFStmtId) CFStmt {
     self.verifyCFStmtId(id);
-    return self.cf_stmts.get(@intFromEnum(id));
+    return self.cf_stmts.get(@backingInt(id));
 }
 
 /// Returns a mutable pointer to the stored statement for the given id.
 pub fn getCFStmtPtr(self: *Self, id: CFStmtId) *CFStmt {
     self.verifyCFStmtId(id);
-    return self.cf_stmts.getPtrImmediate(@intFromEnum(id));
+    return self.cf_stmts.getPtrImmediate(@backingInt(id));
 }
 
 fn verifyCFStmtId(self: *const Self, id: CFStmtId) void {
-    if (builtin.mode == .Debug) {
-        const idx = @intFromEnum(id);
+    if (builtin.mode == .debug) {
+        const idx = @backingInt(id);
         if (idx >= self.cf_stmts.len()) {
             std.debug.panic(
                 "LirStore invariant violated: statement id {d} exceeds statement storage len {d}",
@@ -723,7 +723,7 @@ pub fn addProcSpec(self: *Self, proc: LirProcSpec) Allocator.Error!LirProcSpecId
     const idx = self.proc_specs.len();
     try self.proc_specs.append(self.allocator, proc);
     try self.proc_locs.append(self.allocator, self.current_loc);
-    return @enumFromInt(@as(u32, @intCast(idx)));
+    return @fromBackingInt(@intCast(@as(u32, @intCast(idx))));
 }
 
 /// Number of stored proc specifications.
@@ -763,29 +763,29 @@ pub fn getLocalNamesRaw(self: *const Self) []const u32 {
 
 /// Returns the stored proc specification for the given id.
 pub fn getProcSpec(self: *const Self, idx: LirProcSpecId) LirProcSpec {
-    return self.proc_specs.get(@intFromEnum(idx));
+    return self.proc_specs.get(@backingInt(idx));
 }
 
 /// Updates the body for a stored proc specification.
 pub fn setProcSpecBody(self: *Self, idx: LirProcSpecId, body: ?CFStmtId) void {
-    self.proc_specs.getPtrImmediate(@intFromEnum(idx)).body = body;
+    self.proc_specs.getPtrImmediate(@backingInt(idx)).body = body;
 }
 
 /// Updates the final join-point span for a stored proc specification.
 pub fn setProcSpecJoinPoints(self: *Self, idx: LirProcSpecId, join_points: JoinPointSpan) void {
-    self.proc_specs.getPtrImmediate(@intFromEnum(idx)).join_points = join_points;
+    self.proc_specs.getPtrImmediate(@backingInt(idx)).join_points = join_points;
 }
 
 /// Updates body and final join points after all fallible/appending work has completed.
 pub fn setProcSpecBodyAndJoinPoints(self: *Self, idx: LirProcSpecId, body: ?CFStmtId, join_points: JoinPointSpan) void {
-    const proc = self.proc_specs.getPtrImmediate(@intFromEnum(idx));
+    const proc = self.proc_specs.getPtrImmediate(@backingInt(idx));
     proc.body = body;
     proc.join_points = join_points;
 }
 
 /// Returns a mutable pointer to the stored proc specification for the given id.
 pub fn getProcSpecPtr(self: *Self, idx: LirProcSpecId) *LirProcSpec {
-    return self.proc_specs.getPtrImmediate(@intFromEnum(idx));
+    return self.proc_specs.getPtrImmediate(@backingInt(idx));
 }
 
 /// Returns all stored proc specifications.
@@ -800,7 +800,7 @@ pub fn getProcDebugName(self: *const Self, index: usize) ProcDebugName {
 
 /// Returns the raw local-name table entry for the given local id.
 pub fn getLocalNameRaw(self: *const Self, id: LocalId) u32 {
-    return self.local_names.get(@intFromEnum(id));
+    return self.local_names.get(@backingInt(id));
 }
 
 /// Remaps proc debug-name entries and drops names for pruned procs.
@@ -811,7 +811,7 @@ pub fn compactProcDebugNames(self: *Self, old_to_new: []const ?LirProcSpecId) vo
         if (entry.proc >= old_to_new.len) continue;
         const new_proc = old_to_new[entry.proc] orelse continue;
         names[write] = .{
-            .proc = @intFromEnum(new_proc),
+            .proc = @backingInt(new_proc),
             .string = entry.string,
         };
         write += 1;

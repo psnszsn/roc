@@ -107,8 +107,8 @@ test "can add and lookup idents at top level" {
 
     const foo_ident = try ctx.module_env.insertIdent(Ident.for_text("foo"));
     const bar_ident = try ctx.module_env.insertIdent(Ident.for_text("bar"));
-    const foo_pattern: Pattern.Idx = @enumFromInt(1);
-    const bar_pattern: Pattern.Idx = @enumFromInt(2);
+    const foo_pattern: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const bar_pattern: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Add identifiers
     const foo_result = ctx.self.scopeIntroduceInternal(gpa, .ident, foo_ident, foo_pattern, false, true);
@@ -132,8 +132,8 @@ test "nested scopes shadow outer scopes" {
     defer ctx.deinit();
 
     const x_ident = try ctx.module_env.insertIdent(Ident.for_text("x"));
-    const outer_pattern: Pattern.Idx = @enumFromInt(1);
-    const inner_pattern: Pattern.Idx = @enumFromInt(2);
+    const outer_pattern: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const inner_pattern: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Add x to outer scope
     const outer_result = ctx.self.scopeIntroduceInternal(gpa, .ident, x_ident, outer_pattern, false, true);
@@ -169,7 +169,7 @@ test "top level var error" {
     defer ctx.deinit();
 
     const var_ident = try ctx.module_env.insertIdent(Ident.for_text("count_"));
-    const pattern: Pattern.Idx = @enumFromInt(1);
+    const pattern: Pattern.Idx = @fromBackingInt(@intCast(1));
 
     // Should fail to introduce var at top level
     const result = ctx.self.scopeIntroduceInternal(gpa, .ident, var_ident, pattern, true, true);
@@ -185,8 +185,8 @@ test "type variables are tracked separately from value identifiers" {
 
     // Create identifiers for 'a' - one for value, one for type
     const a_ident = try ctx.module_env.insertIdent(Ident.for_text("a"));
-    const pattern: Pattern.Idx = @enumFromInt(1);
-    const type_anno: TypeAnno.Idx = @enumFromInt(1);
+    const pattern: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const type_anno: TypeAnno.Idx = @fromBackingInt(@intCast(1));
 
     // Introduce 'a' as a value identifier
     const value_result = ctx.self.scopeIntroduceInternal(gpa, .ident, a_ident, pattern, false, true);
@@ -216,8 +216,8 @@ test "var reassignment within same function" {
     try ctx.self.scopeEnter(gpa, true);
 
     const count_ident = try ctx.module_env.insertIdent(Ident.for_text("count_"));
-    const pattern1: Pattern.Idx = @enumFromInt(1);
-    const pattern2: Pattern.Idx = @enumFromInt(2);
+    const pattern1: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const pattern2: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Declare var
     const declare_result = ctx.self.scopeIntroduceInternal(gpa, .ident, count_ident, pattern1, true, true);
@@ -242,8 +242,8 @@ test "var reassignment across function boundary fails" {
     try ctx.self.scopeEnter(gpa, true);
 
     const count_ident = try ctx.module_env.insertIdent(Ident.for_text("count_"));
-    const pattern1: Pattern.Idx = @enumFromInt(1);
-    const pattern2: Pattern.Idx = @enumFromInt(2);
+    const pattern1: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const pattern2: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Declare var in first function
     const declare_result = ctx.self.scopeIntroduceInternal(gpa, .ident, count_ident, pattern1, true, true);
@@ -265,8 +265,8 @@ test "identifiers with and without underscores are different" {
 
     const sum_ident = try ctx.module_env.insertIdent(Ident.for_text("sum"));
     const sum_underscore_ident = try ctx.module_env.insertIdent(Ident.for_text("sum_"));
-    const pattern1: Pattern.Idx = @enumFromInt(1);
-    const pattern2: Pattern.Idx = @enumFromInt(2);
+    const pattern1: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const pattern2: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Enter function scope so we can use var
     try ctx.self.scopeEnter(gpa, true);
@@ -294,8 +294,8 @@ test "aliases work separately from idents" {
     defer ctx.deinit();
 
     const foo_ident = try ctx.module_env.insertIdent(Ident.for_text("Foo"));
-    const ident_pattern: Pattern.Idx = @enumFromInt(1);
-    const alias_pattern: Pattern.Idx = @enumFromInt(2);
+    const ident_pattern: Pattern.Idx = @fromBackingInt(@intCast(1));
+    const alias_pattern: Pattern.Idx = @fromBackingInt(@intCast(2));
 
     // Add as both ident and alias (they're in separate namespaces)
     const ident_result = ctx.self.scopeIntroduceInternal(gpa, .ident, foo_ident, ident_pattern, false, true);
@@ -322,8 +322,8 @@ test "type binding introduction handles same-scope local conflicts" {
     defer scopes[0].deinit(gpa);
 
     const type_ident = try ctx.module_env.insertIdent(Ident.for_text("Thing"));
-    const first_stmt: Statement.Idx = @enumFromInt(1);
-    const second_stmt: Statement.Idx = @enumFromInt(2);
+    const first_stmt: Statement.Idx = @fromBackingInt(@intCast(1));
+    const second_stmt: Statement.Idx = @fromBackingInt(@intCast(2));
 
     const inserted = try Scope.introduceTypeBinding(
         gpa,
@@ -372,8 +372,8 @@ test "type binding introduction reports parent shadowing without changing parent
     }
 
     const type_ident = try ctx.module_env.insertIdent(Ident.for_text("Thing"));
-    const parent_stmt: Statement.Idx = @enumFromInt(1);
-    const child_stmt: Statement.Idx = @enumFromInt(2);
+    const parent_stmt: Statement.Idx = @fromBackingInt(@intCast(1));
+    const child_stmt: Statement.Idx = @fromBackingInt(@intCast(2));
 
     try std.testing.expectEqual(
         Scope.TypeBindingDecision.inserted,
@@ -413,7 +413,7 @@ test "local type bindings replace current external imports" {
     const type_ident = try ctx.module_env.insertIdent(Ident.for_text("Thing"));
     const module_ident = try ctx.module_env.insertIdent(Ident.for_text("Imported"));
     const external = externalTypeBinding(module_ident, type_ident);
-    const local_stmt: Statement.Idx = @enumFromInt(1);
+    const local_stmt: Statement.Idx = @fromBackingInt(@intCast(1));
 
     try std.testing.expectEqual(
         Scope.TypeBindingDecision.inserted,
@@ -503,7 +503,7 @@ test "associated type aliases do not replace current external imports" {
     const type_ident = try ctx.module_env.insertIdent(Ident.for_text("Thing"));
     const module_ident = try ctx.module_env.insertIdent(Ident.for_text("Imported"));
     const external = externalTypeBinding(module_ident, type_ident);
-    const associated_stmt: Statement.Idx = @enumFromInt(1);
+    const associated_stmt: Statement.Idx = @fromBackingInt(@intCast(1));
 
     try std.testing.expectEqual(
         Scope.TypeBindingDecision.inserted,

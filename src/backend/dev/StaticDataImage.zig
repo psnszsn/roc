@@ -186,7 +186,7 @@ fn alignForwardChecked(value: usize, alignment: usize) ?usize {
 test "static data image resolves data relocations and compact LIR addresses" {
     const allocator = std.testing.allocator;
     var target_bytes = [_]u8{ 10, 20, 30, 40 };
-    var root_bytes = [_]u8{0} ** @sizeOf(usize);
+    var root_bytes = @as([@sizeOf(usize)]u8, @splat(0));
     const root_relocations = [_]StaticDataRelocation{.{
         .offset = 0,
         .target_symbol_name = "payload",
@@ -218,13 +218,13 @@ test "static data image resolves data relocations and compact LIR addresses" {
 
 test "static data image resolves function relocations explicitly" {
     const allocator = std.testing.allocator;
-    var root_bytes = [_]u8{0} ** @sizeOf(usize);
+    var root_bytes = @as([@sizeOf(usize)]u8, @splat(0));
     const root_relocations = [_]StaticDataRelocation{.{
         .offset = 0,
         .target_symbol_name = "roc__proc_1",
         .kind = .function_pointer,
         .callable_capture_offset = 16,
-        .procedure = @enumFromInt(1),
+        .procedure = @fromBackingInt(@intCast(1)),
     }};
     const exports = [_]StaticDataExport{.{
         .symbol_name = "callable",
@@ -239,7 +239,7 @@ test "static data image resolves function relocations explicitly" {
         fn resolve(_: ?*anyopaque, relocation: StaticDataRelocation) ?usize {
             if (!std.mem.eql(u8, relocation.target_symbol_name, "roc__proc_1")) return null;
             if (relocation.callable_capture_offset != 16) return null;
-            if (@intFromEnum(relocation.procedure orelse return null) != 1) return null;
+            if (@backingInt(relocation.procedure orelse return null) != 1) return null;
             return 0x1234;
         }
     };
@@ -250,7 +250,7 @@ test "static data image resolves function relocations explicitly" {
 }
 
 test "static data image rejects and releases an unresolved data graph" {
-    var root_bytes = [_]u8{0} ** @sizeOf(usize);
+    var root_bytes = @as([@sizeOf(usize)]u8, @splat(0));
     const relocations = [_]StaticDataRelocation{.{
         .offset = 0,
         .target_symbol_name = "missing",

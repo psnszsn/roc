@@ -154,17 +154,17 @@ pub const Store = struct {
     }
 
     pub fn add(self: *Store, content: Content) std.mem.Allocator.Error!TypeId {
-        const id: TypeId = @enumFromInt(@as(u32, @intCast(self.types.len())));
+        const id: TypeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.types.len()))));
         try self.types.append(self.allocator, content);
         return id;
     }
 
     pub fn set(self: *Store, id: TypeId, content: Content) void {
-        self.types.set(@intFromEnum(id), content);
+        self.types.set(@backingInt(id), content);
     }
 
     pub fn get(self: *const Store, id: TypeId) Content {
-        return self.types.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.types.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn typeCount(self: *const Store) usize {
@@ -204,7 +204,7 @@ pub const Store = struct {
         const start: u32 = @intCast(self.fn_variants.len());
         for (values, 0..) |variant, i| {
             var stored = variant;
-            stored.id = @enumFromInt(@as(u32, @intCast(start + i)));
+            stored.id = @fromBackingInt(@intCast(@as(u32, @intCast(start + i))));
             try self.fn_variants.append(self.allocator, stored);
         }
         return .{ .start = start, .len = @intCast(values.len) };
@@ -343,7 +343,7 @@ pub const Store = struct {
                 writeU32(hasher, @intCast(field_slice.len));
                 for (0..field_slice.len) |index| {
                     const field = GuardedList.at(field_slice, index);
-                    writeU32(hasher, @intFromEnum(field.symbol));
+                    writeU32(hasher, @backingInt(field.symbol));
                     self.writeTypeDigest(name_store, hasher, field.ty);
                     self.writeTypeDigest(name_store, hasher, field.storage_ty);
                 }
@@ -368,8 +368,8 @@ pub const Store = struct {
                 writeU32(hasher, @intCast(variant_slice.len));
                 for (0..variant_slice.len) |index| {
                     const variant = GuardedList.at(variant_slice, index);
-                    writeU32(hasher, @intFromEnum(variant.source));
-                    writeU32(hasher, @intFromEnum(variant.target));
+                    writeU32(hasher, @backingInt(variant.source));
+                    writeU32(hasher, @backingInt(variant.target));
                     if (variant.capture_ty) |capture_ty| {
                         writeBytes(hasher, "capture");
                         self.writeTypeDigest(name_store, hasher, capture_ty);
@@ -393,8 +393,8 @@ pub const Store = struct {
                 writeU32(hasher, @intCast(variant_slice.len));
                 for (0..variant_slice.len) |index| {
                     const variant = GuardedList.at(variant_slice, index);
-                    writeU32(hasher, @intFromEnum(variant.source));
-                    writeU32(hasher, @intFromEnum(variant.target));
+                    writeU32(hasher, @backingInt(variant.source));
+                    writeU32(hasher, @backingInt(variant.target));
                     if (variant.capture_ty) |capture_ty| {
                         writeBytes(hasher, "capture");
                         self.writeTypeDigest(name_store, hasher, capture_ty);
@@ -488,14 +488,14 @@ test "lambda mono callable variants receive store-local ids" {
 
     const capture_ty = try store.add(.zst);
     const variants = try store.addFnVariants(&.{
-        .{ .id = @enumFromInt(99), .source = @enumFromInt(7), .target = @enumFromInt(70), .capture_ty = capture_ty },
-        .{ .id = @enumFromInt(99), .source = @enumFromInt(8), .target = @enumFromInt(80), .capture_ty = null },
+        .{ .id = @fromBackingInt(@intCast(99)), .source = @fromBackingInt(@intCast(7)), .target = @fromBackingInt(@intCast(70)), .capture_ty = capture_ty },
+        .{ .id = @fromBackingInt(@intCast(99)), .source = @fromBackingInt(@intCast(8)), .target = @fromBackingInt(@intCast(80)), .capture_ty = null },
     });
     const callable = try store.add(.{ .callable = variants });
 
     const stored_variants = store.fnVariantSpan(store.get(callable).callable);
-    try std.testing.expectEqual(@as(FnVariantId, @enumFromInt(variants.start)), GuardedList.at(stored_variants, 0).id);
-    try std.testing.expectEqual(@as(FnVariantId, @enumFromInt(1)), GuardedList.at(stored_variants, 1).id);
+    try std.testing.expectEqual(@as(FnVariantId, @fromBackingInt(@intCast(variants.start))), GuardedList.at(stored_variants, 0).id);
+    try std.testing.expectEqual(@as(FnVariantId, @fromBackingInt(@intCast(1))), GuardedList.at(stored_variants, 1).id);
     try std.testing.expectEqual(capture_ty, GuardedList.at(stored_variants, 0).capture_ty.?);
 }
 
@@ -505,10 +505,10 @@ test "lambda mono empty spans use shared empty descriptor" {
 
     const unit = try store.add(.zst);
     const nonempty_span = try store.addSpan(&.{unit});
-    const nonempty_fields = try store.addFields(&.{.{ .name = @enumFromInt(1), .ty = unit, .default = null }});
-    const nonempty_capture_fields = try store.addCaptureFields(&.{.{ .symbol = @enumFromInt(2), .binder = null, .ty = unit, .storage_ty = unit }});
-    const nonempty_tags = try store.addTags(&.{.{ .name = @enumFromInt(3), .checked_name = @enumFromInt(3), .payloads = nonempty_span }});
-    const nonempty_variants = try store.addFnVariants(&.{.{ .id = @enumFromInt(99), .source = @enumFromInt(4), .target = @enumFromInt(40), .capture_ty = unit }});
+    const nonempty_fields = try store.addFields(&.{.{ .name = @fromBackingInt(@intCast(1)), .ty = unit, .default = null }});
+    const nonempty_capture_fields = try store.addCaptureFields(&.{.{ .symbol = @fromBackingInt(@intCast(2)), .binder = null, .ty = unit, .storage_ty = unit }});
+    const nonempty_tags = try store.addTags(&.{.{ .name = @fromBackingInt(@intCast(3)), .checked_name = @fromBackingInt(@intCast(3)), .payloads = nonempty_span }});
+    const nonempty_variants = try store.addFnVariants(&.{.{ .id = @fromBackingInt(@intCast(99)), .source = @fromBackingInt(@intCast(4)), .target = @fromBackingInt(@intCast(40)), .capture_ty = unit }});
     try std.testing.expect(nonempty_span.len == 1);
     try std.testing.expect(nonempty_fields.len == 1);
     try std.testing.expect(nonempty_capture_fields.len == 1);

@@ -40,6 +40,7 @@ owns_builtin_module: bool,
 /// Heap-allocated source buffer owned by this TestEnv (if any)
 owned_source: ?[]u8 = null,
 published_owns_module_env: bool = false,
+published_dependencies_deinitialized: bool = false,
 
 /// Test environment for canonicalization testing, providing a convenient wrapper around ModuleEnv, AST, and Can.
 const TestEnv = @This();
@@ -95,7 +96,7 @@ pub fn initWithImport(module_name: []const u8, source: []const u8, other_module_
             if (type_ident) |ident| {
                 if (other_test_env.module_env.getExposedTypeNodeIndexById(ident)) |node_idx| {
                     // The node index IS the statement index for type declarations
-                    break :blk @as(CIR.Statement.Idx, @enumFromInt(node_idx));
+                    break :blk @as(CIR.Statement.Idx, @fromBackingInt(@intCast(node_idx)));
                 }
             }
         }
@@ -298,7 +299,7 @@ pub fn initWithExecutableRootNames(module_name: []const u8, source: []const u8, 
     checker.fixupTypeWriter();
     for (explicit_root_names) |root_name| {
         const root_def_idx = can.explicitRootDefByName(root_name) orelse {
-            if (@import("builtin").mode == .Debug) {
+            if (@import("builtin").mode == .debug) {
                 std.debug.panic("test invariant violated: explicit executable root `{s}` was not found", .{root_name});
             }
             unreachable;
@@ -398,13 +399,22 @@ pub fn initExpr(module_name: []const u8, comptime source_expr: []const u8) TestE
     return test_env;
 }
 
-pub fn deinit(self: *TestEnv) void {
+fn deinitPublishedDependencies(self: *TestEnv) void {
+    if (self.published_dependencies_deinitialized) return;
+
     self.can.deinit();
     self.gpa.destroy(self.can);
     self.parse_ast.deinit();
 
     self.checker.deinit();
     self.type_writer.deinit();
+    self.module_envs.deinit();
+
+    self.published_dependencies_deinitialized = true;
+}
+
+pub fn deinit(self: *TestEnv) void {
+    self.deinitPublishedDependencies();
 
     // ModuleEnv.deinit calls self.common.deinit() to clean up CommonEnv's internals
     // Since common is now a value field, we don't need to free it separately
@@ -416,8 +426,6 @@ pub fn deinit(self: *TestEnv) void {
         }
     }
 
-    self.module_envs.deinit();
-
     // Clean up loaded Builtin module (only if we own it)
     if (self.owns_builtin_module) {
         self.builtin_module.deinit();
@@ -426,6 +434,8 @@ pub fn deinit(self: *TestEnv) void {
 
 /// Transfer ownership of the published checked module into a typed-CIR source module.
 pub fn takePublishedSourceModule(self: *TestEnv) TypedCIR.Modules.SourceModule {
+    std.debug.assert(!self.published_owns_module_env);
+    self.deinitPublishedDependencies();
     self.published_owns_module_env = true;
     const owned_source = self.owned_source;
     self.owned_source = null;
@@ -639,7 +649,7 @@ pub fn assertNominalDeclValidity(self: *TestEnv, name: []const u8, expected: boo
 
         const decl_idx = self.module_env.types.lookupNominalDeclByKey(
             self.module_env.selfModuleIdentity(),
-            @intFromEnum(stmt_idx),
+            @backingInt(stmt_idx),
         ) orelse return error.TestUnexpectedResult;
         try testing.expectEqual(expected, self.module_env.types.getNominalDecl(decl_idx).isValid());
         return;

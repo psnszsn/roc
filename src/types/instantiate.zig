@@ -482,7 +482,7 @@ pub const Instantiator = struct {
                         .rigid => .rigid,
                     },
                     .name = rigid.name,
-                    .cons_start = @intFromEnum(rigid.constraints.start),
+                    .cons_start = @backingInt(rigid.constraints.start),
                     .cons_len = @intCast(rigid.constraints.len()),
                     .cons_base = @intCast(machine.pending_constraints.items.len),
                 } });
@@ -508,7 +508,7 @@ pub const Instantiator = struct {
                     },
                     .result = .flex,
                     .name = flex.name,
-                    .cons_start = @intFromEnum(flex.constraints.start),
+                    .cons_start = @backingInt(flex.constraints.start),
                     .cons_len = @intCast(flex.constraints.len()),
                     .cons_base = @intCast(machine.pending_constraints.items.len),
                 } });
@@ -526,7 +526,7 @@ pub const Instantiator = struct {
                         .empty_tag_union_is_default = empty_tag_union_is_default,
                     },
                     .alias = alias,
-                    .args_start = @intFromEnum(arg_span.start),
+                    .args_start = @backingInt(arg_span.start),
                     .args_count = arg_span.count,
                     .vars_base = @intCast(machine.value_stack.items.len),
                 } });
@@ -563,7 +563,7 @@ pub const Instantiator = struct {
                                 .fresh_var = fresh_var,
                                 .empty_tag_union_is_default = empty_tag_union_is_default,
                             },
-                            .elems_start = @intFromEnum(tuple.elems.start),
+                            .elems_start = @backingInt(tuple.elems.start),
                             .elems_count = tuple.elems.count,
                             .vars_base = @intCast(machine.value_stack.items.len),
                         } });
@@ -582,7 +582,7 @@ pub const Instantiator = struct {
                                 .empty_tag_union_is_default = empty_tag_union_is_default,
                             },
                             .nominal = nominal,
-                            .args_start = @intFromEnum(arg_span.start),
+                            .args_start = @backingInt(arg_span.start),
                             .args_count = arg_span.count,
                             .vars_base = @intCast(machine.value_stack.items.len),
                         } });
@@ -866,7 +866,7 @@ pub const Instantiator = struct {
         while (true) {
             const arrived: u32 = @intCast(machine.value_stack.items.len - frame.vars_base);
             if (arrived < args_count) {
-                const arg_var = self.store.vars.items.items[@intFromEnum(frame.func.args.start) + arrived];
+                const arg_var = self.store.vars.items.items[@backingInt(frame.func.args.start) + arrived];
                 if (!try self.requestVar(arg_var, false)) return false;
                 continue;
             }
@@ -875,7 +875,7 @@ pub const Instantiator = struct {
                 continue;
             }
             if (arrived < args_count + 1 + deps_count) {
-                const dep_var = self.store.vars.items.items[@intFromEnum(frame.func.effect_deps.start) + (arrived - args_count - 1)];
+                const dep_var = self.store.vars.items.items[@backingInt(frame.func.effect_deps.start) + (arrived - args_count - 1)];
                 if (!try self.requestVar(dep_var, false)) return false;
                 continue;
             }
@@ -910,7 +910,7 @@ pub const Instantiator = struct {
                         // Indexing through the run's start only happens when
                         // the record has fields; start may be undefined when
                         // count is 0.
-                        const field = self.store.record_fields.get(@enumFromInt(@intFromEnum(frame.source_fields.start) + frame.field_idx));
+                        const field = self.store.record_fields.get(@fromBackingInt(@intCast(@backingInt(frame.source_fields.start) + frame.field_idx)));
                         const child_var = switch (frame.field_axis) {
                             .type_var => blk: {
                                 if (field.presence.presenceVar() != null) {
@@ -952,7 +952,7 @@ pub const Instantiator = struct {
             if (frame.field_idx < frame.source_fields.count) {
                 // Indexing through the run's start only happens when the
                 // record has fields; start may be undefined when count is 0.
-                const field = self.store.record_fields.get(@enumFromInt(@intFromEnum(frame.source_fields.start) + frame.field_idx));
+                const field = self.store.record_fields.get(@fromBackingInt(@intCast(@backingInt(frame.source_fields.start) + frame.field_idx)));
                 const child_var = switch (frame.field_axis) {
                     .type_var => blk: {
                         if (field.presence.presenceVar() != null) {
@@ -991,7 +991,7 @@ pub const Instantiator = struct {
         for (0..source_fields.count) |i| {
             // The loop body runs only for a non-empty run, so reading the
             // run's start here never reads an empty range's undefined start.
-            const field = self.store.record_fields.get(@enumFromInt(@intFromEnum(source_fields.start) + i));
+            const field = self.store.record_fields.get(@fromBackingInt(@intCast(@backingInt(source_fields.start) + i)));
             const fresh_type_var = machine.value_stack.items[vars_idx];
             vars_idx += 1;
             const fresh_presence = if (field.presence.presenceVar()) |_| blk: {
@@ -1030,12 +1030,12 @@ pub const Instantiator = struct {
                     }
                     // Indexing through the run's start only happens when the
                     // union has tags; start may be undefined when count is 0.
-                    const tag = self.store.tags.get(@enumFromInt(@intFromEnum(frame.source_tags.start) + frame.tag_idx));
+                    const tag = self.store.tags.get(@fromBackingInt(@intCast(@backingInt(frame.source_tags.start) + frame.tag_idx)));
                     const arrived: u32 = @intCast(machine.value_stack.items.len - frame.vars_base);
                     if (arrived < tag.args.count) {
                         // Indexing through tag.args.start only happens when the
                         // tag has payloads; start may be undefined when count is 0.
-                        const arg_var = self.store.vars.items.items[@intFromEnum(tag.args.start) + arrived];
+                        const arg_var = self.store.vars.items.items[@backingInt(tag.args.start) + arrived];
                         if (!try self.requestVar(arg_var, false)) return false;
                         continue;
                     }

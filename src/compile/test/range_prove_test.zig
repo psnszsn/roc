@@ -52,7 +52,7 @@ fn countDecodeShape(store: *const lir.LirStore, layouts: *const layout.Store) ha
     defer gpa.free(buf);
     for (0..store.getProcSpecs().len) |index| {
         var writer = std.Io.Writer.fixed(buf);
-        try lir.DebugPrint.writeProc(gpa, store, layouts, @enumFromInt(@as(u32, @intCast(index))), &writer);
+        try lir.DebugPrint.writeProc(gpa, store, layouts, @fromBackingInt(@intCast(@as(u32, @intCast(index)))), &writer);
         const text = writer.buffered();
         if (std.mem.count(u8, text, "num_from_le_bytes_unchecked") == 0) continue;
         if (std.c.getenv("RANGE_PROVE_DUMP") != null) {
@@ -163,7 +163,7 @@ fn countArithmeticShape(store: *const lir.LirStore, layouts: *const layout.Store
     defer gpa.free(buf);
     for (0..store.getProcSpecs().len) |index| {
         var writer = std.Io.Writer.fixed(buf);
-        try lir.DebugPrint.writeProc(gpa, store, layouts, @enumFromInt(@as(u32, @intCast(index))), &writer);
+        try lir.DebugPrint.writeProc(gpa, store, layouts, @fromBackingInt(@intCast(@as(u32, @intCast(index)))), &writer);
         const text = writer.buffered();
         if (std.c.getenv("RANGE_PROVE_DUMP_ALL") != null) std.debug.print("\n===== arithmetic candidate =====\n{s}\n", .{text});
         const selected = switch (arithmetic_selection) {
@@ -483,7 +483,7 @@ fn countRealShape(store: *const lir.LirStore, layouts: *const layout.Store) harn
     defer gpa.free(buf);
     for (0..store.getProcSpecs().len) |index| {
         var writer = std.Io.Writer.fixed(buf);
-        try lir.DebugPrint.writeProc(gpa, store, layouts, @enumFromInt(@as(u32, @intCast(index))), &writer);
+        try lir.DebugPrint.writeProc(gpa, store, layouts, @fromBackingInt(@intCast(@as(u32, @intCast(index)))), &writer);
         const text = writer.buffered();
         if (std.mem.count(u8, text, "num_from_le_bytes_unchecked") < 3) continue;
         if (std.c.getenv("RANGE_PROVE_DUMP") != null) {

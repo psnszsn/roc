@@ -66,14 +66,14 @@ pub const SemanticToken = struct {
 /// projects each category onto the LSP `SemanticType` index it corresponds to.
 pub fn tokenTagToSemanticType(tag: Token.Tag) ?u32 {
     return switch (tag.highlightCategory()) {
-        .keyword => @intFromEnum(SemanticType.keyword),
-        .type => @intFromEnum(SemanticType.type),
-        .variable => @intFromEnum(SemanticType.variable),
-        .field => @intFromEnum(SemanticType.property),
-        .tag => @intFromEnum(SemanticType.enumMember),
-        .number => @intFromEnum(SemanticType.number),
-        .string => @intFromEnum(SemanticType.string),
-        .operator => @intFromEnum(SemanticType.operator),
+        .keyword => @backingInt(SemanticType.keyword),
+        .type => @backingInt(SemanticType.type),
+        .variable => @backingInt(SemanticType.variable),
+        .field => @backingInt(SemanticType.property),
+        .tag => @backingInt(SemanticType.enumMember),
+        .number => @backingInt(SemanticType.number),
+        .string => @backingInt(SemanticType.string),
+        .operator => @backingInt(SemanticType.operator),
 
         // Brackets, structural punctuation, and non-highlighted tokens carry no
         // semantic-token type.
@@ -92,7 +92,7 @@ fn tokenSemanticTypeAt(tags: []const Token.Tag, token_index: usize) ?u32 {
         token_index + 1 < tags.len and
         tags[token_index + 1] == .NoSpaceOpenRound)
     {
-        return @intFromEnum(SemanticType.function);
+        return @backingInt(SemanticType.function);
     }
 
     return tokenTagToSemanticType(tag);
@@ -368,7 +368,7 @@ const SemanticCollector = struct {
                 if (std.meta.activeTag(lambda) == .e_lambda) {
                     var i: u32 = 0;
                     while (i < lambda.e_lambda.args.span.len) : (i += 1) {
-                        const param_idx: CIR.Pattern.Idx = @enumFromInt(lambda.e_lambda.args.span.start + i);
+                        const param_idx: CIR.Pattern.Idx = @fromBackingInt(@intCast(lambda.e_lambda.args.span.start + i));
                         try self.visitPatternAsParameter(param_idx);
                     }
                 }
@@ -377,7 +377,7 @@ const SemanticCollector = struct {
                 // Pure lambda - visit each parameter pattern
                 var i: u32 = 0;
                 while (i < l.args.span.len) : (i += 1) {
-                    const param_idx: CIR.Pattern.Idx = @enumFromInt(l.args.span.start + i);
+                    const param_idx: CIR.Pattern.Idx = @fromBackingInt(@intCast(l.args.span.start + i));
                     try self.visitPatternAsParameter(param_idx);
                 }
             },
@@ -385,7 +385,7 @@ const SemanticCollector = struct {
                 // Hosted lambda has args directly
                 var i: u32 = 0;
                 while (i < h.args.span.len) : (i += 1) {
-                    const param_idx: CIR.Pattern.Idx = @enumFromInt(h.args.span.start + i);
+                    const param_idx: CIR.Pattern.Idx = @fromBackingInt(@intCast(h.args.span.start + i));
                     try self.visitPatternAsParameter(param_idx);
                 }
             },
@@ -467,7 +467,7 @@ const SemanticCollector = struct {
                 // Visit each destructured field's pattern
                 var i: u32 = 0;
                 while (i < r.destructs.span.len) : (i += 1) {
-                    const destruct_idx: CIR.Pattern.RecordDestruct.Idx = @enumFromInt(r.destructs.span.start + i);
+                    const destruct_idx: CIR.Pattern.RecordDestruct.Idx = @fromBackingInt(@intCast(r.destructs.span.start + i));
                     const destruct = self.module_env.store.getRecordDestruct(destruct_idx);
                     // Get the pattern from the kind union
                     const field_pattern = destruct.kind.toPatternIdx();
@@ -477,14 +477,14 @@ const SemanticCollector = struct {
             .tuple => |t| {
                 var i: u32 = 0;
                 while (i < t.patterns.span.len) : (i += 1) {
-                    const elem_idx: CIR.Pattern.Idx = @enumFromInt(t.patterns.span.start + i);
+                    const elem_idx: CIR.Pattern.Idx = @fromBackingInt(@intCast(t.patterns.span.start + i));
                     try self.visitPatternAsParameter(elem_idx);
                 }
             },
             .list => |l| {
                 var i: u32 = 0;
                 while (i < l.patterns.span.len) : (i += 1) {
-                    const elem_idx: CIR.Pattern.Idx = @enumFromInt(l.patterns.span.start + i);
+                    const elem_idx: CIR.Pattern.Idx = @fromBackingInt(@intCast(l.patterns.span.start + i));
                     try self.visitPatternAsParameter(elem_idx);
                 }
             },
@@ -628,7 +628,7 @@ const SemanticCollector = struct {
 
                             // Check if this is an exported function from the module
                             if (self.import_context.isModuleFunction(module_name, func_name)) {
-                                semantic_type = @intFromEnum(SemanticType.function);
+                                semantic_type = @backingInt(SemanticType.function);
                             }
                         }
                     }
@@ -670,7 +670,7 @@ const SemanticCollector = struct {
             .line = pos.line,
             .start_char = pos.character,
             .length = length,
-            .token_type = @intFromEnum(semantic_type),
+            .token_type = @backingInt(semantic_type),
             .modifiers = 0,
         });
     }

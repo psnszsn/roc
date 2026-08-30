@@ -87,9 +87,9 @@ pub fn run(store: *LirStore, layouts: *const layout_mod.Store) ScalarizeError!vo
     for (0..store.procSpecCount()) |proc_index| {
         var rounds: usize = 0;
         while (rounds < max_rounds) : (rounds += 1) {
-            const proc = store.getProcSpec(@enumFromInt(@as(u32, @intCast(proc_index))));
+            const proc = store.getProcSpec(@fromBackingInt(@intCast(@as(u32, @intCast(proc_index)))));
             const body = proc.body orelse break;
-            if (!try pass.scalarizeProc(@enumFromInt(@as(u32, @intCast(proc_index))), body)) break;
+            if (!try pass.scalarizeProc(@fromBackingInt(@intCast(@as(u32, @intCast(proc_index)))), body)) break;
         }
     }
 }
@@ -1253,7 +1253,7 @@ const ScalarizeTest = struct {
     }
 
     fn freshJoinPointId(self: *ScalarizeTest) LIR.JoinPointId {
-        const id: LIR.JoinPointId = @enumFromInt(self.next_join_point);
+        const id: LIR.JoinPointId = @fromBackingInt(@intCast(self.next_join_point));
         self.next_join_point += 1;
         return id;
     }

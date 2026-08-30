@@ -152,7 +152,7 @@ pub fn crashMessage(self: *const CompileTimeHost) ?[]const u8 {
 pub fn rocComptimeBranchTaken(roc_ops: *RocOps, site_raw: u32, branch_index: u32) callconv(.c) void {
     const self: *CompileTimeHost = @ptrCast(@alignCast(roc_ops.env));
     self.comptime_branch_hits.append(self.host_arena.allocator(), .{
-        .site = @enumFromInt(site_raw),
+        .site = @fromBackingInt(@intCast(site_raw)),
         .branch_index = branch_index,
     }) catch {
         self.jump(.host_oom);
@@ -162,7 +162,7 @@ pub fn rocComptimeBranchTaken(roc_ops: *RocOps, site_raw: u32, branch_index: u32
 /// Dev-backend hook called when empirical exhaustiveness fails.
 pub fn rocComptimeExhaustivenessFailed(roc_ops: *RocOps, site_raw: u32) callconv(.c) void {
     const self: *CompileTimeHost = @ptrCast(@alignCast(roc_ops.env));
-    self.comptime_failed_site = @enumFromInt(site_raw);
+    self.comptime_failed_site = @fromBackingInt(@intCast(site_raw));
     self.jump(.comptime_exhaustiveness);
 }
 
@@ -327,6 +327,9 @@ fn hostBytesAllocator(allocator: Allocator) Allocator {
         .windows,
         .uefi,
         .@"3ds",
+        .wiiu,
+        .@"switch",
+        .psx,
         .ps3,
         .ps4,
         .ps5,
@@ -342,6 +345,8 @@ fn hostBytesAllocator(allocator: Allocator) Allocator {
         .opencl,
         .opengl,
         .vulkan,
+        .tios,
+        .ashetos,
         => allocator,
     };
 }

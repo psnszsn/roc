@@ -294,7 +294,7 @@ pub const StaticDataValue = struct {
 
 /// Deterministic symbol name for an internal static-data value.
 pub fn staticDataSymbolName(allocator: Allocator, id: LIR.StaticDataId) Allocator.Error![]u8 {
-    return try std.fmt.allocPrint(allocator, "roc__static_const_value_{d}", .{@intFromEnum(id)});
+    return try std.fmt.allocPrint(allocator, "roc__static_const_value_{d}", .{@backingInt(id)});
 }
 
 /// Complete LIR program and side data consumed by ARC, backends, and eval.
@@ -422,7 +422,7 @@ pub const Result = struct {
     ) Allocator.Error!LIR.ComptimeSiteId {
         const owned_branch_regions = try self.store.allocator.dupe(base.Region, branch_regions);
         errdefer self.store.allocator.free(owned_branch_regions);
-        const id: LIR.ComptimeSiteId = @enumFromInt(@as(u32, @intCast(self.comptime_sites.items.len)));
+        const id: LIR.ComptimeSiteId = @fromBackingInt(@intCast(@as(u32, @intCast(self.comptime_sites.items.len))));
         try self.comptime_sites.append(self.store.allocator, .{
             .kind = kind,
             .region = region,
@@ -509,13 +509,13 @@ test "boxy side tables initialize empty and use flat pools" {
     try std.testing.expectEqual(@as(usize, 0), result.boxy_method_hidden_desc_sources.items.len);
 
     const desc_refs_start = result.boxy_desc_refs.items.len;
-    try result.boxy_desc_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try result.boxy_desc_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     const desc_refs = BoxySpan{ .start = @intCast(desc_refs_start), .len = 1 };
 
     const copy_plan_start = result.boxy_payload_steps.items.len;
     try result.boxy_payload_steps.append(allocator, .{ .dynamic = .{
         .op = .copy,
-        .desc = .{ .static = @enumFromInt(fixtureTableIndex(0)) },
+        .desc = .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) },
     } });
     const copy_plan = BoxySpan{ .start = @intCast(copy_plan_start), .len = 1 };
 
@@ -539,11 +539,11 @@ test "boxy side tables initialize empty and use flat pools" {
     const arg_layouts = BoxySpan{ .start = @intCast(arg_layouts_start), .len = 1 };
 
     const arg_descs_start = result.boxy_desc_refs.items.len;
-    try result.boxy_desc_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try result.boxy_desc_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     const arg_descs = BoxySpan{ .start = @intCast(arg_descs_start), .len = 1 };
 
     const nested_dicts_start = result.boxy_dict_refs.items.len;
-    try result.boxy_dict_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try result.boxy_dict_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     const nested_dicts = BoxySpan{ .start = @intCast(nested_dicts_start), .len = 1 };
 
     const hidden_desc_sources_start = result.boxy_method_hidden_desc_sources.items.len;
@@ -552,8 +552,8 @@ test "boxy side tables initialize empty and use flat pools" {
 
     const method_slots_start = result.boxy_method_slots.items.len;
     try result.boxy_method_slots.append(allocator, .{
-        .method = @enumFromInt(fixtureTableIndex(0)),
-        .proc = @enumFromInt(fixtureTableIndex(0)),
+        .method = @fromBackingInt(@intCast(fixtureTableIndex(0))),
+        .proc = @fromBackingInt(@intCast(fixtureTableIndex(0))),
         .adapter = .{
             .arg_layouts = arg_layouts,
             .arg_descs = arg_descs,
@@ -564,7 +564,7 @@ test "boxy side tables initialize empty and use flat pools" {
     const method_slots = BoxySpan{ .start = @intCast(method_slots_start), .len = 1 };
 
     const hidden_descs_start = result.boxy_desc_refs.items.len;
-    try result.boxy_desc_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try result.boxy_desc_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     const hidden_descs = BoxySpan{ .start = @intCast(hidden_descs_start), .len = 1 };
 
     try result.boxy_dicts.append(allocator, .{
@@ -576,8 +576,8 @@ test "boxy side tables initialize empty and use flat pools" {
     try result.boxy_adapt_steps.append(allocator, .{ .dynamic_payload = .{
         .source_offset = 0,
         .target_offset = 8,
-        .source_desc = .{ .static = @enumFromInt(fixtureTableIndex(0)) },
-        .target_desc = .{ .static = @enumFromInt(fixtureTableIndex(0)) },
+        .source_desc = .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) },
+        .target_desc = .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) },
         .mode = .copy,
     } });
     const adapt_steps = BoxySpan{ .start = @intCast(adapt_steps_start), .len = 1 };

@@ -79,7 +79,7 @@ pub fn build(allocator: Allocator, store: *const lir.LirStore, target: RocTarget
 
     var strings = store.strings.iterator();
     while (strings.next()) |entry| {
-        const symbol_name = try std.fmt.allocPrint(allocator, "roc__static_str_{d}", .{@intFromEnum(entry.idx)});
+        const symbol_name = try std.fmt.allocPrint(allocator, "roc__static_str_{d}", .{@backingInt(entry.idx)});
         var symbol_owned = true;
         errdefer if (symbol_owned) allocator.free(symbol_name);
 

@@ -35,6 +35,12 @@
 //!   return ctx.exitCode();
 
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const builtin = @import("builtin");
 const Allocator = std.mem.Allocator;
 const reporting = @import("reporting");
@@ -468,9 +474,10 @@ pub fn renderProblem(ctx: *CliCtx, problem: CliProblem) Allocator.Error!void {
 
 // Tests
 
-const merged_stdio_helper_path_env = "ROC_CLI_IO_WRITER_TEST_HELPER";
-const merged_stdout_payload = "stdout \u{2713} issue-10465\n" ** 256;
-const merged_stderr_payload = "stderr \u{2713} issue-10465\n" ** 256;
+const merged_stdout_line = "stdout \u{2713} issue-10465\n";
+const merged_stderr_line = "stderr \u{2713} issue-10465\n";
+const merged_stdout_payload = repeatBytes(merged_stdout_line, 256);
+const merged_stderr_payload = repeatBytes(merged_stderr_line, 256);
 
 test "issue 10465 merged standard streams preserve both buffered outputs" {
     const allocator = std.testing.allocator;
@@ -482,8 +489,7 @@ test "issue 10465 merged standard streams preserve both buffered outputs" {
     const combined_path = try std.fs.path.join(allocator, &.{ ".zig-cache", "tmp", &tmp.sub_path, "combined.log" });
     defer allocator.free(combined_path);
 
-    const helper_path_z = std.c.getenv(merged_stdio_helper_path_env) orelse return error.TestUnexpectedResult;
-    const helper_path = helper_path_z[0..std.mem.len(helper_path_z)];
+    const helper_path = @import("cli_test_options").io_writer_helper_path;
 
     var child = try std.process.spawn(test_io, .{
         .argv = &.{ helper_path, combined_path },
@@ -502,8 +508,8 @@ test "issue 10465 merged standard streams preserve both buffered outputs" {
     const combined = try tmp.dir.readFileAlloc(test_io, "combined.log", allocator, .limited(64 * 1024));
     defer allocator.free(combined);
 
-    try std.testing.expect(std.mem.find(u8, combined, merged_stderr_payload) != null);
-    try std.testing.expect(std.mem.find(u8, combined, merged_stdout_payload) != null);
+    try std.testing.expect(std.mem.find(u8, combined, &merged_stderr_payload) != null);
+    try std.testing.expect(std.mem.find(u8, combined, &merged_stdout_payload) != null);
 }
 
 test "CliCtx accumulates problems" {

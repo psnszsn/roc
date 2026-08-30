@@ -32,6 +32,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const elf = std.elf;
+const NativePhdr = elf.ElfN.Phdr;
 const posix = std.posix;
 const mem = std.mem;
 const self_relocate = @import("base").elf_self_relocate;
@@ -97,10 +98,10 @@ pub const ElfDynLib = struct {
                 i += 1;
                 ph_addr += eh.e_phentsize;
             }) {
-                const ph: *elf.Phdr = @ptrFromInt(ph_addr);
-                switch (ph.p_type) {
-                    elf.PT_LOAD => virt_addr_end = @max(virt_addr_end, ph.p_vaddr + ph.p_memsz),
-                    elf.PT_DYNAMIC => maybe_dynv = @ptrFromInt(file_addr + ph.p_offset),
+                const ph: *NativePhdr = @ptrFromInt(ph_addr);
+                switch (ph.type) {
+                    .LOAD => virt_addr_end = @max(virt_addr_end, ph.vaddr + ph.memsz),
+                    .DYNAMIC => maybe_dynv = @ptrFromInt(file_addr + ph.offset),
                     else => {},
                 }
             }
@@ -128,17 +129,17 @@ pub const ElfDynLib = struct {
                 i += 1;
                 ph_addr += eh.e_phentsize;
             }) {
-                const ph: *elf.Phdr = @ptrFromInt(ph_addr);
-                if (ph.p_type != elf.PT_LOAD) continue;
+                const ph: *NativePhdr = @ptrFromInt(ph_addr);
+                if (ph.type != .LOAD) continue;
 
-                const seg_addr = base + ph.p_vaddr;
+                const seg_addr = base + ph.vaddr;
                 const aligned_addr = seg_addr & ~(@as(usize, page_size) - 1);
                 const extra_bytes = seg_addr - aligned_addr;
-                const extended_memsz = mem.alignForward(usize, ph.p_memsz + extra_bytes, page_size);
+                const extended_memsz = mem.alignForward(usize, ph.memsz + extra_bytes, page_size);
                 const ptr: [*]align(std.heap.page_size_min) u8 = @ptrFromInt(aligned_addr);
-                const prot = elfToProt(ph.p_flags);
+                const prot = elfToProt(ph.flags);
 
-                if ((ph.p_flags & elf.PF_W) == 0) {
+                if (!ph.flags.W) {
                     // Read-only: map straight from the file.
                     _ = try posix.mmap(
                         ptr,
@@ -146,7 +147,7 @@ pub const ElfDynLib = struct {
                         prot,
                         .{ .TYPE = .PRIVATE, .FIXED = true },
                         file.handle,
-                        ph.p_offset - extra_bytes,
+                        ph.offset - extra_bytes,
                     );
                 } else {
                     // Writable: anonymous map, then copy the segment's real file
@@ -161,8 +162,8 @@ pub const ElfDynLib = struct {
                         -1,
                         0,
                     );
-                    const dst = seg_mem[extra_bytes..][0..ph.p_filesz];
-                    const src = file_bytes[ph.p_offset..][0..ph.p_filesz];
+                    const dst = seg_mem[extra_bytes..][0..ph.filesz];
+                    const src = file_bytes[ph.offset..][0..ph.filesz];
                     @memcpy(dst, src);
                 }
             }
@@ -234,10 +235,10 @@ pub const ElfDynLib = struct {
     }
 };
 
-fn elfToProt(elf_prot: u64) posix.PROT {
+fn elfToProt(elf_prot: elf.PF) posix.PROT {
     return .{
-        .READ = (elf_prot & elf.PF_R) != 0,
-        .WRITE = (elf_prot & elf.PF_W) != 0,
-        .EXEC = (elf_prot & elf.PF_X) != 0,
+        .READ = elf_prot.R,
+        .WRITE = elf_prot.W,
+        .EXEC = elf_prot.X,
     };
 }

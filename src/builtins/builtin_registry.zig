@@ -218,16 +218,16 @@ pub const BuiltinFn = enum {
     u64_mod_by,
 
     const symbol_names = blk: {
-        var result: [std.meta.fields(BuiltinFn).len][:0]const u8 = undefined;
+        var result: [@typeInfo(BuiltinFn).@"enum".field_names.len][:0]const u8 = undefined;
         for (std.meta.tags(BuiltinFn)) |builtin| {
-            result[@intFromEnum(builtin)] = symbol_prefix ++ @tagName(builtin);
+            result[@backingInt(builtin)] = symbol_prefix ++ @tagName(builtin);
         }
         break :blk result;
     };
 
     /// The linker symbol this builtin is exported and resolved under.
     pub fn symbolName(self: BuiltinFn) [:0]const u8 {
-        return symbol_names[@intFromEnum(self)];
+        return symbol_names[@backingInt(self)];
     }
 
     /// The wrapper function backing this builtin, typed per member.
@@ -236,16 +236,16 @@ pub const BuiltinFn = enum {
     }
 
     const wrapper_addresses = blk: {
-        var result: [std.meta.fields(BuiltinFn).len]*const anyopaque = undefined;
+        var result: [@typeInfo(BuiltinFn).@"enum".field_names.len]*const anyopaque = undefined;
         for (std.meta.tags(BuiltinFn)) |builtin| {
-            result[@intFromEnum(builtin)] = @ptrCast(wrapper(builtin));
+            result[@backingInt(builtin)] = @ptrCast(wrapper(builtin));
         }
         break :blk result;
     };
 
     /// Address of the wrapper function (dev-JIT native calls and symbol resolution).
     pub fn wrapperAddress(self: BuiltinFn) usize {
-        return @intFromPtr(wrapper_addresses[@intFromEnum(self)]);
+        return @intFromPtr(wrapper_addresses[@backingInt(self)]);
     }
 
     /// Which linkable builtins payloads carry a builtin's wrapper.
@@ -260,7 +260,7 @@ pub const BuiltinFn = enum {
 
     const payload_by_builtin = blk: {
         @setEvalBranchQuota(10_000);
-        var result = [_]Payload{.full} ** std.meta.fields(BuiltinFn).len;
+        var result: [@typeInfo(BuiltinFn).@"enum".field_names.len]Payload = @splat(.full);
         for ([_]BuiltinFn{
             .allocate_with_refcount,
             .box_decref_with,
@@ -362,14 +362,14 @@ pub const BuiltinFn = enum {
             .u32_mod_by,
             .u64_mod_by,
             .u8_mod_by,
-        }) |builtin| result[@intFromEnum(builtin)] = .core;
+        }) |builtin| result[@backingInt(builtin)] = .core;
 
         for ([_]BuiltinFn{
             .hot_reload_enter,
             .hot_reload_erased_callable_drop,
             .hot_reload_leave,
             .hot_reload_retain_current,
-        }) |builtin| result[@intFromEnum(builtin)] = .jit_only;
+        }) |builtin| result[@backingInt(builtin)] = .jit_only;
 
         break :blk result;
     };
@@ -378,7 +378,7 @@ pub const BuiltinFn = enum {
     /// `.full`: exported by the full payload and absent from the core one,
     /// the right default for a newly added builtin.
     pub fn payload(self: BuiltinFn) Payload {
-        return payload_by_builtin[@intFromEnum(self)];
+        return payload_by_builtin[@backingInt(self)];
     }
 };
 
@@ -485,11 +485,11 @@ comptime {
         }
     }
     // Every wrapper is registered as a member.
-    for (@typeInfo(dev_wrappers).@"struct".decls) |decl| {
-        if (!std.mem.startsWith(u8, decl.name, symbol_prefix)) continue;
-        if (@typeInfo(@TypeOf(@field(dev_wrappers, decl.name))) != .@"fn") continue;
-        if (!@hasField(BuiltinFn, decl.name[symbol_prefix.len..])) {
-            @compileError("dev_wrappers." ++ decl.name ++ " is not registered; add BuiltinFn." ++ decl.name[symbol_prefix.len..] ++ " to builtin_registry.zig");
+    for (std.meta.declarations(dev_wrappers)) |decl_name| {
+        if (!std.mem.startsWith(u8, decl_name, symbol_prefix)) continue;
+        if (@typeInfo(@TypeOf(@field(dev_wrappers, decl_name))) != .@"fn") continue;
+        if (!@hasField(BuiltinFn, decl_name[symbol_prefix.len..])) {
+            @compileError("dev_wrappers." ++ decl_name ++ " is not registered; add BuiltinFn." ++ decl_name[symbol_prefix.len..] ++ " to builtin_registry.zig");
         }
     }
 }

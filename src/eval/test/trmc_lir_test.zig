@@ -75,7 +75,7 @@ fn lowLevelStmtWithUnique(store: *LirStore, target: LocalId, op: LowLevel, args:
 /// them from a sequential counter (see arc.zig's next_join_point). Each proc
 /// these tests build owns its own counter, so ids stay unique within a proc.
 fn freshJoinPointId(next: *u32) LIR.JoinPointId {
-    const id: LIR.JoinPointId = @enumFromInt(next.*);
+    const id: LIR.JoinPointId = @fromBackingInt(@intCast(next.*));
     next.* += 1;
     return id;
 }
@@ -564,7 +564,7 @@ fn runProcU64Args(
 ) TrmcLirTestError!u64 {
     var interp = try eval.Interpreter.init(allocator, store, layouts, runtime_env.get_ops(), .preserve);
     defer interp.deinit();
-    const arg_layouts = [_]layout.Idx{.u64} ** 4;
+    const arg_layouts = @as([4]layout.Idx, @splat(.u64));
     var packed_args: [4]u64 = undefined;
     @memcpy(packed_args[0..args.len], args);
     const result = try interp.eval(.{
@@ -614,7 +614,7 @@ test "trmc'd repeat escapes the interpreter call-depth cap" {
 
     // The interpreter's artificial call-depth cap is a Debug-only diagnostic.
     // In Debug, verify the untransformed control case exceeds that cap.
-    if (comptime @import("builtin").mode == .Debug) {
+    if (comptime @import("builtin").mode == .debug) {
         var store = LirStore.init(allocator);
         defer store.deinit();
         var layouts = try layout.Store.init(allocator, base.target.TargetUsize.native);

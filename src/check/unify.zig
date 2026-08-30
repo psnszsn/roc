@@ -1417,7 +1417,7 @@ const Unifier = struct {
             if (nominal.sourceDecl().present) {
                 // Invariant: every keyed nominal application in a store can
                 // resolve its declaration in that store.
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic("unify invariant violated: nominal application has a source declaration but no declaration table entry", .{});
                 }
                 unreachable;
@@ -1450,7 +1450,7 @@ const Unifier = struct {
             for (args) |arg| {
                 _ = try self.scratch.opened_nominal_args.append(self.scratch.gpa, self.types_store.resolveVar(arg).var_);
             }
-            break :blk VarSafeList.Range{ .start = @enumFromInt(start), .count = @intCast(args.len) };
+            break :blk VarSafeList.Range{ .start = @fromBackingInt(@intCast(start)), .count = @intCast(args.len) };
         };
 
         const baseline: u32 = @intCast(self.types_store.len());
@@ -1468,7 +1468,7 @@ const Unifier = struct {
         const now: u32 = @intCast(self.types_store.len());
         var fresh_int: u32 = baseline;
         while (fresh_int < now) : (fresh_int += 1) {
-            _ = try self.scratch.fresh_vars.append(self.scratch.gpa, @enumFromInt(fresh_int));
+            _ = try self.scratch.fresh_vars.append(self.scratch.gpa, @fromBackingInt(@intCast(fresh_int)));
         }
 
         try self.scratch.opened_nominals.append(self.scratch.gpa, .{
@@ -2684,8 +2684,7 @@ const Unifier = struct {
         const capacity = a_func.effect_deps.len() + b_func.effect_deps.len();
         if (capacity == 0) return selected;
 
-        var deps_sfa = std.heap.stackFallback(8 * @sizeOf(Var), self.scratch.gpa);
-        const deps_alloc = deps_sfa.get();
+        const deps_alloc = self.scratch.gpa;
         var deps = try std.ArrayList(Var).initCapacity(deps_alloc, capacity);
         defer deps.deinit(deps_alloc);
 
@@ -2736,7 +2735,7 @@ const Unifier = struct {
         var i: u32 = shared_fields_range.len();
         while (i > 0) {
             i -= 1;
-            const idx: TwoRecordFieldsSafeList.Idx = @enumFromInt(@intFromEnum(shared_fields_range.start) + i);
+            const idx: TwoRecordFieldsSafeList.Idx = @fromBackingInt(@intCast(@backingInt(shared_fields_range.start) + i));
             var shared = self.scratch.in_both_fields.get(idx).*;
 
             // Merge field presence
@@ -3236,7 +3235,7 @@ const Unifier = struct {
         var shared_idx: u32 = shared_tags_range.len();
         while (shared_idx > 0) {
             shared_idx -= 1;
-            const idx: TwoTagsSafeList.Idx = @enumFromInt(@intFromEnum(shared_tags_range.start) + shared_idx);
+            const idx: TwoTagsSafeList.Idx = @fromBackingInt(@intCast(@backingInt(shared_tags_range.start) + shared_idx));
             const tags = self.scratch.in_both_tags.get(idx).*;
             if (tags.a.args.len() != tags.b.args.len()) return error.TypeMismatch;
 
@@ -3280,7 +3279,7 @@ const Unifier = struct {
         // unifyStaticDispatchConstraints, which appends to the same scratch buffer.
         // If that append causes reallocation, a cached slice would be invalidated.
         if (partitioned.in_both.len() > 0) {
-            const in_both_start: usize = @intFromEnum(partitioned.in_both.start);
+            const in_both_start: usize = @backingInt(partitioned.in_both.start);
             for (0..partitioned.in_both.len()) |i| {
                 // Re-fetch on each iteration since the backing array may have moved
                 const two_constraints = self.scratch.in_both_static_dispatch_constraints.items.items[in_both_start + i];
@@ -3869,7 +3868,7 @@ pub const Scratch = struct {
         // Now we have: [sorted_base | sorted_extension]
         // Do an in-place merge using the standard merge technique
         // Get the slice starting from range.start with the new total length
-        const start_idx: usize = @intFromEnum(range.start);
+        const start_idx: usize = @backingInt(range.start);
         const total_len = current_len + new_count;
         const items = self.gathered_fields.items.items[start_idx..][0..total_len];
 
@@ -3926,7 +3925,7 @@ pub const Scratch = struct {
         }
 
         // In-place merge
-        const start_idx: usize = @intFromEnum(range.start);
+        const start_idx: usize = @backingInt(range.start);
         const total_len = current_len + new_count;
         const items = self.gathered_tags.items.items[start_idx..][0..total_len];
 

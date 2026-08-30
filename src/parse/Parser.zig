@@ -339,7 +339,7 @@ fn enterDeclScope(
         .end = region.end,
     });
     if (kind == .associated) self.decl_index.setScopeOwnerTypePath(scope_idx, self.currentTypePath());
-    while (self.scope_pending_annos.items.len <= @intFromEnum(scope_idx)) {
+    while (self.scope_pending_annos.items.len <= @backingInt(scope_idx)) {
         try self.scope_pending_annos.append(self.gpa, null);
     }
     return scope_idx;
@@ -350,7 +350,7 @@ fn exitDeclScope(
     scope_idx: DeclIndex.ScopeIdx,
     region: AST.TokenizedRegion,
 ) std.mem.Allocator.Error!void {
-    self.scope_pending_annos.items[@intFromEnum(scope_idx)] = null;
+    self.scope_pending_annos.items[@backingInt(scope_idx)] = null;
     try self.decl_index.exitScope(scope_idx, .{
         .start = region.start,
         .end = region.end,
@@ -359,7 +359,7 @@ fn exitDeclScope(
 
 fn currentPendingAnno(self: *Parser) ?*?DeclIndex.DeclIdx {
     const scope_idx = self.decl_index.currentScope() orelse return null;
-    return &self.scope_pending_annos.items[@intFromEnum(scope_idx)];
+    return &self.scope_pending_annos.items[@backingInt(scope_idx)];
 }
 
 fn currentTypePath(self: *const Parser) ?DeclIndex.TypePathIdx {
@@ -369,7 +369,7 @@ fn currentTypePath(self: *const Parser) ?DeclIndex.TypePathIdx {
 
 fn currentAssociatedOwnerPath(self: *const Parser) ?DeclIndex.TypePathIdx {
     const scope_idx = self.decl_index.currentScope() orelse return null;
-    const scope = self.decl_index.scopes.items[@intFromEnum(scope_idx)];
+    const scope = self.decl_index.scopes.items[@backingInt(scope_idx)];
     if (scope.kind != .associated) return null;
     return scope.owner_type_path;
 }
@@ -409,20 +409,20 @@ fn recordStatementDecl(
                 .{ .none, 0 };
             break :blk DeclIndex.Decl{
                 .scope = scope_idx,
-                .statement = @intFromEnum(statement_idx),
+                .statement = @backingInt(statement_idx),
                 .kind = .value,
                 .value_form = value_form,
                 .value_arity = value_arity,
                 .name_tok = name_tok,
                 .owner_type_path = owner_type_path,
-                .pattern = @intFromEnum(decl.pattern),
+                .pattern = @backingInt(decl.pattern),
                 .anno = null,
                 .region = .{ .start = decl.region.start, .end = decl.region.end },
             };
         },
         .@"var" => |v| DeclIndex.Decl{
             .scope = scope_idx,
-            .statement = @intFromEnum(statement_idx),
+            .statement = @backingInt(statement_idx),
             .kind = .var_decl,
             .name_tok = v.name,
             .owner_type_path = owner_type_path,
@@ -439,15 +439,15 @@ fn recordStatementDecl(
                     break :binding_blk self.tok_buf.resolveIdentifier(i.target.module_name_tok);
                 },
                 .qualifier = if (i.target.qualifier_tok) |qualifier_tok| self.tok_buf.resolveIdentifier(qualifier_tok) else null,
-                .origin = @enumFromInt(@intFromEnum(i.target.origin)),
-                .base = @enumFromInt(@intFromEnum(i.target.base)),
+                .origin = @fromBackingInt(@intCast(@backingInt(i.target.origin))),
+                .base = @fromBackingInt(@intCast(@backingInt(i.target.base))),
                 .parent_count = i.target.parent_count,
                 .nested_type_path = try self.nestedImportPathIdent(i.target),
                 .region = .{ .start = i.region.start, .end = i.region.end },
             });
             break :blk DeclIndex.Decl{
                 .scope = scope_idx,
-                .statement = @intFromEnum(statement_idx),
+                .statement = @backingInt(statement_idx),
                 .kind = .import,
                 .name_tok = i.alias_tok orelse if (i.target.nested_start_tok) |nested_start|
                     nested_start + i.target.nested_len - 1
@@ -460,7 +460,7 @@ fn recordStatementDecl(
         },
         .file_import => |fi| DeclIndex.Decl{
             .scope = scope_idx,
-            .statement = @intFromEnum(statement_idx),
+            .statement = @backingInt(statement_idx),
             .kind = .file_import,
             .name_tok = fi.name_tok,
             .pattern = null,
@@ -477,13 +477,13 @@ fn recordStatementDecl(
             };
             break :blk DeclIndex.Decl{
                 .scope = scope_idx,
-                .statement = @intFromEnum(statement_idx),
+                .statement = @backingInt(statement_idx),
                 .kind = kind,
                 .name_tok = header.name,
                 .owner_type_path = owner_type_path,
                 .type_path = type_path,
                 .pattern = null,
-                .anno = @intFromEnum(td.anno),
+                .anno = @backingInt(td.anno),
                 .associated_scope = if (td.associated) |assoc| assoc.scope else null,
                 .type_dependencies = type_dependencies,
                 .region = .{ .start = td.region.start, .end = td.region.end },
@@ -491,12 +491,12 @@ fn recordStatementDecl(
         },
         .type_anno => |ta| DeclIndex.Decl{
             .scope = scope_idx,
-            .statement = @intFromEnum(statement_idx),
+            .statement = @backingInt(statement_idx),
             .kind = if (ta.is_var) .var_anno else .value_anno,
             .name_tok = ta.name,
             .owner_type_path = owner_type_path,
             .pattern = null,
-            .anno = @intFromEnum(ta.anno),
+            .anno = @backingInt(ta.anno),
             .region = .{ .start = ta.region.start, .end = ta.region.end },
         },
         .expr,
@@ -535,7 +535,7 @@ fn recordStatementDecl(
     if (record.kind == .value or record.kind == .var_decl) {
         if (self.currentPendingAnno()) |pending| {
             if (pending.*) |anno_idx| {
-                const anno = self.decl_index.decls.items[@intFromEnum(anno_idx)];
+                const anno = self.decl_index.decls.items[@backingInt(anno_idx)];
                 const kinds_match = (record.kind == .value and anno.kind == .value_anno) or
                     (record.kind == .var_decl and anno.kind == .var_anno);
                 if (kinds_match and self.tokenIdentsEqual(anno.name_tok, record.name_tok)) {
@@ -595,13 +595,13 @@ fn recordValueDecl(
 
     var record = DeclIndex.Decl{
         .scope = scope_idx,
-        .statement = @intFromEnum(statement_idx),
+        .statement = @backingInt(statement_idx),
         .kind = .value,
         .value_form = value_form,
         .value_arity = value_arity,
         .name_tok = name_tok,
         .owner_type_path = owner_type_path,
-        .pattern = @intFromEnum(pattern_idx),
+        .pattern = @backingInt(pattern_idx),
         .anno = null,
         .region = .{ .start = region.start, .end = region.end },
     };
@@ -613,7 +613,7 @@ fn recordValueDecl(
     const decl_idx = try self.decl_index.addDecl(record);
     if (self.currentPendingAnno()) |pending| {
         if (pending.*) |anno_idx| {
-            const anno = self.decl_index.decls.items[@intFromEnum(anno_idx)];
+            const anno = self.decl_index.decls.items[@backingInt(anno_idx)];
             if (anno.kind == .value_anno and self.tokenIdentsEqual(anno.name_tok, record.name_tok)) {
                 self.decl_index.pairAnnotation(anno_idx, decl_idx);
             }
@@ -770,13 +770,13 @@ pub fn pushMalformed(self: *Parser, comptime T: type, tag: AST.Diagnostic.Tag, s
             const nid = try self.store.nodes.append(self.gpa, .{
                 .tag = .malformed,
                 .main_token = 0,
-                .data = .{ .lhs = @intFromEnum(AST.Diagnostic.Tag.expr_unexpected_token), .rhs = 0 },
+                .data = .{ .lhs = @backingInt(AST.Diagnostic.Tag.expr_unexpected_token), .rhs = 0 },
                 .region = malformed_region,
             });
             self.cached_malformed_node = nid;
         }
         // Cast the cached node to the requested type
-        return @enumFromInt(@intFromEnum(self.cached_malformed_node.?));
+        return @fromBackingInt(@intCast(@backingInt(self.cached_malformed_node.?)));
     }
 }
 
@@ -2697,8 +2697,8 @@ const OpenSyntaxStack = struct {
     type_fn_ret: std.ArrayList(TypeFnAfterRetState) = .empty,
 
     fn deinit(self: *OpenSyntaxStack, allocator: std.mem.Allocator) void {
-        inline for (std.meta.fields(OpenSyntaxStack)) |field| {
-            @field(self, field.name).deinit(allocator);
+        inline for (@typeInfo(OpenSyntaxStack).@"struct".field_names) |field_name| {
+            @field(self, field_name).deinit(allocator);
         }
     }
 
@@ -2707,10 +2707,11 @@ const OpenSyntaxStack = struct {
         const Stack = std.ArrayList(Payload);
         comptime var matches = 0;
         comptime var stack_field_name: []const u8 = "";
-        inline for (std.meta.fields(OpenSyntaxStack)) |field| {
-            if (field.type == Stack) {
+        const stack_info = @typeInfo(OpenSyntaxStack).@"struct";
+        inline for (stack_info.field_names, stack_info.field_types) |field_name, field_type| {
+            if (field_type == Stack) {
                 matches += 1;
-                stack_field_name = field.name;
+                stack_field_name = field_name;
             }
         }
         if (matches == 0) {
@@ -2839,14 +2840,14 @@ const OpenSyntaxStack = struct {
     }
 
     fn clearRetainingCapacity(self: *OpenSyntaxStack) void {
-        inline for (std.meta.fields(OpenSyntaxStack)) |field| {
-            @field(self, field.name).clearRetainingCapacity();
+        inline for (@typeInfo(OpenSyntaxStack).@"struct".field_names) |field_name| {
+            @field(self, field_name).clearRetainingCapacity();
         }
     }
 
     fn isEmpty(self: *const OpenSyntaxStack) bool {
-        inline for (std.meta.fields(OpenSyntaxStack)) |field| {
-            if (@field(self, field.name).items.len != 0) return false;
+        inline for (@typeInfo(OpenSyntaxStack).@"struct".field_names) |field_name| {
+            if (@field(self, field_name).items.len != 0) return false;
         }
         return true;
     }
@@ -2862,20 +2863,20 @@ const ParserKernelScratch = struct {
     associated_blocks: StatementAssociatedBlockStack = .{},
 
     fn deinit(self: *ParserKernelScratch, allocator: std.mem.Allocator) void {
-        inline for (std.meta.fields(ParserKernelScratch)) |field| {
-            @field(self, field.name).deinit(allocator);
+        inline for (@typeInfo(ParserKernelScratch).@"struct".field_names) |field_name| {
+            @field(self, field_name).deinit(allocator);
         }
     }
 
     fn clearRetainingCapacity(self: *ParserKernelScratch) void {
-        inline for (std.meta.fields(ParserKernelScratch)) |field| {
-            @field(self, field.name).clearRetainingCapacity();
+        inline for (@typeInfo(ParserKernelScratch).@"struct".field_names) |field_name| {
+            @field(self, field_name).clearRetainingCapacity();
         }
     }
 
     fn isEmpty(self: *const ParserKernelScratch) bool {
-        inline for (std.meta.fields(ParserKernelScratch)) |field| {
-            if (!@field(self, field.name).isEmpty()) return false;
+        inline for (@typeInfo(ParserKernelScratch).@"struct".field_names) |field_name| {
+            if (!@field(self, field_name).isEmpty()) return false;
         }
         return true;
     }
@@ -3272,9 +3273,9 @@ fn runExprStatementKernel(
     }) {
         .prefix => {
             const tok = self.peek();
-            const tok_int = @intFromEnum(tok);
+            const tok_int = @backingInt(tok);
 
-            if (tok_int < @intFromEnum(Token.Tag.UpperIdent)) {
+            if (tok_int < @backingInt(Token.Tag.UpperIdent)) {
                 if (tok == .EndOfFile) {
                     const start = self.pos;
                     const expr = try self.pushMalformed(AST.Expr.Idx, .expr_unexpected_token, start);
@@ -3381,7 +3382,7 @@ fn runExprStatementKernel(
                     expr_finish_state = .{ .start = start, .min_bp = expr_state.min_bp, .expr = expr };
                     continue :expr_kernel .suffix;
                 }
-            } else if (tok_int < @intFromEnum(Token.Tag.OpPlus)) {
+            } else if (tok_int < @backingInt(Token.Tag.OpPlus)) {
                 if (tok == .LowerIdent or tok == .NamedUnderscore) {
                     const start = self.pos;
                     self.advance();
@@ -3530,7 +3531,7 @@ fn runExprStatementKernel(
                         continue :expr_kernel .block_next;
                     }
                 }
-            } else if (tok_int < @intFromEnum(Token.Tag.KwApp)) {
+            } else if (tok_int < @backingInt(Token.Tag.KwApp)) {
                 if (tok == .OpUnaryMinus or tok == .OpBang) {
                     const start = self.pos;
                     const operator_token = start;
@@ -3675,7 +3676,7 @@ fn runExprStatementKernel(
         },
         .suffix => {
             const tok = self.peek();
-            const tok_int = @intFromEnum(tok);
+            const tok_int = @backingInt(tok);
 
             // Trivia-separated postfixes apply to the completed pipe; adjacent
             // NoSpaceDot* postfixes remain part of the pipe target.
@@ -3740,8 +3741,8 @@ fn runExprStatementKernel(
                 continue :expr_kernel .collection_next;
             }
 
-            if (tok_int < @intFromEnum(Token.Tag.OpenRound)) {
-                if (tok_int >= @intFromEnum(Token.Tag.DotInt) and tok_int <= @intFromEnum(Token.Tag.NoSpaceDotInt)) {
+            if (tok_int < @backingInt(Token.Tag.OpenRound)) {
+                if (tok_int >= @backingInt(Token.Tag.DotInt) and tok_int <= @backingInt(Token.Tag.NoSpaceDotInt)) {
                     const elem_token = self.pos;
                     self.advance();
                     expr_finish_state.expr = try self.store.addExpr(.{ .tuple_access = .{
@@ -3751,7 +3752,7 @@ fn runExprStatementKernel(
                     } });
                     continue :expr_kernel .suffix;
                 }
-                if (tok_int >= @intFromEnum(Token.Tag.DotLowerIdent) and tok_int <= @intFromEnum(Token.Tag.NoSpaceDotLowerIdent)) {
+                if (tok_int >= @backingInt(Token.Tag.DotLowerIdent) and tok_int <= @backingInt(Token.Tag.NoSpaceDotLowerIdent)) {
                     const s = self.pos;
                     const receiver = expr_finish_state.expr;
                     self.advance();
@@ -3779,7 +3780,7 @@ fn runExprStatementKernel(
                     );
                     continue :expr_kernel .suffix;
                 }
-                if (tok_int >= @intFromEnum(Token.Tag.DotQuestionLowerIdent) and tok_int <= @intFromEnum(Token.Tag.NoSpaceDotQuestionLowerIdent)) {
+                if (tok_int >= @backingInt(Token.Tag.DotQuestionLowerIdent) and tok_int <= @backingInt(Token.Tag.NoSpaceDotQuestionLowerIdent)) {
                     const field_token = self.pos;
                     self.advance();
                     expr_finish_state.expr = try self.store.addOrExtendFieldAccess(
@@ -3789,14 +3790,14 @@ fn runExprStatementKernel(
                     );
                     continue :expr_kernel .suffix;
                 }
-                if (tok_int >= @intFromEnum(Token.Tag.DotUpperIdent) and
-                    tok_int <= @intFromEnum(Token.Tag.MalformedNoSpaceDotQuestionUnicodeIdent))
+                if (tok_int >= @backingInt(Token.Tag.DotUpperIdent) and
+                    tok_int <= @backingInt(Token.Tag.MalformedNoSpaceDotQuestionUnicodeIdent))
                 {
                     const expr = try self.pushMalformed(AST.Expr.Idx, .expr_dot_suffix_not_allowed, self.pos);
                     expr_finish_state = .{ .start = expr_finish_state.start, .min_bp = expr_finish_state.min_bp, .expr = expr };
                     continue :expr_kernel .suffix;
                 }
-            } else if (tok_int < @intFromEnum(Token.Tag.OpPlus)) {
+            } else if (tok_int < @backingInt(Token.Tag.OpPlus)) {
                 if (tok == .NoSpaceOpenRound) {
                     if (self.store.fieldAccessContainsOptional(expr_finish_state.expr)) {
                         try self.pushDiagnostic(
@@ -3878,7 +3879,7 @@ fn runExprStatementKernel(
                 });
                 expr_state = .{ .start = self.pos, .min_bp = 0 };
                 continue :expr_kernel .prefix;
-            } else if (tok_int <= @intFromEnum(Token.Tag.OpEquals)) {
+            } else if (tok_int <= @backingInt(Token.Tag.OpEquals)) {
                 const bp = getTokenBPInRange(tok);
                 if (bp.left == 0) {
                     last_expr = expr_finish_state.expr;
@@ -3903,7 +3904,7 @@ fn runExprStatementKernel(
                 }
                 last_expr = expr_finish_state.expr;
                 continue :expr_kernel .complete;
-            } else if (tok_int < @intFromEnum(Token.Tag.NoSpaceOpQuestion)) {
+            } else if (tok_int < @backingInt(Token.Tag.NoSpaceOpQuestion)) {
                 // Not an expression suffix.
             } else if (tok == .NoSpaceOpQuestion) {
                 self.advance();
@@ -3918,14 +3919,14 @@ fn runExprStatementKernel(
                 const expr_idx = try self.pushMalformed(AST.Expr.Idx, .expr_double_dot_is_not_range, self.pos);
                 expr_finish_state = .{ .start = expr_finish_state.start, .min_bp = expr_finish_state.min_bp, .expr = expr_idx };
                 continue :expr_kernel .suffix;
-            } else if (tok_int < @intFromEnum(Token.Tag.OpArrow)) {
+            } else if (tok_int < @backingInt(Token.Tag.OpArrow)) {
                 if (tok == .Dot or tok == .DotStar or tok == .TripleDot) {
                     const expr = try self.pushMalformed(AST.Expr.Idx, .expr_dot_suffix_not_allowed, self.pos);
                     expr_finish_state = .{ .start = expr_finish_state.start, .min_bp = expr_finish_state.min_bp, .expr = expr };
                     continue :expr_kernel .suffix;
                 }
                 // Not an expression suffix.
-            } else if (tok_int <= @intFromEnum(Token.Tag.OpFatArrow)) {
+            } else if (tok_int <= @backingInt(Token.Tag.OpFatArrow)) {
                 // Unlike `->`, `|>` parses postfix access/call syntax as part
                 // of its RHS. An arrow after that RHS starts outside the pipe.
                 if (open_syntax.peekExpr() == .expr_pipe_rhs) {
@@ -4802,15 +4803,15 @@ fn runExprStatementKernel(
                 .scope = state.scope,
                 .region = block_region,
             } });
-            self.decl_index.setScopeOwner(state.scope, .{ .expr = @intFromEnum(expr_idx) });
+            self.decl_index.setScopeOwner(state.scope, .{ .expr = @backingInt(expr_idx) });
             expr_finish_state = .{ .start = state.start, .min_bp = state.min_bp, .expr = expr_idx };
             continue :expr_kernel .suffix;
         },
         .type_prefix => {
             const tok = self.peek();
-            const tok_int = @intFromEnum(tok);
+            const tok_int = @backingInt(tok);
 
-            if (tok_int >= @intFromEnum(Token.Tag.UpperIdent) and tok_int < @intFromEnum(Token.Tag.OpPlus)) {
+            if (tok_int >= @backingInt(Token.Tag.UpperIdent) and tok_int < @backingInt(Token.Tag.OpPlus)) {
                 if (tok == .UpperIdent or tok == .LowerIdent) {
                     const start = self.pos;
                     const first_token_tag = self.peek();
@@ -5770,14 +5771,14 @@ fn runExprStatementKernel(
         },
         .statement_start => {
             const tok = self.peek();
-            const tok_int = @intFromEnum(tok);
+            const tok_int = @backingInt(tok);
 
             if (tok == .EndOfFile) {
                 last_statement = try self.addTopLevelUnexpectedStatement();
                 continue :expr_kernel .statement_complete;
             }
 
-            if (tok_int >= @intFromEnum(Token.Tag.UpperIdent) and tok_int < @intFromEnum(Token.Tag.OpenRound)) {
+            if (tok_int >= @backingInt(Token.Tag.UpperIdent) and tok_int < @backingInt(Token.Tag.OpenRound)) {
                 if (tok == .LowerIdent or tok == .NamedUnderscore) {
                     const start = self.pos;
                     const next_tok = self.peekNext();
@@ -5785,10 +5786,10 @@ fn runExprStatementKernel(
                         const var_tok = self.pos;
                         self.advance();
                         const header = try self.parseTypeHeaderTokens(.dotted_upper_ident);
-                        const header_node = self.store.nodes.get(@enumFromInt(@intFromEnum(header)));
+                        const header_node = self.store.nodes.get(@fromBackingInt(@intCast(@backingInt(header))));
                         if (header_node.tag == .malformed) {
                             self.recoverMalformedTypeDeclLine(start);
-                            const reason: AST.Diagnostic.Tag = @enumFromInt(header_node.data.lhs);
+                            const reason: AST.Diagnostic.Tag = @fromBackingInt(@intCast(header_node.data.lhs));
                             last_statement = try self.store.addMalformed(AST.Statement.Idx, reason, .{ .start = start, .end = self.pos });
                             continue :expr_kernel .statement_complete;
                         }
@@ -5917,10 +5918,10 @@ fn runExprStatementKernel(
                     }
 
                     const header = try self.parseTypeHeaderTokens(.upper_ident);
-                    const header_node = self.store.nodes.get(@enumFromInt(@intFromEnum(header)));
+                    const header_node = self.store.nodes.get(@fromBackingInt(@intCast(@backingInt(header))));
                     if (header_node.tag == .malformed) {
                         self.recoverMalformedTypeDeclLine(start);
-                        const reason: AST.Diagnostic.Tag = @enumFromInt(header_node.data.lhs);
+                        const reason: AST.Diagnostic.Tag = @fromBackingInt(@intCast(header_node.data.lhs));
                         last_statement = try self.store.addMalformed(AST.Statement.Idx, reason, .{ .start = start, .end = self.pos });
                         continue :expr_kernel .statement_complete;
                     }
@@ -6012,7 +6013,7 @@ fn runExprStatementKernel(
                 try open_syntax.pushExpr(open_allocator, .statement_expr_body, Token.Idx, start);
                 expr_state = .{ .start = start, .min_bp = 0 };
                 continue :expr_kernel .prefix;
-            } else if (tok_int >= @intFromEnum(Token.Tag.KwApp) and tok_int <= @intFromEnum(Token.Tag.KwBreak)) {
+            } else if (tok_int >= @backingInt(Token.Tag.KwApp) and tok_int <= @backingInt(Token.Tag.KwBreak)) {
                 if (tok == .KwVar) {
                     const start = self.pos;
                     if (statement_type != .in_body) {
@@ -6205,7 +6206,7 @@ fn runExprStatementKernel(
                 .associated = associated,
                 .region = .{ .start = type_decl_state.start, .end = self.pos },
             } }, type_decl_state.type_dependencies, type_decl_state.type_path);
-            self.decl_index.setScopeOwner(associated.scope, .{ .associated_type_decl = @intFromEnum(statement_idx) });
+            self.decl_index.setScopeOwner(associated.scope, .{ .associated_type_decl = @backingInt(statement_idx) });
             last_statement = statement_idx;
             continue :expr_kernel .statement_complete;
         },
@@ -6235,9 +6236,9 @@ fn runExprStatementKernel(
         },
         .pattern_prefix => {
             const tok = self.peek();
-            const tok_int = @intFromEnum(tok);
+            const tok_int = @backingInt(tok);
 
-            if (tok_int < @intFromEnum(Token.Tag.UpperIdent)) {
+            if (tok_int < @backingInt(Token.Tag.UpperIdent)) {
                 if (tok == .Float) {
                     const start = self.pos;
                     self.advance();
@@ -6323,7 +6324,7 @@ fn runExprStatementKernel(
                     }
                     continue :expr_kernel .pattern_complete;
                 }
-            } else if (tok_int < @intFromEnum(Token.Tag.OpPlus)) {
+            } else if (tok_int < @backingInt(Token.Tag.OpPlus)) {
                 if (tok == .UpperIdent) {
                     const start = self.pos;
                     const qual_result = try self.readQualificationChain(.all_segments);
@@ -6426,7 +6427,7 @@ fn runExprStatementKernel(
                     };
                     continue :expr_kernel .pattern_record_next;
                 }
-            } else if (tok_int < @intFromEnum(Token.Tag.KwApp)) {
+            } else if (tok_int < @backingInt(Token.Tag.KwApp)) {
                 if (tok == .DoubleDot) {
                     const start = self.pos;
                     var name: ?Token.Idx = null;
@@ -6970,8 +6971,7 @@ fn recordTypeDependenciesFromAnnoWorklist(
     root: AST.TypeAnno.Idx,
     mode: TypeDependencyWalkMode,
 ) std.mem.Allocator.Error!void {
-    var pending_allocator_state = std.heap.stackFallback(4096, self.gpa);
-    const pending_allocator = pending_allocator_state.get();
+    const pending_allocator = self.gpa;
     var pending: std.ArrayList(TypeDependencyWalkItem) = .empty;
     defer pending.deinit(pending_allocator);
 
@@ -7127,36 +7127,36 @@ fn finishRecordExpr(
 pub const BinOpBp = struct { left: u8, right: u8 };
 
 inline fn isInBinOpTokenRange(tok: Token.Tag) bool {
-    const tok_int = @intFromEnum(tok);
-    return tok_int >= @intFromEnum(Token.Tag.OpPlus) and tok_int <= @intFromEnum(Token.Tag.OpEquals);
+    const tok_int = @backingInt(tok);
+    return tok_int >= @backingInt(Token.Tag.OpPlus) and tok_int <= @backingInt(Token.Tag.OpEquals);
 }
 
 const no_bin_op_bp = BinOpBp{ .left = 0, .right = 0 };
 const bin_op_bp_table = blk: {
-    const start = @intFromEnum(Token.Tag.OpPlus);
-    const len = @intFromEnum(Token.Tag.OpEquals) - start + 1;
-    var table = [_]BinOpBp{no_bin_op_bp} ** len;
+    const start = @backingInt(Token.Tag.OpPlus);
+    const len = @backingInt(Token.Tag.OpEquals) - start + 1;
+    var table = @as([len]BinOpBp, @splat(no_bin_op_bp));
     // `*`, `/`, `//`, and `%` form a single multiplicative precedence group,
     // left-associative among each other (`right > left` makes a following
     // same-group operator fail `left >= min_bp`, so `1 % 10 // 100` parses as
     // `(1 % 10) // 100`). The group binds tighter than additive (`+`/`-`).
-    table[@intFromEnum(Token.Tag.OpStar) - start] = .{ .left = 32, .right = 33 };
-    table[@intFromEnum(Token.Tag.OpSlash) - start] = .{ .left = 32, .right = 33 };
-    table[@intFromEnum(Token.Tag.OpDoubleSlash) - start] = .{ .left = 32, .right = 33 };
-    table[@intFromEnum(Token.Tag.OpPercent) - start] = .{ .left = 32, .right = 33 };
-    table[@intFromEnum(Token.Tag.OpPlus) - start] = .{ .left = 22, .right = 23 };
-    table[@intFromEnum(Token.Tag.OpBinaryMinus) - start] = .{ .left = 22, .right = 23 };
-    table[@intFromEnum(Token.Tag.OpDoubleQuestion) - start] = .{ .left = 20, .right = 21 };
+    table[@backingInt(Token.Tag.OpStar) - start] = .{ .left = 32, .right = 33 };
+    table[@backingInt(Token.Tag.OpSlash) - start] = .{ .left = 32, .right = 33 };
+    table[@backingInt(Token.Tag.OpDoubleSlash) - start] = .{ .left = 32, .right = 33 };
+    table[@backingInt(Token.Tag.OpPercent) - start] = .{ .left = 32, .right = 33 };
+    table[@backingInt(Token.Tag.OpPlus) - start] = .{ .left = 22, .right = 23 };
+    table[@backingInt(Token.Tag.OpBinaryMinus) - start] = .{ .left = 22, .right = 23 };
+    table[@backingInt(Token.Tag.OpDoubleQuestion) - start] = .{ .left = 20, .right = 21 };
     // `lhs ? handler` (spaced `?`) binds looser than `??` and tighter than `=`/`==`.
-    table[@intFromEnum(Token.Tag.OpQuestion) - start] = .{ .left = 18, .right = 19 };
-    table[@intFromEnum(Token.Tag.OpEquals) - start] = .{ .left = 17, .right = 17 };
-    table[@intFromEnum(Token.Tag.OpNotEquals) - start] = .{ .left = 15, .right = 15 };
-    table[@intFromEnum(Token.Tag.OpLessThan) - start] = .{ .left = 13, .right = 13 };
-    table[@intFromEnum(Token.Tag.OpGreaterThan) - start] = .{ .left = 11, .right = 11 };
-    table[@intFromEnum(Token.Tag.OpLessThanOrEq) - start] = .{ .left = 9, .right = 9 };
-    table[@intFromEnum(Token.Tag.OpGreaterThanOrEq) - start] = .{ .left = 7, .right = 7 };
-    table[@intFromEnum(Token.Tag.OpAnd) - start] = .{ .left = 6, .right = 5 };
-    table[@intFromEnum(Token.Tag.OpOr) - start] = .{ .left = 4, .right = 3 };
+    table[@backingInt(Token.Tag.OpQuestion) - start] = .{ .left = 18, .right = 19 };
+    table[@backingInt(Token.Tag.OpEquals) - start] = .{ .left = 17, .right = 17 };
+    table[@backingInt(Token.Tag.OpNotEquals) - start] = .{ .left = 15, .right = 15 };
+    table[@backingInt(Token.Tag.OpLessThan) - start] = .{ .left = 13, .right = 13 };
+    table[@backingInt(Token.Tag.OpGreaterThan) - start] = .{ .left = 11, .right = 11 };
+    table[@backingInt(Token.Tag.OpLessThanOrEq) - start] = .{ .left = 9, .right = 9 };
+    table[@backingInt(Token.Tag.OpGreaterThanOrEq) - start] = .{ .left = 7, .right = 7 };
+    table[@backingInt(Token.Tag.OpAnd) - start] = .{ .left = 6, .right = 5 };
+    table[@backingInt(Token.Tag.OpOr) - start] = .{ .left = 4, .right = 3 };
     // Ranges are the loosest binary operators. left < right makes them
     // non-associative (a range cannot nest into its own right operand, so
     // `a..<b..<c` parses left-associatively for canonicalization to reject).
@@ -7164,13 +7164,13 @@ const bin_op_bp_table = blk: {
     // of `or` (left = 4, right = 3): the expected form is `(a or b)..<c`, not
     // `a or (1..<5)`. Conversely a range DOES swallow `or` on its own right
     // side, so `a..<b or c` parses as `a..<(b or c)` (range is the loosest op).
-    table[@intFromEnum(Token.Tag.OpDoubleDotLessThan) - start] = .{ .left = 2, .right = 3 };
-    table[@intFromEnum(Token.Tag.OpDoubleDotEquals) - start] = .{ .left = 2, .right = 3 };
+    table[@backingInt(Token.Tag.OpDoubleDotLessThan) - start] = .{ .left = 2, .right = 3 };
+    table[@backingInt(Token.Tag.OpDoubleDotEquals) - start] = .{ .left = 2, .right = 3 };
     break :blk table;
 };
 
 inline fn getTokenBPInRange(tok: Token.Tag) BinOpBp {
-    return bin_op_bp_table[@intFromEnum(tok) - @intFromEnum(Token.Tag.OpPlus)];
+    return bin_op_bp_table[@backingInt(tok) - @backingInt(Token.Tag.OpPlus)];
 }
 
 /// Get the binding power for a Token if it's a operator token, else return null.
@@ -7181,8 +7181,8 @@ pub fn getTokenBP(tok: Token.Tag) ?BinOpBp {
 }
 
 comptime {
-    for (@typeInfo(Token.Tag).@"enum".fields) |field| {
-        const tok: Token.Tag = @enumFromInt(field.value);
+    for (@typeInfo(Token.Tag).@"enum".field_values) |field_value| {
+        const tok: Token.Tag = @fromBackingInt(@intCast(field_value));
         if (getTokenBP(tok) != null and !isInBinOpTokenRange(tok)) {
             @compileError("binary operator binding-power token outside parser operator range");
         }

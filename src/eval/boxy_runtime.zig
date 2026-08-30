@@ -392,7 +392,7 @@ pub const BoxyRuntime = struct {
     }
 
     fn invariantFailed(_: *const BoxyRuntime, comptime fmt: []const u8, args: anytype) noreturn {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             debugPrint(fmt, args);
             debugPrint("\n", .{});
             std.debug.assert(false);
@@ -405,7 +405,7 @@ pub const BoxyRuntime = struct {
     }
 
     pub fn requireBoxyTypeDesc(self: *const BoxyRuntime, desc_id: LIR.BoxyTypeDescId) *const LirProgram.BoxyTypeDesc {
-        const index = @intFromEnum(desc_id);
+        const index = @backingInt(desc_id);
         if (index >= self.boxy_tables.type_descs.len) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy descriptor id {d} exceeded descriptor table length {d}",
@@ -416,7 +416,7 @@ pub const BoxyRuntime = struct {
     }
 
     pub fn requireBoxyAdapter(self: *const BoxyRuntime, adapter_id: LIR.BoxyAdapterId) *const LirProgram.BoxyAdapter {
-        const index = @intFromEnum(adapter_id);
+        const index = @backingInt(adapter_id);
         if (index >= self.boxy_tables.adapters.len) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy adapter id {d} exceeded adapter table length {d}",
@@ -516,7 +516,7 @@ pub const BoxyRuntime = struct {
             "LIR/interpreter invariant violated: boxy descriptor had no tag variant with discriminant {d} payload_layout={d} checked_type={any} variants={any} ext={any}",
             .{
                 discriminant,
-                @intFromEnum(desc.payload_layout),
+                @backingInt(desc.payload_layout),
                 desc.debug_checked_type,
                 desc.tag_variants,
                 desc.tag_ext_desc,
@@ -556,13 +556,13 @@ pub const BoxyRuntime = struct {
             if (discriminant == 0) return .zst;
             self.invariantFailed(
                 "LIR/interpreter invariant violated: zero-sized boxy tag descriptor payload layout {d} received nonzero discriminant {d}",
-                .{ @intFromEnum(union_layout), discriminant },
+                .{ @backingInt(union_layout), discriminant },
             );
         }
         if (union_layout_val.tag != .tag_union) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy tag descriptor payload layout {d} was not a tag union",
-                .{@intFromEnum(union_layout)},
+                .{@backingInt(union_layout)},
             );
         }
         const tu_data = self.layout_store.getTagUnionData(union_layout_val.getTagUnion().idx);
@@ -570,7 +570,7 @@ pub const BoxyRuntime = struct {
         if (discriminant >= variants.len) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy tag discriminant {d} exceeded payload layout {d} variant count {d}",
-                .{ discriminant, @intFromEnum(union_layout), variants.len },
+                .{ discriminant, @backingInt(union_layout), variants.len },
             );
         }
         return variants.get(discriminant).payload_layout;
@@ -646,7 +646,7 @@ pub const BoxyRuntime = struct {
                 if (actual_layout_val.getIdx() == expected_layout) {
                     const data_ptr = self.readBoxedDataPointer(value) orelse self.invariantFailed(
                         "LIR/interpreter invariant violated: expected boxed layout {d} to contain data for inner layout {d}, but observed null box pointer",
-                        .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                        .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                     );
                     return .{ .ptr = data_ptr };
                 }
@@ -675,7 +675,7 @@ pub const BoxyRuntime = struct {
     ) ResolvedListBase {
         const resolved_layout = self.layout_store.resolvedListLayoutIdx(list_layout) orelse self.invariantFailed(
             "LIR/interpreter invariant violated: expected explicit resolved list layout for layout {d}",
-            .{@intFromEnum(list_layout)},
+            .{@backingInt(list_layout)},
         );
         return .{
             .value = self.normalizeValueToLayout(list_val, list_layout, resolved_layout),
@@ -694,7 +694,7 @@ pub const BoxyRuntime = struct {
     pub fn listElemLayout(self: *const BoxyRuntime, list_layout: layout_mod.Idx) layout_mod.Idx {
         const resolved_layout = self.layout_store.resolvedListLayoutIdx(list_layout) orelse self.invariantFailed(
             "LIR/interpreter invariant violated: expected explicit resolved list layout for layout {d}",
-            .{@intFromEnum(list_layout)},
+            .{@backingInt(list_layout)},
         );
         const l = self.layout_store.getLayout(resolved_layout);
         if (l.tag == .list) return l.getIdx();
@@ -711,7 +711,7 @@ pub const BoxyRuntime = struct {
             const inner_layout = union_layout_val.getIdx();
             const data_ptr = self.readBoxedDataPointer(union_val) orelse self.invariantFailed(
                 "LIR/interpreter invariant violated: boxed tag union layout {d} had null data pointer for inner layout {d}",
-                .{ @intFromEnum(union_layout), @intFromEnum(inner_layout) },
+                .{ @backingInt(union_layout), @backingInt(inner_layout) },
             );
             return .{
                 .value = .{ .ptr = data_ptr },
@@ -745,8 +745,8 @@ pub const BoxyRuntime = struct {
                     self.invariantFailed(
                         "LIR/interpreter invariant violated: dynamic boxy tag source had null payload pointer for source layout {d} descriptor payload layout {d}",
                         .{
-                            @intFromEnum(source_layout),
-                            @intFromEnum(source_desc.payload_layout),
+                            @backingInt(source_layout),
+                            @backingInt(source_desc.payload_layout),
                         },
                     );
                 };
@@ -763,7 +763,7 @@ pub const BoxyRuntime = struct {
             .ptr,
             => self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy tag source layout {d} was not a tag-union-compatible layout",
-                .{@intFromEnum(source_layout)},
+                .{@backingInt(source_layout)},
             ),
         };
     }
@@ -840,7 +840,7 @@ pub const BoxyRuntime = struct {
         if (nested_index >= refs.len) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: descriptor payload layout {d} missing nested descriptor {d}; checked_type={any} proc={d}",
-                .{ @intFromEnum(desc.payload_layout), nested_index, desc.debug_checked_type, hooks.traceProcId() },
+                .{ @backingInt(desc.payload_layout), nested_index, desc.debug_checked_type, hooks.traceProcId() },
             );
         }
         return try hooks.resolveDescRef(refs[nested_index]);
@@ -858,7 +858,7 @@ pub const BoxyRuntime = struct {
         if (layout_val.tag != .struct_) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy struct field descriptor lookup received layout {d} ({s})",
-                .{ @intFromEnum(struct_layout), @tagName(layout_val.tag) },
+                .{ @backingInt(struct_layout), @tagName(layout_val.tag) },
             );
         }
         const struct_idx = layout_val.getStruct().idx;
@@ -866,7 +866,7 @@ pub const BoxyRuntime = struct {
         if (field_index >= struct_data.fields.count) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy struct field descriptor index {d} exceeded layout {d} field count {d}",
-                .{ field_index, @intFromEnum(struct_layout), struct_data.fields.count },
+                .{ field_index, @backingInt(struct_layout), struct_data.fields.count },
             );
         }
 
@@ -884,7 +884,7 @@ pub const BoxyRuntime = struct {
         if (nested_index >= refs.len) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy struct descriptor for layout {d} was missing nested descriptor {d}; context={s} checked_type={any} descriptor_payload={d} nested_count={d} proc={d}",
-                .{ @intFromEnum(struct_layout), nested_index, context, desc.debug_checked_type, @intFromEnum(desc.payload_layout), refs.len, hooks.traceProcId() },
+                .{ @backingInt(struct_layout), nested_index, context, desc.debug_checked_type, @backingInt(desc.payload_layout), refs.len, hooks.traceProcId() },
             );
         }
         return try hooks.resolveDescRef(refs[nested_index]);
@@ -914,9 +914,9 @@ pub const BoxyRuntime = struct {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: positional boxy struct adaptation had source layout {d} with {d} fields and target layout {d} with {d} fields; source_checked_type={any} target_checked_type={any} proc={d}",
                     .{
-                        @intFromEnum(source_desc.payload_layout),
+                        @backingInt(source_desc.payload_layout),
                         source_field_count,
-                        @intFromEnum(target_desc.payload_layout),
+                        @backingInt(target_desc.payload_layout),
                         target_field_count,
                         source_desc.debug_checked_type,
                         target_desc.debug_checked_type,
@@ -1073,7 +1073,7 @@ pub const BoxyRuntime = struct {
         const desc_ref = desc.tag_ext_desc orelse {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag descriptor had no row-extension descriptor; payload_layout={d} variants={d} checked_type={any} proc={d}",
-                .{ @intFromEnum(desc.payload_layout), desc.tag_variants.len, desc.debug_checked_type, hooks.traceProcId() },
+                .{ @backingInt(desc.payload_layout), desc.tag_variants.len, desc.debug_checked_type, hooks.traceProcId() },
             );
         };
         return try hooks.resolveDescRef(desc_ref);
@@ -1096,7 +1096,7 @@ pub const BoxyRuntime = struct {
         const ext_discriminant = self.boxyTagExtDiscriminant(source_desc) orelse {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag match descriptor had no variant named {s}; checked_type={any} payload_layout={d} variants={d}",
-                .{ self.store.getString(tag_name), source_desc.debug_checked_type, @intFromEnum(source_desc.payload_layout), source_desc.tag_variants.len },
+                .{ self.store.getString(tag_name), source_desc.debug_checked_type, @backingInt(source_desc.payload_layout), source_desc.tag_variants.len },
             );
         };
         if (disc != ext_discriminant) return false;
@@ -1111,7 +1111,7 @@ pub const BoxyRuntime = struct {
         if (self.layoutNeedsBoxyStructuralDesc(payload_layout)) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: structurally dynamic layout {d} was missing its explicit source descriptor",
-                .{@intFromEnum(payload_layout)},
+                .{@backingInt(payload_layout)},
             );
         }
         const contains_refcounted = self.layout_store.layoutContainsRefcounted(self.layout_store.getLayout(payload_layout));
@@ -1197,7 +1197,7 @@ pub const BoxyRuntime = struct {
         if (nested_index >= nested.len) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy descriptor payload layout {d} missing nested descriptor {d}; checked_type={any} proc={d}",
-                .{ @intFromEnum(desc.payload_layout), nested_index, desc.debug_checked_type, hooks.traceProcId() },
+                .{ @backingInt(desc.payload_layout), nested_index, desc.debug_checked_type, hooks.traceProcId() },
             );
         }
         return try hooks.resolveDescRef(nested[nested_index]);
@@ -1214,7 +1214,7 @@ pub const BoxyRuntime = struct {
         return try self.boxyBoxAllocationPayloadDesc(hooks, box_layout, desc) orelse
             self.invariantFailedError(
                 "Box payload descriptor projection had no payload descriptor; box_layout={d} checked_type={any} proc={d}",
-                .{ @intFromEnum(box_layout), desc.debug_checked_type, hooks.traceProcId() },
+                .{ @backingInt(box_layout), desc.debug_checked_type, hooks.traceProcId() },
             );
     }
 
@@ -1231,8 +1231,8 @@ pub const BoxyRuntime = struct {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: descriptor payload layout {d} missing tag variant id {d}; checked_type={any} proc={d}",
                 .{
-                    @intFromEnum(desc.payload_layout),
-                    @intFromEnum(tag_name),
+                    @backingInt(desc.payload_layout),
+                    @backingInt(tag_name),
                     desc.debug_checked_type,
                     hooks.traceProcId(),
                 },
@@ -1242,7 +1242,7 @@ pub const BoxyRuntime = struct {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: descriptor tag variant id {d} missing payload descriptor {d}; checked_type={any} proc={d}",
                 .{
-                    @intFromEnum(tag_name),
+                    @backingInt(tag_name),
                     payload_index,
                     desc.debug_checked_type,
                     hooks.traceProcId(),
@@ -1493,7 +1493,7 @@ pub const BoxyRuntime = struct {
                     if (target_nested_index >= target_nested.len) {
                         return self.invariantFailedError(
                             "LIR/interpreter invariant violated: target struct descriptor for layout {d} was missing field descriptor {d}",
-                            .{ @intFromEnum(target.payload_layout), target_nested_index },
+                            .{ @backingInt(target.payload_layout), target_nested_index },
                         );
                     }
                     const target_ref = target_nested[target_nested_index];
@@ -1524,7 +1524,7 @@ pub const BoxyRuntime = struct {
                 if (target_nested_index != target_nested.len) {
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: target struct descriptor for layout {d} had {d} excess field descriptors",
-                        .{ @intFromEnum(target.payload_layout), target_nested.len - target_nested_index },
+                        .{ @backingInt(target.payload_layout), target_nested.len - target_nested_index },
                     );
                 }
             } else for (target_nested, 0..) |target_ref, index| {
@@ -1581,14 +1581,14 @@ pub const BoxyRuntime = struct {
                                     if (payload.tag != .struct_) {
                                         return self.invariantFailedError(
                                             "LIR/interpreter invariant violated: multi-argument source tag payload layout {d} was not a struct",
-                                            .{@intFromEnum(variant.payload_layout)},
+                                            .{@backingInt(variant.payload_layout)},
                                         );
                                     }
                                     const fields = self.layout_store.getStructData(payload.getStruct().idx).fields.count;
                                     if (target_payload.payload_index >= fields) {
                                         return self.invariantFailedError(
                                             "LIR/interpreter invariant violated: source tag payload index {d} exceeded layout {d} field count {d}",
-                                            .{ target_payload.payload_index, @intFromEnum(variant.payload_layout), fields },
+                                            .{ target_payload.payload_index, @backingInt(variant.payload_layout), fields },
                                         );
                                     }
                                     break :blk self.layout_store.getStructFieldLayoutByOriginalIndex(
@@ -1858,7 +1858,7 @@ pub const BoxyRuntime = struct {
                     16 => a.read(i128) == b.read(i128),
                     else => return self.invariantFailedError(
                         "LIR/interpreter invariant violated: fractional layout {d} has unsupported size {d}",
-                        .{ @intFromEnum(layout_idx), self.helper.sizeOf(layout_idx) },
+                        .{ @backingInt(layout_idx), self.helper.sizeOf(layout_idx) },
                     ),
                 },
                 .int => switch (self.helper.sizeOf(layout_idx)) {
@@ -1869,7 +1869,7 @@ pub const BoxyRuntime = struct {
                     16 => if (isUnsigned(layout_idx)) a.read(u128) == b.read(u128) else a.read(i128) == b.read(i128),
                     else => return self.invariantFailedError(
                         "LIR/interpreter invariant violated: scalar layout {d} has unsupported size {d}",
-                        .{ @intFromEnum(layout_idx), self.helper.sizeOf(layout_idx) },
+                        .{ @backingInt(layout_idx), self.helper.sizeOf(layout_idx) },
                     ),
                 },
                 .opaque_ptr => switch (self.helper.sizeOf(layout_idx)) {
@@ -1877,7 +1877,7 @@ pub const BoxyRuntime = struct {
                     8 => a.read(usize) == b.read(usize),
                     else => return self.invariantFailedError(
                         "LIR/interpreter invariant violated: opaque pointer layout {d} has unsupported size {d}",
-                        .{ @intFromEnum(layout_idx), self.helper.sizeOf(layout_idx) },
+                        .{ @backingInt(layout_idx), self.helper.sizeOf(layout_idx) },
                     ),
                 },
                 .vector => a.read(u128) == b.read(u128),
@@ -1886,12 +1886,12 @@ pub const BoxyRuntime = struct {
                 const hooks = maybe_hooks orelse
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: descriptor-backed boxy equality had no frame for layout {d}",
-                        .{@intFromEnum(layout_idx)},
+                        .{@backingInt(layout_idx)},
                     );
                 break :blk try self.boxyValuesEqual(hooks, a, b, layout_idx, payload_desc);
             } else return self.invariantFailedError(
                 "LIR/interpreter invariant violated: erased box equality had no descriptor for layout {d}",
-                .{@intFromEnum(layout_idx)},
+                .{@backingInt(layout_idx)},
             ),
             .box_of_zst => true,
             .box => blk: {
@@ -1902,7 +1902,7 @@ pub const BoxyRuntime = struct {
                     const hooks = maybe_hooks orelse
                         return self.invariantFailedError(
                             "LIR/interpreter invariant violated: descriptor-backed box equality had no frame for layout {d}",
-                            .{@intFromEnum(layout_idx)},
+                            .{@backingInt(layout_idx)},
                         );
                     break :blk_desc try self.firstNestedBoxyDesc(hooks, box_desc);
                 } else null;
@@ -1910,11 +1910,11 @@ pub const BoxyRuntime = struct {
             },
             .erased_callable => return self.invariantFailedError(
                 "LIR/interpreter invariant violated: equality on erased callable layout {d} survived lowering",
-                .{@intFromEnum(layout_idx)},
+                .{@backingInt(layout_idx)},
             ),
             .ptr => return self.invariantFailedError(
                 "LIR/interpreter invariant violated: equality on compiler-internal ptr layout {d}",
-                .{@intFromEnum(layout_idx)},
+                .{@backingInt(layout_idx)},
             ),
             .struct_ => blk: {
                 const struct_data = self.layout_store.getStructData(layout_val.getStruct().idx);
@@ -1938,7 +1938,7 @@ pub const BoxyRuntime = struct {
                         const hooks = maybe_hooks orelse
                             return self.invariantFailedError(
                                 "LIR/interpreter invariant violated: descriptor-backed struct equality had no frame for layout {d}",
-                                .{@intFromEnum(layout_idx)},
+                                .{@backingInt(layout_idx)},
                             );
                         const resolved = try hooks.resolveDescRef(desc_refs[next_desc]);
                         next_desc += 1;
@@ -1960,7 +1960,7 @@ pub const BoxyRuntime = struct {
                     const hooks = maybe_hooks orelse
                         return self.invariantFailedError(
                             "LIR/interpreter invariant violated: descriptor-backed tag equality had no frame for layout {d}",
-                            .{@intFromEnum(layout_idx)},
+                            .{@backingInt(layout_idx)},
                         );
                     if (self.boxyTagExtDiscriminant(tag_desc)) |ext_discriminant| {
                         if (a_disc == ext_discriminant) {
@@ -2041,7 +2041,7 @@ pub const BoxyRuntime = struct {
                     const hooks = maybe_hooks orelse
                         return self.invariantFailedError(
                             "LIR/interpreter invariant violated: descriptor-backed list equality had no frame for layout {d}",
-                            .{@intFromEnum(layout_idx)},
+                            .{@backingInt(layout_idx)},
                         );
                     break :blk_desc try self.firstNestedBoxyDesc(hooks, list_desc);
                 } else null;
@@ -2117,7 +2117,7 @@ pub const BoxyRuntime = struct {
         if (layout_val.tag != .box and layout_val.tag != .erased_box) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: descriptor-guided box drop expected box layout {d}",
-                .{@intFromEnum(layout_idx)},
+                .{@backingInt(layout_idx)},
             );
         }
 
@@ -2137,7 +2137,7 @@ pub const BoxyRuntime = struct {
                     }
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: dynamic box drop for layout {d} had allocation 0x{x} but descriptor {any} payload layout {d} (checked type {any}) did not describe it in proc {d}",
-                        .{ @intFromEnum(layout_idx), @intFromPtr(self.readBoxedDataPointer(val).?), static_desc_index, @intFromEnum(desc.payload_layout), desc.debug_checked_type, hooks.traceProcId() },
+                        .{ @backingInt(layout_idx), @intFromPtr(self.readBoxedDataPointer(val).?), static_desc_index, @backingInt(desc.payload_layout), desc.debug_checked_type, hooks.traceProcId() },
                     );
                 }
                 return;
@@ -2255,7 +2255,7 @@ pub const BoxyRuntime = struct {
                 if (next_desc >= desc_refs.len) {
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: boxy struct drop descriptor for layout {d} was missing nested descriptor {d}",
-                        .{ @intFromEnum(struct_layout), next_desc },
+                        .{ @backingInt(struct_layout), next_desc },
                     );
                 }
                 const resolved = try hooks.resolveDescRef(desc_refs[next_desc]);
@@ -2322,12 +2322,12 @@ pub const BoxyRuntime = struct {
                                 .{
                                     original_index,
                                     hooks.traceProcId(),
-                                    @intFromEnum(union_layout),
-                                    @intFromEnum(desc.payload_layout),
+                                    @backingInt(union_layout),
+                                    @backingInt(desc.payload_layout),
                                     desc.debug_checked_type,
                                     self.store.getString(variant.name),
-                                    @intFromEnum(actual_payload_layout),
-                                    @intFromEnum(field_layout),
+                                    @backingInt(actual_payload_layout),
+                                    @backingInt(field_layout),
                                 },
                             );
                         };
@@ -2351,7 +2351,7 @@ pub const BoxyRuntime = struct {
             => {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: multi-payload tag {s} used non-struct payload layout {d}",
-                    .{ self.store.getString(variant.name), @intFromEnum(actual_payload_layout) },
+                    .{ self.store.getString(variant.name), @backingInt(actual_payload_layout) },
                 );
             },
         }
@@ -2917,7 +2917,7 @@ pub const BoxyRuntime = struct {
         const ext_discriminant = self.boxyTagExtDiscriminant(desc) orelse {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag construction descriptor had no variant named {s}; checked_type={any} payload_layout={d} variants={d}",
-                .{ self.store.getString(tag_name), desc.debug_checked_type, @intFromEnum(desc.payload_layout), desc.tag_variants.len },
+                .{ self.store.getString(tag_name), desc.debug_checked_type, @backingInt(desc.payload_layout), desc.tag_variants.len },
             );
         };
         const ext_desc = try self.resolveBoxyTagExtDesc(hooks, desc);
@@ -3109,7 +3109,7 @@ pub const BoxyRuntime = struct {
         const ext_discriminant = self.boxyTagExtDiscriminant(source_desc) orelse {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag payload descriptor had no variant named {s}; checked_type={any} payload_layout={d} variants={d}",
-                .{ self.store.getString(tag_name), source_desc.debug_checked_type, @intFromEnum(source_desc.payload_layout), source_desc.tag_variants.len },
+                .{ self.store.getString(tag_name), source_desc.debug_checked_type, @backingInt(source_desc.payload_layout), source_desc.tag_variants.len },
             );
         };
         if (disc != ext_discriminant) {
@@ -3190,10 +3190,10 @@ pub const BoxyRuntime = struct {
             .tag_union,
             .ptr,
             => {
-                if (builtin.mode == .Debug and payload_index != 0) {
+                if (builtin.mode == .debug and payload_index != 0) {
                     self.invariantFailed(
                         "LIR/interpreter invariant violated: scalar boxy tag payload access requested payload_idx {d} from non-struct payload layout {d}",
-                        .{ payload_index, @intFromEnum(actual_payload_layout) },
+                        .{ payload_index, @backingInt(actual_payload_layout) },
                     );
                 }
                 return .{
@@ -3224,7 +3224,7 @@ pub const BoxyRuntime = struct {
             const payload_desc = desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: concrete payload layout {d} needed descriptor-guided boxing into layout {d}",
-                    .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                    .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                 );
             };
             return try self.allocBoxyDynamicPayload(hooks, value, actual_layout, payload_desc, expected_layout);
@@ -3239,7 +3239,7 @@ pub const BoxyRuntime = struct {
                     if (payload_size == 0) return try self.materializeLocalValue(hooks, Value.zst, expected_layout);
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: descriptor-backed box layout {d} had null payload pointer for nonzero payload layout {d}",
-                        .{ @intFromEnum(actual_layout), @intFromEnum(payload_layout) },
+                        .{ @backingInt(actual_layout), @backingInt(payload_layout) },
                     );
                 }
                 return try self.materializeBoxyPayloadToLayout(
@@ -3255,7 +3255,7 @@ pub const BoxyRuntime = struct {
             const payload_desc = desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy struct payload layout {d} needed descriptor-guided materialization into layout {d}",
-                    .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                    .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                 );
             };
             return try self.materializeBoxyStructPayloadToLayout(hooks, value, actual_layout, payload_desc, expected_layout);
@@ -3280,14 +3280,14 @@ pub const BoxyRuntime = struct {
             const payload_desc = desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized boxy tag payload needed descriptor-guided materialization into layout {d}",
-                    .{@intFromEnum(expected_layout)},
+                    .{@backingInt(expected_layout)},
                 );
             };
             const variants = self.requireBoxyTagVariants(payload_desc.tag_variants);
             if (variants.len != 1) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized boxy tag payload descriptor for layout {d} had {d} variants",
-                    .{ @intFromEnum(expected_layout), variants.len },
+                    .{ @backingInt(expected_layout), variants.len },
                 );
             }
             const variant = variants[0];
@@ -3302,7 +3302,7 @@ pub const BoxyRuntime = struct {
             if (self.helper.sizeOf(expected_payload_layout) != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized boxy tag payload materialized into nonzero target payload layout {d}",
-                    .{@intFromEnum(expected_payload_layout)},
+                    .{@backingInt(expected_payload_layout)},
                 );
             }
             if (self.helper.sizeOf(target.base_layout) > 0) {
@@ -3310,7 +3310,7 @@ pub const BoxyRuntime = struct {
             } else if (variant.discriminant != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized boxy tag payload wrote nonzero discriminant {d} into zero-sized layout {d}",
-                    .{ variant.discriminant, @intFromEnum(target.base_layout) },
+                    .{ variant.discriminant, @backingInt(target.base_layout) },
                 );
             }
             return target.outer;
@@ -3322,7 +3322,7 @@ pub const BoxyRuntime = struct {
             const payload_desc = desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy tag payload layout {d} needed descriptor-guided materialization into layout {d}",
-                    .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                    .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                 );
             };
             return try self.materializeBoxyTagPayloadToLayout(hooks, value, actual_layout, payload_desc, expected_layout);
@@ -3331,7 +3331,7 @@ pub const BoxyRuntime = struct {
             const payload_desc = desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: tag wrapper payload layout {d} needed descriptor-guided materialization into layout {d}",
-                    .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                    .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                 );
             };
             if (payload_desc.tag_variants.len != 0) {
@@ -3544,7 +3544,7 @@ pub const BoxyRuntime = struct {
             source_list.bytes orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: non-empty boxy list payload had null source bytes for layout {d}",
-                    .{@intFromEnum(actual_layout)},
+                    .{@backingInt(actual_layout)},
                 );
             };
 
@@ -3703,7 +3703,7 @@ pub const BoxyRuntime = struct {
             const resolved_target_desc = target_desc orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: borrowed target box lacked a descriptor (source_layout={d} target_layout={d} source_checked={any} proc={d})",
-                    .{ @intFromEnum(source_layout), @intFromEnum(target_layout), if (source_desc) |desc| desc.debug_checked_type else null, hooks.traceProcId() },
+                    .{ @backingInt(source_layout), @backingInt(target_layout), if (source_desc) |desc| desc.debug_checked_type else null, hooks.traceProcId() },
                 );
             };
             const allocation_desc = try self.boxyBoxAllocationPayloadDesc(hooks, target_layout, resolved_target_desc);
@@ -4201,7 +4201,7 @@ pub const BoxyRuntime = struct {
                         }
                         return self.invariantFailedError(
                             "LIR/interpreter invariant violated: non-zero-sized payload layout {d} targeted canonical Box({{}}) layout {d}",
-                            .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                            .{ @backingInt(actual_layout), @backingInt(expected_layout) },
                         );
                     },
                     .box => {
@@ -4393,7 +4393,7 @@ pub const BoxyRuntime = struct {
         } else if (present_discriminant != 0) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: presence-slot materialization wrote nonzero discriminant {d} into zero-sized layout {d}",
-                .{ present_discriminant, @intFromEnum(target.base_layout) },
+                .{ present_discriminant, @backingInt(target.base_layout) },
             );
         }
 
@@ -4437,7 +4437,7 @@ pub const BoxyRuntime = struct {
                 }
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized tag materialization target box layout {d} had no allocation descriptor",
-                    .{@intFromEnum(expected_layout)},
+                    .{@backingInt(expected_layout)},
                 );
             };
             if (allocation_desc == target_desc and allocation_desc.payload_layout == expected_layout) {
@@ -4465,7 +4465,7 @@ pub const BoxyRuntime = struct {
         if (source_variants.len != 1) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: zero-sized source boxy tag payload descriptor for layout {d} had {d} variants",
-                .{ @intFromEnum(expected_layout), source_variants.len },
+                .{ @backingInt(expected_layout), source_variants.len },
             );
         }
         const source_variant = source_variants[0];
@@ -4481,7 +4481,7 @@ pub const BoxyRuntime = struct {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: target boxy tag descriptor for layout {d} had no variant named {s}; target_type={any} target_variants={d} source_type={any}",
                     .{
-                        @intFromEnum(expected_layout),
+                        @backingInt(expected_layout),
                         self.store.getString(source_variant.name),
                         target_desc.debug_checked_type,
                         target_desc.tag_variants.len,
@@ -4496,7 +4496,7 @@ pub const BoxyRuntime = struct {
             } else if (target_ext_discriminant != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: zero-sized boxy tag materialization wrote nonzero extension discriminant {d} into zero-sized layout {d}",
-                    .{ target_ext_discriminant, @intFromEnum(expected_layout) },
+                    .{ target_ext_discriminant, @backingInt(expected_layout) },
                 );
             }
             const ext_slot_layout = self.requireBoxyTagPayloadLayout(target.base_layout, target_ext_discriminant);
@@ -4516,7 +4516,7 @@ pub const BoxyRuntime = struct {
         } else if (target_variant.discriminant != 0) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: zero-sized boxy tag materialization wrote nonzero discriminant {d} into zero-sized layout {d}",
-                .{ target_variant.discriminant, @intFromEnum(target.base_layout) },
+                .{ target_variant.discriminant, @backingInt(target.base_layout) },
             );
         }
 
@@ -4664,7 +4664,7 @@ pub const BoxyRuntime = struct {
                 }
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy source box layout {d} had null data for payload layout {d}",
-                    .{ @intFromEnum(layout_idx), @intFromEnum(payload_desc.payload_layout) },
+                    .{ @backingInt(layout_idx), @backingInt(payload_desc.payload_layout) },
                 );
             }
             return .{ .value = .{ .ptr = data_ptr.? }, .layout = payload_desc.payload_layout, .desc = payload_desc };
@@ -4693,7 +4693,7 @@ pub const BoxyRuntime = struct {
                 }
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy source box layout {d} had null data for payload layout {d}",
-                    .{ @intFromEnum(layout_idx), @intFromEnum(source_payload_desc.payload_layout) },
+                    .{ @backingInt(layout_idx), @backingInt(source_payload_desc.payload_layout) },
                 );
             }
             return .{ .value = .{ .ptr = data_ptr.? }, .layout = source_payload_desc.payload_layout, .desc = source_payload_desc };
@@ -4707,7 +4707,7 @@ pub const BoxyRuntime = struct {
                 }
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: target-guided boxy source box layout {d} had null data for payload layout {d}",
-                    .{ @intFromEnum(layout_idx), @intFromEnum(payload_desc.payload_layout) },
+                    .{ @backingInt(layout_idx), @backingInt(payload_desc.payload_layout) },
                 );
             }
             return .{ .value = .{ .ptr = data_ptr.? }, .layout = payload_desc.payload_layout, .desc = payload_desc };
@@ -4718,10 +4718,10 @@ pub const BoxyRuntime = struct {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: erased box layout {d} had a dynamic payload but no source or target payload descriptor (proc={d}, source_checked={any}, source_payload={d}, source_nested={d}, source_variants={d})",
                     .{
-                        @intFromEnum(layout_idx),
+                        @backingInt(layout_idx),
                         hooks.traceProcId(),
                         source_desc.debug_checked_type,
-                        @intFromEnum(source_desc.payload_layout),
+                        @backingInt(source_desc.payload_layout),
                         source_desc.nested_descs.len,
                         source_desc.tag_variants.len,
                     },
@@ -4771,9 +4771,9 @@ pub const BoxyRuntime = struct {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: descriptor-guided struct materialization expected struct layouts, got actual={d} ({s}) expected={d} ({s})",
                 .{
-                    @intFromEnum(actual_layout),
+                    @backingInt(actual_layout),
                     @tagName(actual_layout_val.tag),
-                    @intFromEnum(expected_layout),
+                    @backingInt(expected_layout),
                     @tagName(expected_layout_val.tag),
                 },
             );
@@ -4796,7 +4796,7 @@ pub const BoxyRuntime = struct {
                 if (next_desc >= desc_refs.len) {
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: boxy struct materialization descriptor for actual layout {d} into {d} was missing nested descriptor {d}; checked_type={any} nested_count={d}",
-                        .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout), next_desc, desc.debug_checked_type, desc_refs.len },
+                        .{ @backingInt(actual_layout), @backingInt(expected_layout), next_desc, desc.debug_checked_type, desc_refs.len },
                     );
                 }
                 const resolved = try hooks.resolveDescRef(desc_refs[next_desc]);
@@ -4879,7 +4879,7 @@ pub const BoxyRuntime = struct {
             } else if (discriminant != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: concrete tag materialization wrote nonzero discriminant {d} into zero-sized layout {d}",
-                    .{ discriminant, @intFromEnum(target.base_layout) },
+                    .{ discriminant, @backingInt(target.base_layout) },
                 );
             }
 
@@ -4955,9 +4955,9 @@ pub const BoxyRuntime = struct {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: target-guided struct materialization expected struct layouts, got actual={d} ({s}) expected={d} ({s})",
                 .{
-                    @intFromEnum(actual_layout),
+                    @backingInt(actual_layout),
                     @tagName(actual_layout_val.tag),
-                    @intFromEnum(expected_layout),
+                    @backingInt(expected_layout),
                     @tagName(expected_layout_val.tag),
                 },
             );
@@ -5035,7 +5035,7 @@ pub const BoxyRuntime = struct {
         } else if (discriminant != 0) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag materialization wrote nonzero discriminant {d} into zero-sized layout {d}",
-                .{ discriminant, @intFromEnum(target.base_layout) },
+                .{ discriminant, @backingInt(target.base_layout) },
             );
         }
 
@@ -5115,7 +5115,7 @@ pub const BoxyRuntime = struct {
             const target_ext_discriminant = self.boxyTagExtDiscriminant(target_desc) orelse {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: target boxy tag descriptor for layout {d} had no variant named {s}",
-                    .{ @intFromEnum(expected_layout), self.store.getString(source_variant.name) },
+                    .{ @backingInt(expected_layout), self.store.getString(source_variant.name) },
                 );
             };
             const target_ext_desc = try self.resolveBoxyTagExtDesc(hooks, target_desc);
@@ -5125,7 +5125,7 @@ pub const BoxyRuntime = struct {
             } else if (target_ext_discriminant != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy tag materialization wrote nonzero extension discriminant {d} into zero-sized layout {d}",
-                    .{ target_ext_discriminant, @intFromEnum(expected_layout) },
+                    .{ target_ext_discriminant, @backingInt(expected_layout) },
                 );
             }
             const ext_slot_layout = self.requireBoxyTagPayloadLayout(target.base_layout, target_ext_discriminant);
@@ -5147,7 +5147,7 @@ pub const BoxyRuntime = struct {
         } else if (target_variant.discriminant != 0) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy tag materialization wrote nonzero discriminant {d} into zero-sized layout {d}",
-                .{ target_variant.discriminant, @intFromEnum(target.base_layout) },
+                .{ target_variant.discriminant, @backingInt(target.base_layout) },
             );
         }
 
@@ -5374,16 +5374,16 @@ pub const BoxyRuntime = struct {
             4 => value.read(u32),
             8 => value.read(u64),
             else => {
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     const layout_val_dbg = self.layout_store.getLayout(layout_idx);
                     debugPrint(
                         "LIR/interpreter bad switch layout idx={d} tag={s} size={d}\n",
-                        .{ @intFromEnum(layout_idx), @tagName(layout_val_dbg.tag), self.helper.sizeOf(layout_idx) },
+                        .{ @backingInt(layout_idx), @tagName(layout_val_dbg.tag), self.helper.sizeOf(layout_idx) },
                     );
                 }
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: switch condition layout {d} is not a supported scalar width",
-                    .{@intFromEnum(layout_idx)},
+                    .{@backingInt(layout_idx)},
                 );
             },
         };
@@ -5426,7 +5426,7 @@ pub const BoxyRuntime = struct {
             if (self.helper.sizeOf(payload_desc.payload_layout) != 0) {
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: non-zero-sized boxy inspect payload layout {d} had a null box pointer",
-                    .{@intFromEnum(payload_desc.payload_layout)},
+                    .{@backingInt(payload_desc.payload_layout)},
                 );
             }
             return try self.appendLayoutInspect(hooks, out, Value.zst, payload_desc.payload_layout, payload_desc);
@@ -5448,7 +5448,7 @@ pub const BoxyRuntime = struct {
         if (result.layout != .str) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: to_inspect worker returned layout {d} instead of Str",
-                .{@intFromEnum(result.layout)},
+                .{@backingInt(result.layout)},
             );
         }
         try out.appendSlice(self.eval_arena, readRocStr(result.value));
@@ -5510,7 +5510,7 @@ pub const BoxyRuntime = struct {
             else
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: erased box inspect had no descriptor for layout {d}",
-                    .{@intFromEnum(layout_idx)},
+                    .{@backingInt(layout_idx)},
                 ),
             .box => {
                 try out.appendSlice(self.eval_arena, "Box(");
@@ -5530,12 +5530,12 @@ pub const BoxyRuntime = struct {
             else
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: boxy tag-union inspect for layout {d} had no descriptor",
-                    .{@intFromEnum(layout_idx)},
+                    .{@backingInt(layout_idx)},
                 ),
             .erased_callable, .closure => try out.appendSlice(self.eval_arena, "<function>"),
             .ptr => return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy inspect reached compiler-internal pointer layout {d}",
-                .{@intFromEnum(layout_idx)},
+                .{@backingInt(layout_idx)},
             ),
         }
     }
@@ -5695,7 +5695,7 @@ pub const BoxyRuntime = struct {
                 const bytes = list.bytes orelse {
                     return self.invariantFailedError(
                         "LIR/interpreter invariant violated: non-empty list layout {d} had null bytes during boxy inspect",
-                        .{@intFromEnum(list_layout)},
+                        .{@backingInt(list_layout)},
                     );
                 };
                 try self.appendLayoutInspect(hooks, out, .{ .ptr = bytes + index * elem_size }, elem_layout, elem_desc);
@@ -5860,7 +5860,7 @@ pub const BoxyRuntime = struct {
     }
 
     pub fn requireBoxyDict(self: *const BoxyRuntime, dict_id: LIR.BoxyDictId) *const LirProgram.BoxyDict {
-        const index = @intFromEnum(dict_id);
+        const index = @backingInt(dict_id);
         if (index >= self.boxy_tables.dicts.len) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy dictionary id {d} exceeded dictionary table length {d}",
@@ -5892,7 +5892,7 @@ pub const BoxyRuntime = struct {
         self: *const BoxyRuntime,
         slot_id: LirProgram.BoxyMethodSlotId,
     ) *const LirProgram.BoxyMethodSlot {
-        const index = @intFromEnum(slot_id);
+        const index = @backingInt(slot_id);
         if (index >= self.boxy_tables.method_slots.len) {
             self.invariantFailed(
                 "LIR/interpreter invariant violated: boxy method slot id {d} exceeded method slot table length {d}",
@@ -6314,7 +6314,7 @@ pub const BoxyRuntime = struct {
             .box_of_zst => return try self.allocBoxOfZstValue(hooks, ret_layout),
             .erased_box => return self.invariantFailedError(
                 "LIR/interpreter invariant violated: converting a RocList to erased box layout {d} requires a payload descriptor",
-                .{@intFromEnum(ret_layout)},
+                .{@backingInt(ret_layout)},
             ),
             .scalar,
             .list,
@@ -6339,7 +6339,7 @@ pub const BoxyRuntime = struct {
             .box_of_zst => return try self.allocBoxOfZstValue(hooks, ret_layout),
             .erased_box => return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxing into erased box layout {d} requires a payload descriptor",
-                .{@intFromEnum(ret_layout)},
+                .{@backingInt(ret_layout)},
             ),
             .box => {
                 const box_info = self.boxAllocInfo(hooks, ret_layout_val);
@@ -6399,9 +6399,9 @@ pub const BoxyRuntime = struct {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: explicit ref reinterpret reached aggregate coercion path actual={d} ({s}) expected={d} ({s})",
                 .{
-                    @intFromEnum(actual_layout),
+                    @backingInt(actual_layout),
                     @tagName(actual_layout_val.tag),
-                    @intFromEnum(expected_layout),
+                    @backingInt(expected_layout),
                     @tagName(expected_layout_val.tag),
                 },
             );
@@ -6416,7 +6416,7 @@ pub const BoxyRuntime = struct {
         actual_layout: layout_mod.Idx,
         expected_layout: layout_mod.Idx,
     ) Error!Value {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             const actual_layout_val = self.layout_store.getLayout(actual_layout);
             const expected_layout_val = self.layout_store.getLayout(expected_layout);
             const actual_is_list = actual_layout_val.tag == .list or actual_layout_val.tag == .list_of_zst;
@@ -6425,9 +6425,9 @@ pub const BoxyRuntime = struct {
                 self.invariantFailed(
                     "LIR/interpreter invariant violated: explicit list reinterpret expected list layouts, got actual={d} ({s}) expected={d} ({s})",
                     .{
-                        @intFromEnum(actual_layout),
+                        @backingInt(actual_layout),
                         @tagName(actual_layout_val.tag),
-                        @intFromEnum(expected_layout),
+                        @backingInt(expected_layout),
                         @tagName(expected_layout_val.tag),
                     },
                 );
@@ -6484,14 +6484,14 @@ pub const BoxyRuntime = struct {
                 if (size == 0) return Value.zst;
                 const data_ptr = self.readBoxedDataPointer(value) orelse self.invariantFailed(
                     "LIR/interpreter invariant violated: erased boundary unbox found a null box for layout {d}",
-                    .{@intFromEnum(expected_layout)},
+                    .{@backingInt(expected_layout)},
                 );
                 const result = try hooks.allocValue(expected_layout);
                 result.copyFrom(.{ .ptr = data_ptr }, size);
                 return result;
             }
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             const actual_is_box = actual_layout_val.tag == .box or actual_layout_val.tag == .box_of_zst or actual_layout_val.tag == .erased_box;
             const expected_is_box = expected_layout_val.tag == .box or expected_layout_val.tag == .box_of_zst or expected_layout_val.tag == .erased_box;
             const actual_is_erased_ptr = actual_layout_val.tag == .scalar and actual_layout_val.getScalar().tag == .opaque_ptr;
@@ -6504,9 +6504,9 @@ pub const BoxyRuntime = struct {
                     self.invariantFailed(
                         "LIR/interpreter invariant violated: explicit nominal reinterpret expected both layouts to be lists when either side is a list, got actual={d} ({s}) expected={d} ({s})",
                         .{
-                            @intFromEnum(actual_layout),
+                            @backingInt(actual_layout),
                             @tagName(actual_layout_val.tag),
-                            @intFromEnum(expected_layout),
+                            @backingInt(expected_layout),
                             @tagName(expected_layout_val.tag),
                         },
                     );
@@ -6520,9 +6520,9 @@ pub const BoxyRuntime = struct {
                 self.invariantFailed(
                     "LIR/interpreter invariant violated: explicit nominal reinterpret expected non-list layouts on the same side of layout boxing, got actual={d} ({s}) expected={d} ({s})",
                     .{
-                        @intFromEnum(actual_layout),
+                        @backingInt(actual_layout),
                         @tagName(actual_layout_val.tag),
-                        @intFromEnum(expected_layout),
+                        @backingInt(expected_layout),
                         @tagName(expected_layout_val.tag),
                     },
                 );
@@ -6531,7 +6531,7 @@ pub const BoxyRuntime = struct {
         if (expected_layout_val.tag == .box_of_zst) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: non-zero-sized layout {d} targeted canonical Box({{}}) layout {d}",
-                .{ @intFromEnum(actual_layout), @intFromEnum(expected_layout) },
+                .{ @backingInt(actual_layout), @backingInt(expected_layout) },
             );
         }
         return value;
@@ -6676,13 +6676,13 @@ pub const BoxyRuntime = struct {
         if ((source_mode == .move) != adapter.consumes_source) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy adapter {d} consumption metadata disagreed with its source mode",
-                .{@intFromEnum(adapter_id)},
+                .{@backingInt(adapter_id)},
             );
         }
         if (!adapter.produces_owned_result) {
             return self.invariantFailedError(
                 "LIR/interpreter invariant violated: boxy adapter {d} did not produce an owned result",
-                .{@intFromEnum(adapter_id)},
+                .{@backingInt(adapter_id)},
             );
         }
         const specialized_target_desc = if (source_desc != null and target_desc != null and
@@ -6912,7 +6912,7 @@ pub const BoxyRuntime = struct {
             else
                 return self.invariantFailedError(
                     "LIR/interpreter invariant violated: non-zero-sized payload layout {d} targeted canonical Box({{}}) layout {d}",
-                    .{ @intFromEnum(payload_layout), @intFromEnum(target_layout) },
+                    .{ @backingInt(payload_layout), @backingInt(target_layout) },
                 ),
             .scalar,
             .list,
@@ -7375,7 +7375,7 @@ pub const BoxyRuntime = struct {
 
         return self.invariantFailedError(
             "LIR/interpreter invariant violated: borrowed inspect argument had incompatible concrete layouts {d} and {d}",
-            .{ @intFromEnum(source.layout), @intFromEnum(target_layout) },
+            .{ @backingInt(source.layout), @backingInt(target_layout) },
         );
     }
 
@@ -7402,7 +7402,7 @@ pub const BoxyRuntime = struct {
         }
 
         const dict = LirProgram.BoxyDict{ .method_slots = .{
-            .start = @intFromEnum(slot_id),
+            .start = @backingInt(slot_id),
             .len = 1,
         } };
         const prepared = try self.prepareDictCall(
@@ -7410,7 +7410,7 @@ pub const BoxyRuntime = struct {
             alloc,
             &dict,
             0,
-            @intFromEnum(slot.method),
+            @backingInt(slot.method),
             &.{source},
             &.{},
             .borrow,
@@ -7752,8 +7752,8 @@ pub const BoxyRuntime = struct {
 
 test "dictionary lookup follows the checked slot across module-local method ids" {
     const slots = [_]LirProgram.BoxyMethodSlot{.{
-        .method = @enumFromInt(11),
-        .proc = @enumFromInt(3),
+        .method = @fromBackingInt(@intCast(11)),
+        .proc = @fromBackingInt(@intCast(3)),
     }};
     const dict = LirProgram.BoxyDict{ .method_slots = .{ .start = 0, .len = 1 } };
 
@@ -7761,5 +7761,5 @@ test "dictionary lookup follows the checked slot across module-local method ids"
     runtime.boxy_tables = .{ .method_slots = &slots };
 
     const selected = try runtime.dictionaryMethodSlot(&dict, 0, 0);
-    try std.testing.expectEqual(@as(u32, 3), @intFromEnum(selected.proc));
+    try std.testing.expectEqual(@as(u32, 3), @backingInt(selected.proc));
 }

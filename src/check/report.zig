@@ -212,7 +212,7 @@ pub const ReportBuilder = struct {
     /// created during type checking. Returns null only if the index is beyond even
     /// the checker's region list (shouldn't happen in normal operation).
     fn getRegionSafe(self: *const Self, region_idx: Region.Idx) ?*Region {
-        if (@intFromEnum(region_idx) >= self.checker_regions.len()) return null;
+        if (@backingInt(region_idx) >= self.checker_regions.len()) return null;
         return self.checker_regions.get(region_idx);
     }
 
@@ -229,7 +229,7 @@ pub const ReportBuilder = struct {
     /// not reachable from this report; render only the local side).
     fn defaultDeclRegion(self: *Self, id: types_mod.DefaultId) ?Region {
         if (id.origin_module != self.can_ir.selfModuleIdentity()) return null;
-        return self.can_ir.store.getExprRegion(@enumFromInt(id.expr_node));
+        return self.can_ir.store.getExprRegion(@fromBackingInt(@intCast(id.expr_node)));
     }
 
     fn addSourceHighlightRegion(self: *Self, report: *Report, region: Region) Allocator.Error!void {
@@ -303,7 +303,7 @@ pub const ReportBuilder = struct {
     /// Convert a type into a type var
     pub fn regionIdxFrom(idx: anytype) Region.Idx {
         std.debug.assert(@TypeOf(idx) == Var or @TypeOf(idx) == CIR.Expr.Idx or @TypeOf(idx) == CIR.Pattern.Idx or @TypeOf(idx) == CIR.Node.Idx);
-        return @enumFromInt(@intFromEnum(idx));
+        return @fromBackingInt(@intCast(@backingInt(idx)));
     }
 
     const ProblemRegion = union(enum) {
@@ -1765,7 +1765,7 @@ pub const ReportBuilder = struct {
         else
             null;
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(types.actual_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(types.actual_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -1846,7 +1846,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Invalid Nominal Record", "I'm having trouble with this nominal type that wraps a record.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(types.actual_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(types.actual_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -1884,7 +1884,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Invalid Nominal Tuple", "I'm having trouble with this nominal type that wraps a tuple.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(types.actual_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(types.actual_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -1922,7 +1922,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Invalid Nominal Type", "I'm having trouble with this nominal type.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(types.actual_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(types.actual_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -2258,7 +2258,7 @@ pub const ReportBuilder = struct {
         const snapshot_str = try report.addOwnedString(self.getFormattedString(data.dispatcher_snapshot));
 
         // Add source region highlighting
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.fn_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.fn_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -2335,7 +2335,7 @@ pub const ReportBuilder = struct {
         const snapshot_str = try report.addOwnedString(self.getFormattedString(data.dispatcher_snapshot));
 
         // Add source region highlighting
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.fn_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.fn_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -2532,7 +2532,7 @@ pub const ReportBuilder = struct {
 
         const snapshot_str = try report.addOwnedString(self.getFormattedString(data.dispatcher_snapshot));
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.fn_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.fn_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -2593,7 +2593,7 @@ pub const ReportBuilder = struct {
         const snapshot_str = try report.addOwnedString(self.getFormattedString(data.dispatcher_snapshot));
 
         const literal_region = data.quote_region orelse
-            (if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.dispatcher_var)))) |r| r.* else Region.zero());
+            (if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.dispatcher_var))))) |r| r.* else Region.zero());
         const region_info = self.module_env.calcRegionInfo(literal_region);
 
         try report.document.addSourceRegion(
@@ -2632,7 +2632,7 @@ pub const ReportBuilder = struct {
 
         // Get the region of the dispatcher (the type that was expected)
         // This might be different if the type came from somewhere else (e.g., a type annotation)
-        const dispatcher_region = if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.dispatcher_var)))) |r| r.* else Region.zero();
+        const dispatcher_region = if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.dispatcher_var))))) |r| r.* else Region.zero();
 
         try report.document.addSourceRegion(
             num_region_info,
@@ -2826,7 +2826,7 @@ pub const ReportBuilder = struct {
 
         const snapshot_str = try report.addOwnedString(self.getFormattedString(data.dispatcher_snapshot));
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.fn_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.fn_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -2885,7 +2885,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Type Does Not Support Map", "This type does not have an unambiguous direct tag payload for compiler-derived mapping.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.fn_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.fn_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -3479,7 +3479,7 @@ pub const ReportBuilder = struct {
             D.bytes("type."),
         }, self, &report, &report.headline);
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.var_)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.var_))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -3512,7 +3512,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Compiler Bug", "An internal compiler error occurred while checking this nominal type usage.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.var_)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.var_))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -3903,7 +3903,7 @@ pub const ReportBuilder = struct {
             }, self, &report, &report.headline),
         }
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.decl_var)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.decl_var))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -3940,7 +3940,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Infinite Type", "I am inferring a weird self-referential type.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.var_)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.var_))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -3983,7 +3983,7 @@ pub const ReportBuilder = struct {
             }, self, &report, &report.headline);
         }
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.var_)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.var_))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -4023,7 +4023,7 @@ pub const ReportBuilder = struct {
         var report = try Report.init(self.gpa, "Polymorphic Value", "This top-level value still has an unresolved polymorphic type.", .runtime_error);
         errdefer report.deinit();
 
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.var_)))) |region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.var_))))) |region| {
             const region_info = self.module_env.calcRegionInfo(region.*);
             try report.document.addSourceRegion(
                 region_info,
@@ -4538,7 +4538,7 @@ pub const ReportBuilder = struct {
         errdefer report.deinit();
 
         // Add source region highlighting
-        if (self.getRegionSafe(@enumFromInt(@intFromEnum(data.match_expr)))) |match_region| {
+        if (self.getRegionSafe(@fromBackingInt(@intCast(@backingInt(data.match_expr))))) |match_region| {
             const region_info = self.module_env.calcRegionInfo(match_region.*);
             try report.document.addSourceRegion(
                 region_info,

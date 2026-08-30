@@ -57,7 +57,7 @@ pub fn run(store: *LirStore, layouts: *layout_mod.Store) ResourceError!void {
     const proc_count = store.procSpecCount();
     var proc_index: usize = 0;
     while (proc_index < proc_count) : (proc_index += 1) {
-        const proc_id: LIR.LirProcSpecId = @enumFromInt(proc_index);
+        const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(proc_index));
         try transformProc(store, layouts, proc_id);
     }
 }
@@ -694,7 +694,7 @@ fn testZst(store: *LirStore, target: LocalId, next: CFStmtId) ResourceError!CFSt
 }
 
 fn testFreshJoinPointId(next_join_point: *u32) LIR.JoinPointId {
-    const id: LIR.JoinPointId = @enumFromInt(next_join_point.*);
+    const id: LIR.JoinPointId = @fromBackingInt(@intCast(next_join_point.*));
     next_join_point.* += 1;
     return id;
 }

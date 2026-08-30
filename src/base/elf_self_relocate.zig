@@ -24,6 +24,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const elf = std.elf;
 
+const NativePhdr = elf.ElfN.Phdr;
+
 /// aarch64 dynamic relocation types.
 const R_AARCH64_ABS64: u32 = 257;
 const R_AARCH64_GLOB_DAT: u32 = 1025;
@@ -89,9 +91,9 @@ pub fn applyDynamicRelocations(base: usize, resolver: ?UndefinedSymbolResolver) 
             i += 1;
             ph_addr += ehdr.e_phentsize;
         }) {
-            const ph: *const elf.Phdr = @ptrFromInt(ph_addr);
-            if (ph.p_type == elf.PT_DYNAMIC) {
-                dyn = @ptrFromInt(base + ph.p_vaddr);
+            const ph: *const NativePhdr = @ptrFromInt(ph_addr);
+            if (ph.type == .DYNAMIC) {
+                dyn = @ptrFromInt(base + ph.vaddr);
                 break;
             }
         }
@@ -198,7 +200,7 @@ test "applyDynamicRelocations applies a RELATIVE entry" {
     // relocation, and the target word it points at. The image's "vaddr 0" is
     // the buffer start, mirroring how ElfDynLib maps a real object.
     const ehdr_size = @sizeOf(elf.Ehdr);
-    const phdr_size = @sizeOf(elf.Phdr);
+    const phdr_size = @sizeOf(NativePhdr);
     const dyn_off = std.mem.alignForward(usize, ehdr_size + phdr_size, 8);
     const dyn_count = 4;
     const rela_off = std.mem.alignForward(usize, dyn_off + dyn_count * @sizeOf(elf.Elf64_Dyn), 8);
@@ -218,12 +220,12 @@ test "applyDynamicRelocations applies a RELATIVE entry" {
     ehdr.e_phentsize = phdr_size;
     ehdr.e_phnum = 1;
 
-    const phdr: *elf.Phdr = @ptrCast(@alignCast(buf.ptr + ehdr_size));
-    phdr.p_type = elf.PT_DYNAMIC;
-    phdr.p_vaddr = dyn_off;
-    phdr.p_offset = dyn_off;
-    phdr.p_filesz = dyn_count * @sizeOf(elf.Elf64_Dyn);
-    phdr.p_memsz = phdr.p_filesz;
+    const phdr: *NativePhdr = @ptrCast(@alignCast(buf.ptr + ehdr_size));
+    phdr.type = .DYNAMIC;
+    phdr.vaddr = dyn_off;
+    phdr.offset = dyn_off;
+    phdr.filesz = dyn_count * @sizeOf(elf.Elf64_Dyn);
+    phdr.memsz = phdr.filesz;
 
     const dynv: [*]elf.Elf64_Dyn = @ptrCast(@alignCast(buf.ptr + dyn_off));
     dynv[0] = .{ .d_tag = elf.DT_RELA, .d_val = rela_off };
@@ -253,7 +255,7 @@ test "applyDynamicRelocations binds an undefined symbol through the resolver" {
     // resolver path needs to read that name. The resolver binds the slot to a
     // sentinel address, mirroring how the eval loader binds compiler-rt libcalls.
     const ehdr_size = @sizeOf(elf.Ehdr);
-    const phdr_size = @sizeOf(elf.Phdr);
+    const phdr_size = @sizeOf(NativePhdr);
     const dyn_off = std.mem.alignForward(usize, ehdr_size + phdr_size, 8);
     const dyn_count = 7;
     const rela_off = std.mem.alignForward(usize, dyn_off + dyn_count * @sizeOf(elf.Elf64_Dyn), 8);
@@ -276,12 +278,12 @@ test "applyDynamicRelocations binds an undefined symbol through the resolver" {
     ehdr.e_phentsize = phdr_size;
     ehdr.e_phnum = 1;
 
-    const phdr: *elf.Phdr = @ptrCast(@alignCast(buf.ptr + ehdr_size));
-    phdr.p_type = elf.PT_DYNAMIC;
-    phdr.p_vaddr = dyn_off;
-    phdr.p_offset = dyn_off;
-    phdr.p_filesz = dyn_count * @sizeOf(elf.Elf64_Dyn);
-    phdr.p_memsz = phdr.p_filesz;
+    const phdr: *NativePhdr = @ptrCast(@alignCast(buf.ptr + ehdr_size));
+    phdr.type = .DYNAMIC;
+    phdr.vaddr = dyn_off;
+    phdr.offset = dyn_off;
+    phdr.filesz = dyn_count * @sizeOf(elf.Elf64_Dyn);
+    phdr.memsz = phdr.filesz;
 
     const dynv: [*]elf.Elf64_Dyn = @ptrCast(@alignCast(buf.ptr + dyn_off));
     dynv[0] = .{ .d_tag = elf.DT_JMPREL, .d_val = rela_off };

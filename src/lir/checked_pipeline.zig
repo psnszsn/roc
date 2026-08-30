@@ -394,7 +394,7 @@ pub const RuntimeValueSchemaStore = struct {
         for (self.records.items) |schema| {
             if (std.mem.eql(u8, schema.type_name, type_name)) return schema;
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("runtime schema invariant violated: missing record schema for {s}", .{type_name});
         }
         unreachable;
@@ -404,7 +404,7 @@ pub const RuntimeValueSchemaStore = struct {
         for (self.tag_unions.items) |schema| {
             if (std.mem.eql(u8, schema.type_name, type_name)) return schema;
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("runtime schema invariant violated: missing tag union schema for {s}", .{type_name});
         }
         unreachable;
@@ -711,7 +711,7 @@ fn lowerBoxyCheckedModulesToLir(
 }
 
 fn verifyArithmeticBoundary(store: *const core.LirStore, before_prover: bool) void {
-    if (builtin.mode != .Debug) return;
+    if (builtin.mode != .debug) return;
     for (store.getCFStmts()) |stmt| {
         if (stmt != .assign_low_level) continue;
         const op = stmt.assign_low_level.op;
@@ -729,7 +729,7 @@ fn verifyArithmeticBoundary(store: *const core.LirStore, before_prover: bool) vo
 }
 
 fn verifyCheckedBoundary(modules: CheckedModuleSet, target: TargetConfig) Allocator.Error!void {
-    if (builtin.mode != .Debug) return;
+    if (builtin.mode != .debug) return;
     switch (target.checked_module_state) {
         .complete => try modules.root.module.verifyComplete(),
         .checking_finalization => modules.root.module.verifyReadyForCompileTimeLowering(),
@@ -911,7 +911,7 @@ fn convertRuntimeSchemas(
 }
 
 fn checkedPipelineInvariant(comptime message: []const u8) noreturn {
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         std.debug.panic("checked pipeline invariant violated: {s}", .{message});
     }
     unreachable;
@@ -944,7 +944,7 @@ const LirDump = if (builtin.os.tag == .freestanding) struct {
         const store = &result.store;
         const layouts = &result.layouts;
         for (0..store.procSpecCount()) |index| {
-            const proc_id: LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(index)));
+            const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const name = store.procDebugName(proc_id) orelse continue;
             if (name_filter.len != 0 and std.mem.find(u8, name, name_filter) == null) continue;
             var buffer: std.Io.Writer.Allocating = .init(store.allocator);

@@ -45,6 +45,11 @@ pub fn io() std.Io {
         .ps4,
         .ps5,
         .psp,
+        .wiiu,
+        .@"switch",
+        .psx,
+        .tios,
+        .ashetos,
         .vita,
         .emscripten,
         .wasi,
@@ -161,6 +166,9 @@ fn linuxOperate(_: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable!s
         .file_write_streaming => |op| .{ .file_write_streaming = linuxFileWriteStreaming(op.file, op.header, op.data, op.splat) },
         .device_io_control => @panic("device_io_control unsupported in shim"),
         .net_receive => .{ .net_receive = .{ error.NetworkDown, 0 } },
+        .net_send => .{ .net_send = .{ error.NetworkDown, 0 } },
+        .net_read => .{ .net_read = error.NetworkDown },
+        .net_write => .{ .net_write = error.NetworkDown },
     };
 }
 
@@ -518,6 +526,9 @@ fn windowsOperate(_: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable
         .file_write_streaming => |op| .{ .file_write_streaming = windowsFileWriteStreaming(op.file, op.header, op.data, op.splat) },
         .device_io_control => @panic("device_io_control unsupported in shim"),
         .net_receive => .{ .net_receive = .{ error.NetworkDown, 0 } },
+        .net_send => .{ .net_send = .{ error.NetworkDown, 0 } },
+        .net_read => .{ .net_read = error.NetworkDown },
+        .net_write => .{ .net_write = error.NetworkDown },
     };
 }
 
@@ -780,7 +791,7 @@ fn macosFutexWaitUncancelable(_: ?*anyopaque, ptr: *const u32, expected: u32) vo
     const flags: std.c.UL = .{ .op = .COMPARE_AND_WAIT, .NO_ERRNO = true };
     const status = std.c.__ulock_wait(flags, ptr, expected, 0);
     if (status >= 0) return;
-    const errno: std.c.E = @enumFromInt(-status);
+    const errno: std.c.E = @fromBackingInt(@intCast(-status));
     if (errno == .INTR or errno == .FAULT or errno == .TIMEDOUT) return;
     unreachable;
 }
@@ -795,7 +806,7 @@ fn macosFutexWake(_: ?*anyopaque, ptr: *const u32, max_waiters: u32) void {
     while (true) {
         const status = std.c.__ulock_wake(flags, ptr, 0);
         if (status >= 0) return;
-        const errno: std.c.E = @enumFromInt(-status);
+        const errno: std.c.E = @fromBackingInt(@intCast(-status));
         if (errno == .INTR) continue;
         if (errno == .NOENT) return;
         unreachable;
@@ -808,6 +819,9 @@ fn macosOperate(_: ?*anyopaque, operation: std.Io.Operation) std.Io.Cancelable!s
         .file_write_streaming => |op| .{ .file_write_streaming = macosFileWriteStreaming(op.file, op.header, op.data, op.splat) },
         .device_io_control => @panic("device_io_control unsupported in shim"),
         .net_receive => .{ .net_receive = .{ error.NetworkDown, 0 } },
+        .net_send => .{ .net_send = .{ error.NetworkDown, 0 } },
+        .net_read => .{ .net_read = error.NetworkDown },
+        .net_write => .{ .net_write = error.NetworkDown },
     };
 }
 

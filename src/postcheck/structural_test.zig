@@ -15,19 +15,21 @@ const LIR = @import("lir_core").LIR;
 const names = check.CheckedNames;
 
 fn unionFieldCount(comptime T: type) comptime_int {
-    return @typeInfo(T).@"union".fields.len;
+    return @typeInfo(T).@"union".field_names.len;
 }
 
 fn structFieldType(comptime T: type, comptime name: []const u8) type {
-    inline for (@typeInfo(T).@"struct".fields) |field| {
-        if (std.mem.eql(u8, field.name, name)) return field.type;
+    const info = @typeInfo(T).@"struct";
+    inline for (info.field_names, info.field_types) |field_name, FieldType| {
+        if (std.mem.eql(u8, field_name, name)) return FieldType;
     }
     @compileError("missing struct field: " ++ name);
 }
 
 fn unionPayloadType(comptime T: type, comptime name: []const u8) type {
-    inline for (@typeInfo(T).@"union".fields) |field| {
-        if (std.mem.eql(u8, field.name, name)) return field.type;
+    const info = @typeInfo(T).@"union";
+    inline for (info.field_names, info.field_types) |field_name, FieldType| {
+        if (std.mem.eql(u8, field_name, name)) return FieldType;
     }
     @compileError("missing union field: " ++ name);
 }
@@ -279,13 +281,13 @@ fn assertNoPostCheckType(comptime T: type, comptime path: []const u8) void {
         .optional => |optional| assertNoPostCheckType(optional.child, path ++ "?"),
         .pointer => |pointer| assertNoPostCheckType(pointer.child, path ++ ".*"),
         .@"struct" => |info| {
-            inline for (info.fields) |field| {
-                assertNoPostCheckType(field.type, path ++ "." ++ field.name);
+            inline for (info.field_names, info.field_types) |field_name, FieldType| {
+                assertNoPostCheckType(FieldType, path ++ "." ++ field_name);
             }
         },
         .@"union" => |info| {
-            inline for (info.fields) |field| {
-                assertNoPostCheckType(field.type, path ++ "." ++ field.name);
+            inline for (info.field_names, info.field_types) |field_name, FieldType| {
+                assertNoPostCheckType(FieldType, path ++ "." ++ field_name);
             }
         },
         .type,
@@ -307,6 +309,7 @@ fn assertNoPostCheckType(comptime T: type, comptime path: []const u8) void {
         .@"anyframe",
         .vector,
         .enum_literal,
+        .spirv,
         => {},
     }
 }
@@ -876,16 +879,16 @@ test "Monotype runtime demands snapshot pass-local compositional impossibility p
         "fn addExpr(self: *BodyContext",
         "fn addFieldExprSpan(",
     );
-    try expectContains(producers, "expr_impossibility_proofs.items[@intFromEnum(id)] = try self.exprDataImpossibilityProof");
-    try expectContains(producers, "pat_impossibility_proofs.items[@intFromEnum(id)] = try self.patDataImpossibilityProof");
-    try expectContains(producers, "stmt_impossibility_proofs.items[@intFromEnum(id)] = try self.stmtDataImpossibilityProof(stmt)");
+    try expectContains(producers, "expr_impossibility_proofs.items[@backingInt(id)] = try self.exprDataImpossibilityProof");
+    try expectContains(producers, "pat_impossibility_proofs.items[@backingInt(id)] = try self.patDataImpossibilityProof");
+    try expectContains(producers, "stmt_impossibility_proofs.items[@backingInt(id)] = try self.stmtDataImpossibilityProof(stmt)");
 
     const statement_frames = sourceSliceBetween(
         lower_source,
         "fn withStatementSuccessRuntimeDemandGuardFrame(",
         "fn runtimeDemandGuardFrameAddresses(",
     );
-    try expectContains(statement_frames, "runtimeDemandGuardFrameAddressRaw(@intFromEnum(statement_id), .statement_success)");
+    try expectContains(statement_frames, "runtimeDemandGuardFrameAddressRaw(@backingInt(statement_id), .statement_success)");
     try expectContains(statement_frames, "try pushRuntimeDemandGuardFrame(");
     try expectContains(lower_source, "body_ctx.runtime_demand_guard_frames = source_ctx.runtime_demand_guard_frames");
     try expectContains(lower_source, "runtimeDemandGuardFrameStackContains(self.draft, self.runtime_demand_guard_frames, address)");
@@ -1497,8 +1500,8 @@ test "each primitive mapping has exactly one definition" {
         try expectNotContains(source, "fn builtinOwnerFromPrimitive(");
     }
     const owner_fn = @typeInfo(@TypeOf(check.CheckedModule.builtinOwnerForPrimitive)).@"fn";
-    try std.testing.expect(owner_fn.params.len == 1);
-    try std.testing.expect(owner_fn.params[0].type.? == check.CheckedModule.CheckedPrimitive);
+    try std.testing.expect(owner_fn.param_types.len == 1);
+    try std.testing.expect(owner_fn.param_types[0].? == check.CheckedModule.CheckedPrimitive);
     try std.testing.expect(owner_fn.return_type.? == check.StaticDispatchRegistry.BuiltinOwner);
 }
 

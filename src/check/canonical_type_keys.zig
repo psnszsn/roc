@@ -337,7 +337,7 @@ const Builder = struct {
 
         if (self.err_by_var and resolved.desc.content == .err) {
             self.writeTag("err_var");
-            self.writeU32(@intFromEnum(root));
+            self.writeU32(@backingInt(root));
             return true;
         }
 
@@ -1063,7 +1063,7 @@ fn writeU32Value(hasher: *std.crypto.hash.sha2.Sha256, value: u32) void {
 }
 
 fn invariantViolation(comptime message: []const u8) noreturn {
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         std.debug.panic(message, .{});
     }
     unreachable;
@@ -1311,7 +1311,7 @@ test "canonical error detection traverses alias arguments" {
 
     var env = try ModuleEnv.init(allocator, "");
     defer env.deinit();
-    try env.setContentIdentity([_]u8{0xA5} ** 32);
+    try env.setContentIdentity(@as([32]u8, @splat(0xA5)));
     const alias_ident = try env.insertIdent(Ident.for_text("Alias"));
 
     var store = try TypeStore.initCapacity(allocator, 16, 8);

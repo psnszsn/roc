@@ -54,17 +54,17 @@ const ProjectionKind = enum(u2) {
 pub fn encodeProjection(op: LIR.RefOp) ?u64 {
     return switch (op) {
         .field => |field| @as(u64, field.field_idx),
-        .tag_payload => |payload| (@as(u64, @intFromEnum(ProjectionKind.tag_payload)) << projection_kind_shift) |
+        .tag_payload => |payload| (@as(u64, @backingInt(ProjectionKind.tag_payload)) << projection_kind_shift) |
             (@as(u64, payload.variant_index) << 16) |
             @as(u64, payload.payload_idx),
-        .tag_payload_struct => |payload| (@as(u64, @intFromEnum(ProjectionKind.tag_payload_struct)) << projection_kind_shift) |
+        .tag_payload_struct => |payload| (@as(u64, @backingInt(ProjectionKind.tag_payload_struct)) << projection_kind_shift) |
             @as(u64, payload.variant_index),
         .local, .discriminant, .list_reinterpret, .nominal => null,
     };
 }
 
 fn projectionKind(projection: u64) ProjectionKind {
-    return @enumFromInt(@as(u2, @intCast(projection >> projection_kind_shift)));
+    return @fromBackingInt(@intCast(@as(u2, @intCast(projection >> projection_kind_shift))));
 }
 
 fn projectionField(projection: u64) u16 {
@@ -259,7 +259,7 @@ pub const Dismantles = struct {
     }
 
     pub fn ownedOnlyParamBenefits(self: *const Dismantles, proc: LIR.LirProcSpecId) arc_sig.ParamMask {
-        const index = @intFromEnum(proc);
+        const index = @backingInt(proc);
         if (index >= self.owned_only_param_benefits.len) {
             dismantleInvariant("ARC owned-only benefit lookup exceeded the analyzed source-procedure table");
         }
@@ -267,16 +267,16 @@ pub const Dismantles = struct {
     }
 
     pub fn ownedOnlyBindingRoot(self: *const Dismantles, local: LIR.LocalId) ?LIR.LocalId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (index >= self.owned_only_binding_roots.len) {
             dismantleInvariant("ARC owned-only binding lookup exceeded the analyzed local table");
         }
         const root = self.owned_only_binding_roots[index];
-        return if (root == no_index) null else @enumFromInt(root);
+        return if (root == no_index) null else @fromBackingInt(@intCast(root));
     }
 
     pub fn isTakeBinding(self: *const Dismantles, local: LIR.LocalId) bool {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (index >= self.take_bindings.len) {
             dismantleInvariant("ARC take-binding lookup exceeded the analyzed local table");
         }
@@ -298,7 +298,7 @@ pub const Dismantles = struct {
 };
 
 fn dismantleInvariant(comptime message: []const u8) noreturn {
-    if (@import("builtin").mode == .Debug) std.debug.panic(message, .{});
+    if (@import("builtin").mode == .debug) std.debug.panic(message, .{});
     unreachable;
 }
 
@@ -318,7 +318,7 @@ const Read = struct {
 };
 
 const Candidate = struct {
-    def_stmt: LIR.CFStmtId = @enumFromInt(no_index),
+    def_stmt: LIR.CFStmtId = @fromBackingInt(@intCast(no_index)),
     def_count: u32 = 0,
     disqualified: bool = false,
     reads: std.ArrayList(Read) = .empty,
@@ -366,7 +366,7 @@ const Analysis = struct {
     }
 
     fn demandOwned(self: *Analysis, local: LIR.LocalId) void {
-        self.owned_demand[@intFromEnum(local)] = true;
+        self.owned_demand[@backingInt(local)] = true;
     }
 
     fn noteDemandAlias(self: *Analysis, source: LIR.LocalId, target: LIR.LocalId) Error!void {
@@ -378,8 +378,8 @@ const Analysis = struct {
         while (changed) {
             changed = false;
             for (self.demand_aliases.items) |edge| {
-                if (!self.owned_demand[@intFromEnum(edge.target)]) continue;
-                const source = &self.owned_demand[@intFromEnum(edge.source)];
+                if (!self.owned_demand[@backingInt(edge.target)]) continue;
+                const source = &self.owned_demand[@backingInt(edge.source)];
                 if (source.*) continue;
                 source.* = true;
                 changed = true;
@@ -391,7 +391,7 @@ const Analysis = struct {
     /// dismantling. Cheap, no allocation; the full per-candidate work only
     /// happens for locals that pass.
     fn passesGate(self: *Analysis, local: LIR.LocalId) bool {
-        const local_index = @intFromEnum(local);
+        const local_index = @backingInt(local);
         if (local_index >= self.rc_local.len) dismantleInvariant("ARC dismantle resource table did not cover local");
         if (!self.rc_local[local_index]) return false;
         const local_layout = self.layouts.getLayout(self.store.getLocal(local).layout_idx);
@@ -413,7 +413,7 @@ const Analysis = struct {
     }
 
     fn entryOf(self: *Analysis, local: LIR.LocalId) Error!?*Candidate {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         switch (self.state[index]) {
             .ineligible, .transparent_alias => return null,
             .candidate => return self.candidates.getPtr(index).?,
@@ -432,16 +432,16 @@ const Analysis = struct {
 
     /// The container a source local stands for: itself, or its alias root.
     fn resolveRoot(self: *Analysis, local: LIR.LocalId) LIR.LocalId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.state[index] == .transparent_alias) {
-            return @enumFromInt(self.alias_root[index]);
+            return @fromBackingInt(@intCast(self.alias_root[index]));
         }
         return local;
     }
 
     fn disqualify(self: *Analysis, local: LIR.LocalId) void {
         const root = self.resolveRoot(local);
-        const index = @intFromEnum(root);
+        const index = @backingInt(root);
         if (self.state[index] == .candidate) {
             if (self.candidates.getPtr(index)) |candidate| candidate.disqualified = true;
         }
@@ -466,7 +466,7 @@ const Analysis = struct {
     /// A definition of `local` by `stmt`. Candidates must be bound exactly
     /// once by a value-producing assignment.
     fn noteDef(self: *Analysis, local: LIR.LocalId, stmt: LIR.CFStmtId) Error!void {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.state[index] == .transparent_alias) {
             // A second definition of an alias re-points it; the root can no
             // longer attribute its reads.
@@ -494,7 +494,7 @@ const Analysis = struct {
     }
 
     fn noteAliasDef(self: *Analysis, stmt: LIR.CFStmtId, target: LIR.LocalId, source: LIR.LocalId) Error!void {
-        const target_index = @intFromEnum(target);
+        const target_index = @backingInt(target);
         if (self.state[target_index] == .transparent_alias) {
             // Redefinition of an existing alias: neither its old nor its new
             // root can attribute reads through it.
@@ -513,7 +513,7 @@ const Analysis = struct {
                 if (self.candidates.getPtr(target_index)) |candidate| candidate.disqualified = true;
             }
             self.state[target_index] = .transparent_alias;
-            self.alias_root[target_index] = @intFromEnum(root);
+            self.alias_root[target_index] = @backingInt(root);
         } else {
             // An owned same-value binding is a path-local whole use. It can
             // move an intact container on this edge, while takes on mutually
@@ -692,12 +692,12 @@ pub fn compute(
     defer gpa.free(direct_call_position_by_arg);
     @memset(direct_call_position_by_arg, std.math.maxInt(u8));
     for (0..store.procSpecCount()) |proc_index| {
-        const proc = store.getProcSpec(@enumFromInt(@as(u32, @intCast(proc_index))));
+        const proc = store.getProcSpec(@fromBackingInt(@intCast(@as(u32, @intCast(proc_index)))));
         const body = proc.body orelse continue;
         const params = store.getLocalSpan(proc.args);
         for (0..GuardedList.borrowLen(params)) |position| {
             const param = GuardedList.at(params, position);
-            is_param[@intFromEnum(param)] = true;
+            is_param[@backingInt(param)] = true;
             const slot = try param_bodies.getOrPut(gpa, param);
             if (slot.found_existing) {
                 slot.value_ptr.* = null;
@@ -732,12 +732,12 @@ pub fn compute(
     var stack = std.ArrayList(LIR.CFStmtId).empty;
     defer stack.deinit(gpa);
     for (0..store.procSpecCount()) |proc_index| {
-        const proc = store.getProcSpec(@enumFromInt(@as(u32, @intCast(proc_index))));
+        const proc = store.getProcSpec(@fromBackingInt(@intCast(@as(u32, @intCast(proc_index)))));
         if (proc.body) |body| try stack.append(gpa, body);
     }
 
     while (stack.pop()) |current| {
-        const stmt_index = @intFromEnum(current);
+        const stmt_index = @backingInt(current);
         if (visited.isSet(stmt_index)) continue;
         visited.set(stmt_index);
         const current_stmt = store.getCFStmt(current);
@@ -794,8 +794,8 @@ pub fn compute(
                 for (0..GuardedList.borrowLen(args)) |i| {
                     const arg = GuardedList.at(args, i);
                     if (i < arc_sig.tracked_param_count) {
-                        direct_call_stmt_by_arg[@intFromEnum(arg)] = @intFromEnum(current);
-                        direct_call_position_by_arg[@intFromEnum(arg)] = @intCast(i);
+                        direct_call_stmt_by_arg[@backingInt(arg)] = @backingInt(current);
+                        direct_call_position_by_arg[@backingInt(arg)] = @intCast(i);
                     }
                     try analysis.useWholeAt(arg, current);
                     if (callee_sig.paramMode(i) == .owned) analysis.demandOwned(arg);
@@ -1072,7 +1072,7 @@ pub fn compute(
 
     var it = analysis.candidates.iterator();
     candidates: while (it.next()) |entry| {
-        const local: LIR.LocalId = @enumFromInt(entry.key_ptr.*);
+        const local: LIR.LocalId = @fromBackingInt(@intCast(entry.key_ptr.*));
         const candidate = entry.value_ptr;
         if (candidate.disqualified) continue;
         if (candidate.reads.items.len == 0) continue;
@@ -1160,7 +1160,7 @@ pub fn compute(
         for (candidate.reads.items) |read| {
             const bit = @as(u64, 1) << @intCast(read.field_idx);
             if (rc_mask & bit == 0) continue;
-            const consuming = !solution.isBorrowed(read.target) or analysis.owned_demand[@intFromEnum(read.target)];
+            const consuming = !solution.isBorrowed(read.target) or analysis.owned_demand[@backingInt(read.target)];
             try read_kinds.put(gpa, read.stmt, .{
                 .bit = bit,
                 .consuming = consuming,
@@ -1172,11 +1172,11 @@ pub fn compute(
             // result is refined by the explicit alias/discriminant/switch
             // continuation. This is a total syntactic/metadata boundary:
             // unsupported continuations simply keep the ordinary schedule.
-            if (!consuming or operand_read_counts[@intFromEnum(read.target)] != 1) continue;
-            const call_stmt_index = direct_call_stmt_by_arg[@intFromEnum(read.target)];
-            const position = direct_call_position_by_arg[@intFromEnum(read.target)];
+            if (!consuming or operand_read_counts[@backingInt(read.target)] != 1) continue;
+            const call_stmt_index = direct_call_stmt_by_arg[@backingInt(read.target)];
+            const position = direct_call_position_by_arg[@backingInt(read.target)];
             if (call_stmt_index == no_index or position == std.math.maxInt(u8)) continue;
-            const call_stmt_id: LIR.CFStmtId = @enumFromInt(call_stmt_index);
+            const call_stmt_id: LIR.CFStmtId = @fromBackingInt(@intCast(call_stmt_index));
             const call_stmt = store.getCFStmt(call_stmt_id);
             if (call_stmt != .assign_call) continue;
             const args = store.getLocalSpan(call_stmt.assign_call.args);
@@ -1214,7 +1214,7 @@ pub fn compute(
 
         var candidate_mask: u64 = 0;
         for (candidate.reads.items) |read| {
-            if (!solution.isBorrowed(read.target) or analysis.owned_demand[@intFromEnum(read.target)]) {
+            if (!solution.isBorrowed(read.target) or analysis.owned_demand[@backingInt(read.target)]) {
                 candidate_mask |= @as(u64, 1) << @intCast(read.field_idx);
             }
         }
@@ -1256,7 +1256,7 @@ pub fn compute(
                 switch (store.getCFStmt(cursor)) {
                     inline .init_uninitialized, .assign_ref, .assign_literal, .assign_call, .assign_call_erased, .assign_packed_erased_fn, .assign_boxy_desc_ref, .assign_boxy_dict_ref, .assign_boxy_box, .assign_boxy_reuse_box, .assign_boxy_unbox, .assign_boxy_adapt, .assign_boxy_inspect, .assign_boxy_eq, .assign_boxy_tag, .assign_boxy_tag_payload, .assign_call_dict, .assign_low_level, .assign_list, .assign_struct, .assign_tag, .store_struct, .store_tag, .set_local, .debug, .expect, .comptime_branch_taken, .incref, .decref, .decref_if_initialized, .free => |stmt| cursor = stmt.next,
                     .join => |stmt| {
-                        try join_bodies.put(gpa, @intFromEnum(stmt.id), stmt.body);
+                        try join_bodies.put(gpa, @backingInt(stmt.id), stmt.body);
                         cursor = stmt.remainder;
                     },
                     .switch_stmt => |stmt| {
@@ -1282,7 +1282,7 @@ pub fn compute(
                         // enclosing early exit—so it ends this path like a
                         // return would. Reads living past it are never
                         // visited, which keeps their fields residual.
-                        const body = join_bodies.get(@intFromEnum(stmt.target)) orelse {
+                        const body = join_bodies.get(@backingInt(stmt.target)) orelse {
                             // A back edge can execute this region again with
                             // its taken fields absent. The current closed
                             // analysis rejects those takes; ordinary retains
@@ -1356,19 +1356,19 @@ pub fn compute(
         for (candidate.reads.items) |read| {
             const bit = @as(u64, 1) << @intCast(read.field_idx);
             if (taken_mask & bit == 0) continue;
-            if (solution.isBorrowed(read.target) and !analysis.owned_demand[@intFromEnum(read.target)]) continue;
+            if (solution.isBorrowed(read.target) and !analysis.owned_demand[@backingInt(read.target)]) continue;
             const take = Take{ .root = local, .field_mask = bit };
             if (owned_only) {
                 try result.owned_only_takes.put(gpa, read.stmt, take);
-                const target_index = @intFromEnum(read.target);
+                const target_index = @backingInt(read.target);
                 const prior = result.owned_only_binding_roots[target_index];
-                if (prior != no_index and prior != @intFromEnum(local)) {
+                if (prior != no_index and prior != @backingInt(local)) {
                     dismantleInvariant("ARC owned-only field binding had conflicting parameter roots");
                 }
-                result.owned_only_binding_roots[target_index] = @intFromEnum(local);
+                result.owned_only_binding_roots[target_index] = @backingInt(local);
             } else {
                 try result.takes.put(gpa, read.stmt, take);
-                result.take_bindings[@intFromEnum(read.target)] = true;
+                result.take_bindings[@backingInt(read.target)] = true;
             }
         }
         for (field_restitutions.items) |receipt| {
@@ -1400,7 +1400,7 @@ pub fn compute(
     // Variant admission consumes the exact owned-only benefit without
     // rescanning bodies or reconstructing parameter identity from statements.
     for (0..store.procSpecCount()) |proc_index| {
-        const proc_id: LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(proc_index)));
+        const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(proc_index))));
         const params = store.getLocalSpan(store.getProcSpec(proc_id).args);
         for (0..GuardedList.borrowLen(params)) |position| {
             const bit = arc_sig.paramBit(position) orelse break;
@@ -1422,11 +1422,11 @@ pub fn compute(
     defer param_info.deinit(gpa);
 
     for (0..store.procSpecCount()) |proc_index| {
-        const proc_id: LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(proc_index)));
+        const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(proc_index))));
         const params = store.getLocalSpan(store.getProcSpec(proc_id).args);
         for (0..GuardedList.borrowLen(params)) |position| {
             const param = GuardedList.at(params, position);
-            const param_index = @intFromEnum(param);
+            const param_index = @backingInt(param);
             if (position >= arc_sig.tracked_param_count) continue;
             const param_slot = try param_info.getOrPut(gpa, param_index);
             if (param_slot.found_existing) {
@@ -1457,7 +1457,7 @@ pub fn compute(
     defer place_heads.deinit(gpa);
     for (0..store.cfStmtCount()) |stmt_index| {
         if (!visited.isSet(stmt_index)) continue;
-        const stmt = store.getCFStmt(@enumFromInt(@as(u32, @intCast(stmt_index))));
+        const stmt = store.getCFStmt(@fromBackingInt(@intCast(@as(u32, @intCast(stmt_index)))));
         if (stmt != .assign_ref) continue;
         const assign = stmt.assign_ref;
         const source: LIR.LocalId, const kind: PlaceEdgeKind = switch (assign.op) {
@@ -1483,11 +1483,11 @@ pub fn compute(
             },
             .discriminant, .list_reinterpret, .nominal => continue,
         };
-        const source_index = @intFromEnum(source);
+        const source_index = @backingInt(source);
         const previous_head = place_heads.get(source_index) orelse no_index;
         try place_edges.append(gpa, .{
             .source = source_index,
-            .target = @intFromEnum(assign.target),
+            .target = @backingInt(assign.target),
             .kind = kind,
             .next = previous_head,
         });
@@ -1506,9 +1506,9 @@ pub fn compute(
     // complete-projection edge.
     var source_it = place_heads.keyIterator();
     while (source_it.next()) |source_ptr| {
-        const source: LIR.LocalId = @enumFromInt(source_ptr.*);
+        const source: LIR.LocalId = @fromBackingInt(@intCast(source_ptr.*));
         const root = solution.unitLocalOf(source);
-        const root_index = @intFromEnum(root);
+        const root_index = @backingInt(root);
         const root_can_own = !solution.isBorrowed(root) or
             is_param[root_index] or
             solution.isJoinParam(root);
@@ -1524,7 +1524,7 @@ pub fn compute(
         while (edge_index != no_index) {
             const edge = place_edges.items[edge_index];
             const projected = source_origin.projected or edge.kind == .projection;
-            const target: LIR.LocalId = @enumFromInt(edge.target);
+            const target: LIR.LocalId = @fromBackingInt(@intCast(edge.target));
             // A join parameter is a cell with one definition per incoming
             // edge, not an SSA value. Its edge-specific transfer is handled
             // by join solving; one global place origin would incorrectly
@@ -1560,20 +1560,20 @@ pub fn compute(
     while (places_it.next()) |entry| {
         const origin = entry.value_ptr.*;
         if (origin.root == ambiguous_index or !origin.projected) continue;
-        const local: LIR.LocalId = @enumFromInt(entry.key_ptr.*);
+        const local: LIR.LocalId = @fromBackingInt(@intCast(entry.key_ptr.*));
         if (!solution.isBorrowed(local) or solution.isJoinParam(local)) continue;
-        try result.projection_units.put(gpa, local, @enumFromInt(origin.root));
+        try result.projection_units.put(gpa, local, @fromBackingInt(@intCast(origin.root)));
     }
     for (place_edges.items) |edge| {
         if (edge.kind != .projection) continue;
-        const target: LIR.LocalId = @enumFromInt(edge.target);
+        const target: LIR.LocalId = @fromBackingInt(@intCast(edge.target));
         // Unlike a borrowed place origin, this move is attached to one exact
         // incoming read. An owned join cell can therefore receive the unit on
         // this edge without conflating its other definitions.
         if (solution.isBorrowed(target)) continue;
         const origin = places.get(edge.source) orelse continue;
         if (origin.root == ambiguous_index) continue;
-        try result.complete_takes.put(gpa, @enumFromInt(edge.kind.projection), @enumFromInt(origin.root));
+        try result.complete_takes.put(gpa, @fromBackingInt(@intCast(edge.kind.projection)), @fromBackingInt(@intCast(origin.root)));
 
         // A complete projection can move its root's exact unit in an owned
         // parameter emission. Publish that mechanical capability to variant
@@ -1582,7 +1582,7 @@ pub fn compute(
         // particular read (including outcome-conditioned restitution).
         const source_info = param_info.get(origin.root) orelse continue;
         if (source_info.proc == ambiguous_index) continue;
-        const source_proc: LIR.LirProcSpecId = @enumFromInt(source_info.proc);
+        const source_proc: LIR.LirProcSpecId = @fromBackingInt(@intCast(source_info.proc));
         if (solution.isPinnedProc(source_proc)) continue;
         result.owned_only_param_benefits[source_info.proc] |= arc_sig.paramBit(source_info.position).?;
     }
@@ -1601,22 +1601,22 @@ pub fn compute(
     defer benefit_heads.deinit(gpa);
     for (0..store.cfStmtCount()) |stmt_index| {
         if (!visited.isSet(stmt_index)) continue;
-        const stmt = store.getCFStmt(@enumFromInt(@as(u32, @intCast(stmt_index))));
+        const stmt = store.getCFStmt(@fromBackingInt(@intCast(@as(u32, @intCast(stmt_index)))));
         if (stmt != .assign_call) continue;
         const call = stmt.assign_call;
         const args = store.getLocalSpan(call.args);
         for (0..GuardedList.borrowLen(args)) |position| {
             if (position >= arc_sig.tracked_param_count) continue;
             const arg = GuardedList.at(args, position);
-            const arg_index = @intFromEnum(arg);
+            const arg_index = @backingInt(arg);
             const place_origin = places.get(arg_index);
-            const root_index: u32 = if (place_origin) |origin| origin.root else @intFromEnum(solution.unitLocalOf(arg));
+            const root_index: u32 = if (place_origin) |origin| origin.root else @backingInt(solution.unitLocalOf(arg));
             if (root_index == no_index or root_index == ambiguous_index) continue;
             const source_info = param_info.get(root_index) orelse continue;
             if (source_info.proc == ambiguous_index) continue;
-            const source_proc: LIR.LirProcSpecId = @enumFromInt(source_info.proc);
+            const source_proc: LIR.LirProcSpecId = @fromBackingInt(@intCast(source_info.proc));
             if (solution.isPinnedProc(source_proc)) continue;
-            const target_key: u32 = @intCast(@intFromEnum(call.proc) * arc_sig.tracked_param_count + position);
+            const target_key: u32 = @intCast(@backingInt(call.proc) * arc_sig.tracked_param_count + position);
             const previous_head = benefit_heads.get(target_key) orelse no_index;
             try benefit_edges.append(gpa, .{
                 .source_key = @intCast(source_info.proc * arc_sig.tracked_param_count + source_info.position),

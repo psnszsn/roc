@@ -30,11 +30,11 @@ test "check - repro - issue 10365 - erroneous captured lambda poisons closure ow
 
     var raw_node_idx: u32 = 0;
     while (raw_node_idx < test_env.checker.cir.store.nodes.len()) : (raw_node_idx += 1) {
-        const node_idx: CIR.Node.Idx = @enumFromInt(raw_node_idx);
+        const node_idx: CIR.Node.Idx = @fromBackingInt(@intCast(raw_node_idx));
         const node = test_env.checker.cir.store.nodes.get(node_idx);
         if (!std.mem.startsWith(u8, @tagName(node.tag), "expr_")) continue;
 
-        const expr_idx: CIR.Expr.Idx = @enumFromInt(raw_node_idx);
+        const expr_idx: CIR.Expr.Idx = @fromBackingInt(@intCast(raw_node_idx));
         const expr = test_env.checker.cir.store.getExpr(expr_idx);
         if (expr == .e_closure) {
             try std.testing.expect(test_env.checker.cir.store.getExpr(expr.e_closure.lambda_idx) == .e_lambda);

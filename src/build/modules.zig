@@ -142,7 +142,11 @@ fn createCompilerPlatformSourcesModule(b: *Build) *Module {
 // wrappers they inevitably execute even when Zig test filters are set.
 fn wrapperTestCount(b: *Build, module_type: ModuleType, module: *Module) usize {
     const lazy_path = module.root_source_file orelse return 0;
-    const root_file_path = lazy_path.getPath(b);
+    const source_path = lazy_path.src_path;
+    const root_file_path = source_path.owner.root.joinString(
+        b.allocator,
+        source_path.sub_path,
+    ) catch @panic("OOM while resolving module test source path");
     const aggregator_names = aggregatorFilters(module_type);
     const has_aggregators = aggregator_names.len != 0;
 
@@ -203,7 +207,7 @@ fn scanFileForWrappers(
         return 0;
     };
 
-    var tree = std.zig.Ast.parse(allocator, source, .zig) catch |err| {
+    var tree = std.zig.Ast.parse(allocator, source, .{ .mode = .zig }) catch |err| {
         std.log.warn(
             "Failed to parse {s} while counting unnamed tests: {s}",
             .{ path, @errorName(err) },
@@ -468,6 +472,17 @@ pub const ModuleType = enum {
     }
 };
 
+fn createZstdBindings(b: *Build, zstd: *Dependency) *Module {
+    const library = zstd.artifact("zstd");
+    const translate = b.addTranslateC(.{
+        .root_source_file = b.path("src/bundle/zstd_import.h"),
+        .target = library.root_module.resolved_target.?,
+        .optimize = library.root_module.optimize.?,
+    });
+    translate.addIncludePath(library.getEmittedIncludeTree());
+    return translate.createModule();
+}
+
 /// Manages all Roc compiler modules and their dependencies
 pub const RocModules = struct {
     collections: *Module,
@@ -491,6 +506,7 @@ pub const RocModules = struct {
     fmt: *Module,
     watch: *Module,
     bundle: *Module,
+    zstd_c: ?*Module,
     unbundle: *Module,
     base58: *Module,
     lsp: *Module,
@@ -549,6 +565,7 @@ pub const RocModules = struct {
     vendor_llvm_compile_bindings: *Module,
 
     pub fn create(b: *Build, build_options_step: *Step.Options, zstd: ?*Dependency) RocModules {
+        const zstd_c = if (zstd) |dependency| createZstdBindings(b, dependency) else null;
         const self = RocModules{
             .collections = b.addModule(
                 "collections",
@@ -577,6 +594,7 @@ pub const RocModules = struct {
             .fmt = b.addModule("fmt", .{ .root_source_file = b.path("src/fmt/mod.zig") }),
             .watch = b.addModule("watch", .{ .root_source_file = b.path("src/watch/watch.zig") }),
             .bundle = b.addModule("bundle", .{ .root_source_file = b.path("src/bundle/mod.zig") }),
+            .zstd_c = zstd_c,
             .unbundle = b.addModule("unbundle", .{ .root_source_file = b.path("src/unbundle/mod.zig") }),
             .base58 = b.addModule("base58", .{ .root_source_file = b.path("src/base58/mod.zig") }),
             .lsp = b.addModule("lsp", .{ .root_source_file = b.path("src/lsp/mod.zig") }),
@@ -613,6 +631,7 @@ pub const RocModules = struct {
         // Note: unbundle uses Zig's stdlib zstd for WASM compatibility
         if (zstd) |z| {
             self.bundle.linkLibrary(z.artifact("zstd"));
+            self.bundle.addImport("zstd_c", zstd_c.?);
         }
 
         // The interpreter's hosted-call trampoline is hand-written assembly (see
@@ -963,6 +982,7 @@ pub const RocModules = struct {
             if (module_type == .bundle) {
                 if (zstd) |z| {
                     test_step.root_module.linkLibrary(z.artifact("zstd"));
+                    test_step.root_module.addImport("zstd_c", self.zstd_c.?);
                 }
             }
 

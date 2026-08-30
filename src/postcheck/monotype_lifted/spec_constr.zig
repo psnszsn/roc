@@ -276,7 +276,7 @@ pub const ProcedureUsage = struct {
     items: []const ProcedureUse = &.{},
 
     pub fn get(self: ProcedureUsage, fn_id: Ast.FnId) ProcedureUse {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         if (index >= self.items.len) {
             Common.invariant("procedure-use inventory did not contain a lifted function");
         }
@@ -905,7 +905,7 @@ const Pass = struct {
     }
 
     fn freshJoinPoint(self: *Pass) Ast.JoinPointId {
-        const id: Ast.JoinPointId = @enumFromInt(self.next_join_point);
+        const id: Ast.JoinPointId = @fromBackingInt(@intCast(self.next_join_point));
         self.next_join_point += 1;
         return id;
     }
@@ -930,7 +930,7 @@ const Pass = struct {
             if (fn_.body != .hosted or fn_.args.len != 0) {
                 Common.invariant("SpecConstr analysis emitted a non-reservation function");
             }
-            next_symbol = @max(next_symbol, @intFromEnum(fn_.symbol) + 1);
+            next_symbol = @max(next_symbol, @backingInt(fn_.symbol) + 1);
         }
         self.symbols.next = next_symbol;
         self.next_join_point = mark.next_join_point;
@@ -990,7 +990,7 @@ const Pass = struct {
         defer program_usage.deinit(self.allocator);
 
         for (original_fn_count..fn_count) |worker_index| {
-            const worker_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(worker_index)));
+            const worker_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(worker_index))));
             const worker = self.program.getFn(worker_id);
             if (worker.body == .hosted) continue;
 
@@ -1381,7 +1381,7 @@ const Pass = struct {
                     .roc => |body| body,
                     .hosted => continue,
                 };
-                const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+                const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
                 try self.markArgUsesInExpr(fn_id, body, &changed);
             }
         }
@@ -1394,7 +1394,7 @@ const Pass = struct {
                 .roc => |body| body,
                 .hosted => continue,
             };
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             try self.collectCallPatternsInExpr(fn_id, body);
         }
     }
@@ -1412,7 +1412,7 @@ const Pass = struct {
                 .roc => |body| body,
                 .hosted => continue,
             };
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             var cloner = Cloner.initForRewrite(self);
             cloner.rewrite_call_patterns = false;
             cloner.emit_callable_workers = false;
@@ -1453,7 +1453,7 @@ const Pass = struct {
         while (wrote_spec) {
             wrote_spec = false;
             for (0..original_fn_count) |index| {
-                const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+                const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
                 var spec_index: usize = 0;
                 while (spec_index < self.plans[index].specs.items.len) : (spec_index += 1) {
                     if (self.plans[index].specs.items[spec_index].written) continue;
@@ -1533,7 +1533,7 @@ const Pass = struct {
                 const captures = self.program.captureOperandSpan(call.captures);
                 for (0..captures.len) |index| try self.markArgUsesInExpr(fn_id, GuardedList.at(captures, index).value, changed);
                 const callee = Ast.localDirectCallee(call) orelse return;
-                const callee_raw = @intFromEnum(callee);
+                const callee_raw = @backingInt(callee);
                 if (callee_raw < self.plans.len) {
                     const callee_uses = self.plans[callee_raw].used_args;
                     if (args.len != callee_uses.len) Common.invariant("direct call arity differed from lifted function arity while propagating argument uses");
@@ -1654,7 +1654,7 @@ const Pass = struct {
         for (0..args.len) |index| {
             const arg = GuardedList.at(args, index);
             if (arg.local == local) {
-                const used = &self.plans[@intFromEnum(fn_id)].used_args[index];
+                const used = &self.plans[@backingInt(fn_id)].used_args[index];
                 if (!used.*) {
                     used.* = true;
                     changed.* = true;
@@ -1715,7 +1715,7 @@ const Pass = struct {
                 try self.collectCallPatternsInExprSpan(owner, call.args);
                 try self.collectCallPatternsInCaptureOperandSpan(owner, call.captures);
                 const callee = Ast.localDirectCallee(call) orelse return;
-                if (@intFromEnum(callee) < self.plans.len) try self.recordCallPattern(callee, call.args);
+                if (@backingInt(callee) < self.plans.len) try self.recordCallPattern(callee, call.args);
             },
             .low_level => |call| {
                 try self.collectCallPatternsInExprSpan(owner, call.args);
@@ -1844,7 +1844,7 @@ const Pass = struct {
     };
 
     fn sourceBody(self: *const Pass, fn_id: Ast.FnId) Ast.FnBody {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         return if (raw < self.plans.len) self.plans[raw].source.body else self.program.getFn(fn_id).body;
     }
 
@@ -1852,7 +1852,7 @@ const Pass = struct {
     /// these inseparable prevents a mutable output body from being admitted
     /// against an original source body's smaller size.
     fn inlineSourceBody(self: *const Pass, fn_id: Ast.FnId) ?InlineSourceBody {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         const body = switch (self.sourceBody(fn_id)) {
             .roc => |body| body,
             .hosted => return null,
@@ -1865,7 +1865,7 @@ const Pass = struct {
     }
 
     fn recordCallPattern(self: *Pass, fn_id: Ast.FnId, args_span: Ast.Span(Ast.ExprId)) Allocator.Error!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (self.newSpecAdmission(raw) != .admitted) return;
         const args = try GuardedList.dupe(self.allocator, Ast.ExprId, self.program.exprSpan(args_span));
         defer self.allocator.free(args);
@@ -1899,7 +1899,7 @@ const Pass = struct {
     }
 
     fn recordCallPatternForValues(self: *Pass, fn_id: Ast.FnId, values: []const Value) Common.LowerError!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.plans.len) return;
         if (self.newSpecAdmission(raw) != .admitted) return;
 
@@ -1914,7 +1914,7 @@ const Pass = struct {
     }
 
     fn ensureCallPatternForValues(self: *Pass, fn_id: Ast.FnId, values: []const Value) Common.LowerError!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.plans.len) return;
         if (!self.plans[raw].source.size.admits()) return;
 
@@ -1943,7 +1943,7 @@ const Pass = struct {
     }
 
     fn callPatternForValues(self: *Pass, fn_id: Ast.FnId, values: []const Value) Common.LowerError!?CallPattern {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.plans.len) return null;
 
         const fn_args = self.program.typedLocalSpan(self.program.getFnAt(raw).args);
@@ -1970,7 +1970,7 @@ const Pass = struct {
 
     fn writeSpecialization(self: *Pass, source_fn_id: Ast.FnId, spec_index: usize) Common.LowerError!void {
         const source_fn = self.program.getFn(source_fn_id);
-        const spec = &self.plans[@intFromEnum(source_fn_id)].specs.items[spec_index];
+        const spec = &self.plans[@backingInt(source_fn_id)].specs.items[spec_index];
 
         const spec_fn_id = spec.fn_id orelse Common.invariant("call-pattern specialization id was not assigned before cloning");
         const symbol = self.program.getFn(spec_fn_id).symbol;
@@ -2026,7 +2026,7 @@ const Pass = struct {
     /// exposed, so pass routing never depends on whole-body shape scans.
     fn rewriteAllOriginalBodies(self: *Pass, original_fn_count: usize) Common.LowerError!void {
         for (0..original_fn_count) |index| {
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             try self.cloneFnBodyInPlace(fn_id);
         }
     }
@@ -2916,7 +2916,7 @@ const Pass = struct {
     /// procedure identity.
     fn callIsSuffixAppend(self: *Pass, call: DirectCall) bool {
         if (call.iterator_procedure != .iter_append) return false;
-        const raw = @intFromEnum(call.fn_id);
+        const raw = @backingInt(call.fn_id);
         if (raw >= self.program.fnCount()) return false;
         return self.program.typedLocalSpan(self.program.getFnAt(raw).args).len == 2;
     }
@@ -3714,7 +3714,7 @@ const Pass = struct {
     /// rewrites consume the resulting values, and loop fixed points scalarize
     /// known carried structure without a body-category routing decision.
     fn cloneFnBodyInPlace(self: *Pass, fn_id: Ast.FnId) Common.LowerError!void {
-        const fn_index = @intFromEnum(fn_id);
+        const fn_index = @backingInt(fn_id);
         if (fn_index < self.whole_body_cloned.len and self.whole_body_cloned[fn_index]) return;
 
         const fn_ = self.program.getFn(fn_id);
@@ -3755,7 +3755,7 @@ const Pass = struct {
     fn projectUnusedLoopResults(self: *Pass) Common.LowerError!void {
         const fn_count = self.program.fnCount();
         for (0..fn_count) |index| {
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const fn_ = self.program.getFn(fn_id);
             const body = switch (fn_.body) {
                 .roc => |body| body,
@@ -3784,7 +3784,7 @@ const Pass = struct {
     /// initial carried state. A nested loop is left to the clone of its
     /// enclosing loop, and a plain scalar counting loop does not qualify.
     fn rewriteCallsInExpr(self: *Pass, expr_id: Ast.ExprId, done: []bool) Allocator.Error!void {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (done[index]) return;
         done[index] = true;
 
@@ -3954,7 +3954,7 @@ const Pass = struct {
 
     fn rewriteCallProc(self: *Pass, expr_id: Ast.ExprId, call: @import("../monotype/ast.zig").CallProc) Allocator.Error!void {
         const callee = Ast.localDirectCallee(call) orelse return;
-        const raw = @intFromEnum(callee);
+        const raw = @backingInt(callee);
         if (raw >= self.plans.len) return;
         if (self.plans[raw].specs.items.len == 0) return;
 
@@ -4845,7 +4845,7 @@ const Cloner = struct {
                 try self.collectCallPatternsInCaptureOperandSpan(owner, call.captures);
 
                 const callee = Ast.localDirectCallee(call) orelse return;
-                const callee_raw = @intFromEnum(callee);
+                const callee_raw = @backingInt(callee);
                 if (callee_raw >= self.pass.plans.len) return;
                 if (self.pass.newSpecAdmission(callee_raw) != .admitted) return;
 
@@ -7775,7 +7775,7 @@ const Cloner = struct {
             .captures = try self.cloneCaptureOperandSpan(call.captures),
             .is_cold = call.is_cold,
         } } });
-        const raw = @intFromEnum(callee);
+        const raw = @backingInt(callee);
         if (self.rewrite_call_patterns and raw < self.pass.plans.len) {
             const source_args = self.pass.program.exprSpan(call.args);
             const args = try GuardedList.dupe(self.pass.allocator, Ast.ExprId, source_args);
@@ -9192,7 +9192,7 @@ const Cloner = struct {
 
         const arg_values = try self.pass.allocator.alloc(Value, args.len);
         defer self.pass.allocator.free(arg_values);
-        const callee_raw = @intFromEnum(callable.fn_id);
+        const callee_raw = @backingInt(callable.fn_id);
         for (args, 0..) |arg_expr, index| {
             const demand_arg_shape = result_shape_demanded and
                 callee_raw < self.pass.plans.len and
@@ -9291,8 +9291,8 @@ const Cloner = struct {
         defer self.pass.allocator.free(arg_values);
         for (args, 0..) |arg_expr, index| {
             const demand_arg_shape = result_shape_demanded and
-                @intFromEnum(callee) < self.pass.plans.len and
-                self.pass.plans[@intFromEnum(callee)].used_args[index];
+                @backingInt(callee) < self.pass.plans.len and
+                self.pass.plans[@backingInt(callee)].used_args[index];
             arg_values[index] = try self.cloneInlineValueBoundingCycles(arg_expr, demand_arg_shape, bindings);
         }
 
@@ -10337,7 +10337,7 @@ const Cloner = struct {
             const id = self.pass.program.captureIdOfLocal(capture.local);
             const value = callableCaptureValueForId(values, id) orelse
                 Common.invariant("rewritten callable had no value for a source capture slot");
-            std.mem.writeInt(u32, &word, @intFromEnum(id), .little);
+            std.mem.writeInt(u32, &word, @backingInt(id), .little);
             hasher.update(&word);
             const digest = self.pass.program.types.typeDigestCached(&self.pass.program.names, valueType(self.pass.program, value), null);
             hasher.update(&digest.bytes);
@@ -10552,7 +10552,7 @@ const BodyLocalScope = struct {
         const func = self.program.getFnAt(self.fn_index);
         Common.invariantFmt(
             "rewritten fn {d} (symbol {d}) references local {d} (`{s}`) bound by no enclosing scope, argument, or capture",
-            .{ self.fn_index, @intFromEnum(func.symbol), @intFromEnum(local), self.program.localName(local) },
+            .{ self.fn_index, @backingInt(func.symbol), @backingInt(local), self.program.localName(local) },
         );
     }
 
@@ -10987,7 +10987,7 @@ const ProgramProcedureUsage = struct {
         @memset(fn_uses, .{});
 
         for (0..fn_count) |owner_index| {
-            const owner: Ast.FnId = @enumFromInt(@as(u32, @intCast(owner_index)));
+            const owner: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(owner_index))));
             const body = switch (program.getFnAt(owner_index).body) {
                 .roc => |body| body,
                 .hosted => continue,
@@ -10997,7 +10997,7 @@ const ProgramProcedureUsage = struct {
             collectAllFnUsesInExpr(program, body, owner, fn_uses);
         }
         for (program.rootsView()) |root| {
-            fn_uses[@intFromEnum(root.fn_id)].value_refs += 1;
+            fn_uses[@backingInt(root.fn_id)].value_refs += 1;
         }
         return .{
             .tail_self_calls = tail_self_calls,
@@ -11040,7 +11040,7 @@ fn collectAllFnUsesInExpr(
         .uninitialized_payload,
         => {},
         .fn_ref => |fn_ref| {
-            uses[@intFromEnum(fn_ref.fn_id)].value_refs += 1;
+            uses[@backingInt(fn_ref.fn_id)].value_refs += 1;
             collectAllFnUsesInCaptureOperands(program, fn_ref.captures, owner, uses);
         },
         .list,
@@ -11083,7 +11083,7 @@ fn collectAllFnUsesInExpr(
         .call_proc => |call| {
             if (Ast.localDirectCallee(call)) |callee| {
                 if (callee != owner) {
-                    const summary = &uses[@intFromEnum(callee)];
+                    const summary = &uses[@backingInt(callee)];
                     summary.external_calls += 1;
                     summary.external_call_expr = expr_id;
                     summary.external_call_owner = owner;
@@ -12643,8 +12643,8 @@ test "SpecConstr preserves record update ordering while exposing its final shape
         .{ .name = a, .ty = u8_ty, .default = null },
         .{ .name = b, .ty = u8_ty, .default = null },
     }) });
-    const base_local = try program.addLocal(@enumFromInt(1), record_ty);
-    const update_local = try program.addLocal(@enumFromInt(2), u8_ty);
+    const base_local = try program.addLocal(@fromBackingInt(@intCast(1)), record_ty);
+    const update_local = try program.addLocal(@fromBackingInt(@intCast(2)), u8_ty);
     const base = try program.addExpr(.{ .ty = record_ty, .data = .{ .local = base_local } });
     const update_value = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = update_local } });
     const update = try program.addExpr(.{ .ty = record_ty, .data = .{ .record_update = .{
@@ -12694,17 +12694,17 @@ test "SpecConstr accepts a transparent alias record update base" {
     const record_ty = try program.types.add(.{ .record = try program.types.addRecordFields(&program.names, &.{
         .{ .name = field, .ty = u8_ty, .default = null },
     }) });
-    const module_identity = try program.names.internModuleIdentity(&([_]u8{0xAB} ** 32));
+    const module_identity = try program.names.internModuleIdentity(&@as([32]u8, @splat(0xAB)));
     const type_name = try program.names.internTypeName("RecordAlias");
     const alias_ty = try program.types.add(.{ .named = .{
-        .named_type = .{ .module = .{}, .ty = @enumFromInt(1) },
+        .named_type = .{ .module = .{}, .ty = @fromBackingInt(@intCast(1)) },
         .def = .{ .module = module_identity, .type_name = type_name },
         .kind = .alias,
         .args = Type.Span.empty(),
         .backing = .{ .ty = record_ty, .use = .inspectable },
     } });
-    const base_local = try program.addLocal(@enumFromInt(1), record_ty);
-    const update_local = try program.addLocal(@enumFromInt(2), u8_ty);
+    const base_local = try program.addLocal(@fromBackingInt(@intCast(1)), record_ty);
+    const update_local = try program.addLocal(@fromBackingInt(@intCast(2)), u8_ty);
     const base = try program.addExpr(.{ .ty = record_ty, .data = .{ .local = base_local } });
     const update_value = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = update_local } });
     const update = try program.addExpr(.{ .ty = alias_ty, .data = .{ .record_update = .{
@@ -12727,7 +12727,7 @@ test "call-pattern scans direct call and function reference capture operands" {
     defer program.deinit();
 
     const unit_ty = try program.types.add(.zst);
-    const local = try program.addLocal(@enumFromInt(1), unit_ty);
+    const local = try program.addLocal(@fromBackingInt(@intCast(1)), unit_ty);
     const unit_expr = try program.addExpr(.{ .ty = unit_ty, .data = .unit });
     _ = try program.addExprSpan(&.{unit_expr});
     const local_expr = try program.addExpr(.{ .ty = unit_ty, .data = .{ .local = local } });
@@ -12773,8 +12773,8 @@ test "issue 10313 value-aware call-pattern collection does not append lifted IR"
 
     const unit_ty = try program.types.add(.zst);
     const tuple_ty = try program.types.add(.{ .tuple = try program.types.addSpan(&.{ unit_ty, unit_ty }) });
-    const arg_local = try program.addLocal(@enumFromInt(1), unit_ty);
-    const bound_local = try program.addLocal(@enumFromInt(2), tuple_ty);
+    const arg_local = try program.addLocal(@fromBackingInt(@intCast(1)), unit_ty);
+    const bound_local = try program.addLocal(@fromBackingInt(@intCast(2)), tuple_ty);
     const arg_ref = try program.addExpr(.{ .ty = unit_ty, .data = .{ .local = arg_local } });
     const unit_expr = try program.addExpr(.{ .ty = unit_ty, .data = .unit });
     const tuple_expr = try program.addExpr(.{
@@ -12788,7 +12788,7 @@ test "issue 10313 value-aware call-pattern collection does not append lifted IR"
         .rest = unit_expr,
     } } });
     _ = try program.addFn(.{
-        .symbol = @enumFromInt(3),
+        .symbol = @fromBackingInt(@intCast(3)),
         .args = try program.addTypedLocalSpan(&.{.{ .local = arg_local, .ty = unit_ty }}),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = body },
@@ -12839,14 +12839,14 @@ test "SpecConstr admission uses body size and worker count before cloning" {
     }
 
     _ = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = unit_expr },
         .ret = unit_ty,
     });
     const large_fn_id = try program.addFn(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = large_body },
@@ -12862,7 +12862,7 @@ test "SpecConstr admission uses body size and worker count before cloning" {
     }
     try std.testing.expectEqual(SpecAdmission.denied_spec_count, pass.newSpecAdmission(0));
     try std.testing.expectEqual(SpecAdmission.denied_body_size, pass.newSpecAdmission(1));
-    const large_inline_source = pass.inlineSourceBody(@enumFromInt(1)) orelse return error.TestUnexpectedResult;
+    const large_inline_source = pass.inlineSourceBody(@fromBackingInt(@intCast(1))) orelse return error.TestUnexpectedResult;
     try std.testing.expect(!large_inline_source.size.admits());
 
     const fn_ty = try program.types.add(.{ .func = .{
@@ -12903,7 +12903,7 @@ test "SpecConstr bounds cumulative inlining across small acyclic wrappers" {
     const unit_expr = try program.addExpr(.{ .ty = unit_ty, .data = .unit });
     var result_ty = unit_ty;
     var callee = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = unit_expr },
@@ -12931,7 +12931,7 @@ test "SpecConstr bounds cumulative inlining across small acyclic wrappers" {
             .data = .{ .tuple = try program.addExprSpan(&.{ first, second }) },
         });
         callee = try program.addFn(.{
-            .symbol = @enumFromInt(@as(u32, @intCast(depth + 2))),
+            .symbol = @fromBackingInt(@intCast(@as(u32, @intCast(depth + 2)))),
             .args = Ast.Span(Ast.TypedLocal).empty(),
             .captures = Ast.Span(Ast.TypedLocal).empty(),
             .body = .{ .roc = body },
@@ -12978,10 +12978,10 @@ test "issue 10760 SpecConstr bounds cloning of rewritten inline bodies" {
         .data = .{ .tuple = try program.addExprSpan(&.{ unit_expr, unit_expr }) },
     });
 
-    const leaf_arg = try program.addLocal(@enumFromInt(1), pair_ty);
+    const leaf_arg = try program.addLocal(@fromBackingInt(@intCast(1)), pair_ty);
     var result_ty = unit_ty;
     var callee = try program.addFn(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = try program.addTypedLocalSpan(&.{.{ .local = leaf_arg, .ty = pair_ty }}),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = unit_expr },
@@ -13009,11 +13009,11 @@ test "issue 10760 SpecConstr bounds cloning of rewritten inline bodies" {
             .data = .{ .tuple = try program.addExprSpan(&.{ first, second }) },
         });
         const arg = try program.addLocal(
-            @enumFromInt(@as(u32, @intCast(depth + 3))),
+            @fromBackingInt(@intCast(@as(u32, @intCast(depth + 3)))),
             pair_ty,
         );
         callee = try program.addFn(.{
-            .symbol = @enumFromInt(@as(u32, @intCast(depth + 12))),
+            .symbol = @fromBackingInt(@intCast(@as(u32, @intCast(depth + 12)))),
             .args = try program.addTypedLocalSpan(&.{.{ .local = arg, .ty = pair_ty }}),
             .captures = Ast.Span(Ast.TypedLocal).empty(),
             .body = .{ .roc = body },
@@ -13026,7 +13026,7 @@ test "issue 10760 SpecConstr bounds cloning of rewritten inline bodies" {
     defer pass.deinit();
 
     for (0..pass.plans.len) |index| {
-        try pass.cloneFnBodyInPlace(@enumFromInt(@as(u32, @intCast(index))));
+        try pass.cloneFnBodyInPlace(@fromBackingInt(@intCast(@as(u32, @intCast(index)))));
     }
 
     const rewritten_body = switch (program.getFn(callee).body) {
@@ -13081,16 +13081,16 @@ test "value-aware call-pattern collection keeps generic producer calls opaque" {
     });
 
     const producer = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = tuple_expr },
         .ret = tuple_ty,
     });
 
-    const consumer_arg = try program.addLocal(@enumFromInt(2), tuple_ty);
+    const consumer_arg = try program.addLocal(@fromBackingInt(@intCast(2)), tuple_ty);
     const consumer = try program.addFn(.{
-        .symbol = @enumFromInt(3),
+        .symbol = @fromBackingInt(@intCast(3)),
         .args = try program.addTypedLocalSpan(&.{.{ .local = consumer_arg, .ty = tuple_ty }}),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = unit_expr },
@@ -13106,14 +13106,14 @@ test "value-aware call-pattern collection keeps generic producer calls opaque" {
         .args = try program.addExprSpan(&.{producer_call}),
     } } });
     _ = try program.addFn(.{
-        .symbol = @enumFromInt(4),
+        .symbol = @fromBackingInt(@intCast(4)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = inline_arg_consumer_call },
         .ret = unit_ty,
     });
 
-    const bound_tuple_local = try program.addLocal(@enumFromInt(5), tuple_ty);
+    const bound_tuple_local = try program.addLocal(@fromBackingInt(@intCast(5)), tuple_ty);
     const bound_tuple_ref = try program.addExpr(.{ .ty = tuple_ty, .data = .{ .local = bound_tuple_local } });
     const let_arg_consumer_call = try program.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
         .callee = .{ .lifted = consumer },
@@ -13126,7 +13126,7 @@ test "value-aware call-pattern collection keeps generic producer calls opaque" {
         .rest = let_arg_consumer_call,
     } } });
     _ = try program.addFn(.{
-        .symbol = @enumFromInt(6),
+        .symbol = @fromBackingInt(@intCast(6)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = let_body },
@@ -13135,13 +13135,13 @@ test "value-aware call-pattern collection keeps generic producer calls opaque" {
 
     var pass = try Pass.init(allocator, &program);
     defer pass.deinit();
-    pass.plans[@intFromEnum(consumer)].used_args[0] = true;
+    pass.plans[@backingInt(consumer)].used_args[0] = true;
 
     try pass.collectValueAwareCallPatterns(3);
-    try std.testing.expectEqual(@as(usize, 0), pass.plans[@intFromEnum(consumer)].specs.items.len);
+    try std.testing.expectEqual(@as(usize, 0), pass.plans[@backingInt(consumer)].specs.items.len);
 
     try pass.collectValueAwareCallPatterns(4);
-    try std.testing.expectEqual(@as(usize, 1), pass.plans[@intFromEnum(consumer)].specs.items.len);
+    try std.testing.expectEqual(@as(usize, 1), pass.plans[@backingInt(consumer)].specs.items.len);
 }
 
 test "generic value cloning preserves a call until its result shape is demanded" {
@@ -13159,7 +13159,7 @@ test "generic value cloning preserves a call until its result shape is demanded"
         } },
     });
     const callee = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = tag },
@@ -13203,14 +13203,14 @@ test "issue 10168 SpecConstr clones every capture when nested cloning grows the 
     } });
     const fn_list_ty = try program.types.add(.{ .list = fn_ty });
     const unit_expr = try program.addExpr(.{ .ty = unit_ty, .data = .unit });
-    const nested_binder: check.CheckedModule.PatternBinderId = @enumFromInt(1);
-    const nested_capture_local = try program.addLocalWithBinder(@enumFromInt(1), unit_ty, nested_binder);
+    const nested_binder: check.CheckedModule.PatternBinderId = @fromBackingInt(@intCast(1));
+    const nested_capture_local = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), unit_ty, nested_binder);
     const nested_capture_slots = try program.addTypedLocalSpan(&.{.{
         .local = nested_capture_local,
         .ty = unit_ty,
     }});
     const nested_fn = try program.addFn(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = nested_capture_slots,
         .body = .{ .roc = unit_expr },
@@ -13239,8 +13239,8 @@ test "issue 10168 SpecConstr clones every capture when nested cloning grows the 
         .data = .{ .list = try program.addExprSpan(&.{nested_fn_ref}) },
     });
     const second_value = unit_expr;
-    const first_local = try program.addLocal(@enumFromInt(3), fn_list_ty);
-    const second_local = try program.addLocal(@enumFromInt(4), unit_ty);
+    const first_local = try program.addLocal(@fromBackingInt(@intCast(3)), fn_list_ty);
+    const second_local = try program.addLocal(@fromBackingInt(@intCast(4)), unit_ty);
     const first_id = program.ensureLiftCaptureId(first_local);
     const second_id = program.ensureLiftCaptureId(second_local);
     const outer_capture_slots = try program.addTypedLocalSpan(&.{
@@ -13248,7 +13248,7 @@ test "issue 10168 SpecConstr clones every capture when nested cloning grows the 
         .{ .local = second_local, .ty = unit_ty },
     });
     const outer_fn = try program.addFn(.{
-        .symbol = @enumFromInt(5),
+        .symbol = @fromBackingInt(@intCast(5)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = outer_capture_slots,
         .body = .{ .roc = unit_expr },
@@ -13306,7 +13306,7 @@ test "field access folding preserves shared residual suffix spans" {
         .{ .name = outer_name, .ty = middle_ty, .default = null },
     }) });
 
-    const leaf_local = try program.addLocal(@enumFromInt(1), leaf_ty);
+    const leaf_local = try program.addLocal(@fromBackingInt(@intCast(1)), leaf_ty);
     const leaf_expr = try program.addExpr(.{ .ty = leaf_ty, .data = .{ .local = leaf_local } });
     const inner_expr = try program.addExpr(.{ .ty = inner_ty, .data = .{
         .record = try program.addFieldExprSpan(&.{.{ .name = leaf_name, .value = leaf_expr }}),
@@ -13327,7 +13327,7 @@ test "field access folding preserves shared residual suffix spans" {
         .segments = full_segments,
     } } });
 
-    const unknown_middle_local = try program.addLocal(@enumFromInt(2), middle_ty);
+    const unknown_middle_local = try program.addLocal(@fromBackingInt(@intCast(2)), middle_ty);
     const unknown_middle_expr = try program.addExpr(.{ .ty = middle_ty, .data = .{ .local = unknown_middle_local } });
     const observable_unknown_middle = try program.addExpr(.{ .ty = middle_ty, .data = .{ .dbg = unknown_middle_expr } });
     const partial_receiver = try program.addExpr(.{ .ty = outer_ty, .data = .{
@@ -13372,7 +13372,7 @@ test "field access folding preserves shared residual suffix spans" {
     var dbg_count: usize = 0;
     var field_access_count: usize = 0;
     for (partial_expr_start..program.exprCount()) |raw_expr| {
-        const counted_expr = program.getExpr(@enumFromInt(@as(u32, @intCast(raw_expr)))).data;
+        const counted_expr = program.getExpr(@fromBackingInt(@intCast(@as(u32, @intCast(raw_expr))))).data;
         if (counted_expr == .dbg) dbg_count += 1;
         if (counted_expr == .field_access) field_access_count += 1;
     }
@@ -13386,8 +13386,8 @@ test "expression traversal visits both operands of structural_hash" {
     defer program.deinit();
 
     const unit_ty = try program.types.add(.zst);
-    const value_local = try program.addLocal(@enumFromInt(1), unit_ty);
-    const hasher_local = try program.addLocal(@enumFromInt(2), unit_ty);
+    const value_local = try program.addLocal(@fromBackingInt(@intCast(1)), unit_ty);
+    const hasher_local = try program.addLocal(@fromBackingInt(@intCast(2)), unit_ty);
 
     const value_expr = try program.addExpr(.{ .ty = unit_ty, .data = .{ .local = value_local } });
     const hasher_local_expr = try program.addExpr(.{ .ty = unit_ty, .data = .{ .local = hasher_local } });
@@ -13416,15 +13416,15 @@ test "call-pattern specialization preserves imported direct calls" {
 
     const unit_ty = try mono.types.add(.zst);
     const imported = try mono.addImportedFn(.{
-        .shard = @enumFromInt(1),
-        .fn_id = @enumFromInt(1),
+        .shard = @fromBackingInt(@intCast(1)),
+        .fn_id = @fromBackingInt(@intCast(1)),
     });
     const body = try mono.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
         .callee = Mono.importedProcCallee(imported),
         .args = Mono.Span(Mono.ExprId).empty(),
     } } });
     try mono.defs.append(allocator, .{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Mono.Span(Mono.TypedLocal).empty(),
         .body = .{ .roc = body },
         .ret = unit_ty,
@@ -13463,7 +13463,7 @@ test "static match verdicts separate definite no-match from statically undecidab
     const foo = try program.names.internTagLabel("Foo");
     const bar = try program.names.internTagLabel("Bar");
 
-    const opaque_expr = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = try program.addLocal(@enumFromInt(1), u8_ty) } });
+    const opaque_expr = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = try program.addLocal(@fromBackingInt(@intCast(1)), u8_ty) } });
     const opaque_value = Value{ .expr = opaque_expr };
     const foo_value = Value{ .tag = .{ .ty = union_ty, .name = foo, .payloads = &.{opaque_value} } };
 
@@ -13584,7 +13584,7 @@ test "SpecConstr pattern clones bind fresh local identities" {
     defer cloner.deinit();
 
     const u8_ty = try program.types.add(.{ .primitive = .u8 });
-    const source_local = try program.addLocal(@enumFromInt(1), u8_ty);
+    const source_local = try program.addLocal(@fromBackingInt(@intCast(1)), u8_ty);
     const source_pat = try program.addPat(.{ .ty = u8_ty, .data = .{ .bind = source_local } });
     const source_ref = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = source_local } });
     const source_payload_ref = try program.addExpr(.{ .ty = u8_ty, .data = .{ .uninitialized_payload = .{ .condition = source_local } } });
@@ -13613,7 +13613,7 @@ test "SpecConstr pattern clones bind fresh local identities" {
     try std.testing.expect(source_local != second_local);
     try std.testing.expect(first_local != second_local);
 
-    const known_local = try program.addLocal(@enumFromInt(2), u8_ty);
+    const known_local = try program.addLocal(@fromBackingInt(@intCast(2)), u8_ty);
     const known_ref = try program.addExpr(.{ .ty = u8_ty, .data = .{ .local = known_local } });
     const known_change = cloner.subst.watermark();
     try cloner.subst.put(cloner.pass.program, source_local, .{ .expr = known_ref });
@@ -13634,12 +13634,12 @@ test "whole-body normalization resolves binder-equivalent argument locals" {
     defer program.deinit();
 
     const ty = try program.types.add(.{ .primitive = .u8 });
-    const binder: check.CheckedModule.PatternBinderId = @enumFromInt(1);
-    const argument = try program.addLocalWithBinder(@enumFromInt(1), ty, binder);
-    const equivalent = try program.addLocalWithBinder(@enumFromInt(2), ty, binder);
+    const binder: check.CheckedModule.PatternBinderId = @fromBackingInt(@intCast(1));
+    const argument = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, binder);
+    const equivalent = try program.addLocalWithBinder(@fromBackingInt(@intCast(2)), ty, binder);
     const equivalent_ref = try program.addExpr(.{ .ty = ty, .data = .{ .local = equivalent } });
     const fn_id = try program.addFn(.{
-        .symbol = @enumFromInt(3),
+        .symbol = @fromBackingInt(@intCast(3)),
         .args = try program.addTypedLocalSpan(&.{.{ .local = argument, .ty = ty }}),
         .captures = Ast.Span(Ast.TypedLocal).empty(),
         .body = .{ .roc = equivalent_ref },
@@ -13662,25 +13662,25 @@ test "substitution resolves equivalent named types with distinct checked provena
     var program = emptyLiftedProgramForTest(allocator);
     defer program.deinit();
 
-    const module_identity = try program.names.internModuleIdentity(&([_]u8{0xAB} ** 32));
+    const module_identity = try program.names.internModuleIdentity(&@as([32]u8, @splat(0xAB)));
     const type_name = try program.names.internTypeName("Nominal");
     const def: Type.TypeDef = .{ .module = module_identity, .type_name = type_name };
     const first_ty = try program.types.add(.{ .named = .{
-        .named_type = .{ .module = .{}, .ty = @enumFromInt(1) },
+        .named_type = .{ .module = .{}, .ty = @fromBackingInt(@intCast(1)) },
         .def = def,
         .kind = .nominal,
         .args = Type.Span.empty(),
     } });
     const second_ty = try program.types.add(.{ .named = .{
-        .named_type = .{ .module = .{}, .ty = @enumFromInt(2) },
+        .named_type = .{ .module = .{}, .ty = @fromBackingInt(@intCast(2)) },
         .def = def,
         .kind = .nominal,
         .args = Type.Span.empty(),
     } });
-    const binder: check.CheckedModule.PatternBinderId = @enumFromInt(1);
-    const first = try program.addLocalWithBinder(@enumFromInt(1), first_ty, binder);
-    const second = try program.addLocalWithBinder(@enumFromInt(2), second_ty, binder);
-    const replacement = try program.addLocal(@enumFromInt(3), first_ty);
+    const binder: check.CheckedModule.PatternBinderId = @fromBackingInt(@intCast(1));
+    const first = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), first_ty, binder);
+    const second = try program.addLocalWithBinder(@fromBackingInt(@intCast(2)), second_ty, binder);
+    const replacement = try program.addLocal(@fromBackingInt(@intCast(3)), first_ty);
     const replacement_expr = try program.addExpr(.{ .ty = first_ty, .data = .{ .local = replacement } });
     const second_expr = try program.addExpr(.{ .ty = second_ty, .data = .{ .local = second } });
 
@@ -13735,7 +13735,7 @@ test "known match fold aborts on undecidable branches and trips the invariant wh
 
     // Every branch a definite no-match violates checker exhaustiveness. In
     // Debug, the invariant panics; probe that abort from a fork on POSIX.
-    if (comptime @import("builtin").mode == .Debug and @import("builtin").os.tag != .windows) {
+    if (comptime @import("builtin").mode == .debug and @import("builtin").os.tag != .windows) {
         const excluded_branches = try program.addBranchSpan(&.{
             .{ .pat = bar_pat, .body = body },
         });
@@ -13770,7 +13770,7 @@ test "known match fold preserves absurd elimination of a structural product" {
     const record_ty = try program.types.add(.{ .record = try program.types.addRecordFields(&program.names, &.{
         .{ .name = field_name, .ty = empty_union_ty, .default = null },
     }) });
-    const impossible_local = try program.addLocal(@enumFromInt(1), empty_union_ty);
+    const impossible_local = try program.addLocal(@fromBackingInt(@intCast(1)), empty_union_ty);
     const impossible_expr = try program.addExpr(.{ .ty = empty_union_ty, .data = .{ .local = impossible_local } });
     const record_value = Value{ .record = .{
         .ty = record_ty,

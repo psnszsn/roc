@@ -19,8 +19,8 @@ pub fn builtinNominal(
     args: checked.CheckedTypeRange,
 ) checked.StoredNominal {
     return .{
-        .name = @enumFromInt(tableIndex(0)),
-        .origin_module = @enumFromInt(tableIndex(0)),
+        .name = @fromBackingInt(@intCast(tableIndex(0))),
+        .origin_module = @fromBackingInt(@intCast(tableIndex(0))),
         .owner_module = .{},
         .builtin = builtin,
         .is_opaque = false,

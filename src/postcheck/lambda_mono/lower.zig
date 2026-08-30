@@ -211,14 +211,14 @@ const FnSpec = struct {
 const FnSpecContext = struct {
     pub fn hash(_: FnSpecContext, spec: FnSpec) u64 {
         var hasher = std.hash.Wyhash.init(0);
-        std.hash.autoHash(&hasher, @intFromEnum(spec.source));
-        std.hash.autoHash(&hasher, @intFromEnum(spec.solved_fn_ty));
+        std.hash.autoHash(&hasher, @backingInt(spec.source));
+        std.hash.autoHash(&hasher, @backingInt(spec.solved_fn_ty));
         std.hash.autoHash(&hasher, spec.abi);
         std.hash.autoHash(&hasher, spec.captures.source);
         std.hash.autoHash(&hasher, spec.captures.start);
         std.hash.autoHash(&hasher, spec.captures.len);
         if (spec.capture_ty) |capture_ty| {
-            std.hash.autoHash(&hasher, @intFromEnum(capture_ty));
+            std.hash.autoHash(&hasher, @backingInt(capture_ty));
         } else {
             std.hash.autoHash(&hasher, @as(u32, std.math.maxInt(u32)));
         }
@@ -244,7 +244,7 @@ const CaptureSpanContext = struct {
         std.hash.autoHash(&hasher, span.source);
         std.hash.autoHash(&hasher, span.start);
         std.hash.autoHash(&hasher, span.len);
-        std.hash.autoHash(&hasher, @intFromEnum(span.solved_fn_ty));
+        std.hash.autoHash(&hasher, @backingInt(span.solved_fn_ty));
         return hasher.final();
     }
 
@@ -394,7 +394,7 @@ const Lowerer = struct {
 
     fn indexSourceFns(self: *Lowerer) Allocator.Error!void {
         for (self.solved.lifted.fns, 0..) |fn_, index| {
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const result = try self.source_symbols.getOrPut(fn_.symbol);
             if (result.found_existing) Common.invariant("two lifted functions had the same symbol");
             result.value_ptr.* = fn_id;
@@ -405,14 +405,14 @@ const Lowerer = struct {
         var index: usize = 0;
         while (index < self.fn_specs.items.len) : (index += 1) {
             if (self.fn_written.items[index]) continue;
-            const out_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const out_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             try self.lowerFnSpec(out_id, self.fn_specs.items[index]);
         }
     }
 
     fn lowerFnSpec(self: *Lowerer, out_id: Ast.FnId, spec: FnSpec) Allocator.Error!void {
         const fn_id = spec.source;
-        const fn_ = self.solved.lifted.fns[@intFromEnum(fn_id)];
+        const fn_ = self.solved.lifted.fns[@backingInt(fn_id)];
         self.captures.clearRetainingCapacity();
         @memset(self.local_map, null);
         @memset(self.expr_map, null);
@@ -487,11 +487,11 @@ const Lowerer = struct {
             .body = body,
             .ret = ret,
         });
-        self.fn_written.items[@intFromEnum(out_id)] = true;
+        self.fn_written.items[@backingInt(out_id)] = true;
     }
 
     fn ensureOwnFnSpec(self: *Lowerer, fn_id: Lifted.FnId, abi: CaptureAbi) Allocator.Error!Ast.FnId {
-        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys[@intFromEnum(fn_id)]);
+        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys[@backingInt(fn_id)]);
         switch (self.solved.types.rootContent(solved_fn_ty)) {
             .func => {},
             .link, .unbound, .forall, .primitive, .named, .record, .tuple, .tag_union, .list, .box, .lambda_set, .erased, .zst, .mono => Common.invariant("Lambda Mono function table contains a non-function type"),
@@ -519,8 +519,8 @@ const Lowerer = struct {
         const result = try self.fn_spec_map.getOrPut(spec);
         if (result.found_existing) return result.value_ptr.*;
 
-        const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(self.program.fnCount())));
-        const source_fn = self.solved.lifted.fns[@intFromEnum(source)];
+        const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.program.fnCount()))));
+        const source_fn = self.solved.lifted.fns[@backingInt(source)];
         const symbol = self.symbols.fresh();
         try self.program.fns.append(self.allocator, undefined);
         try self.fn_specs.append(self.allocator, spec);
@@ -568,7 +568,7 @@ const Lowerer = struct {
     }
 
     fn ownCaptureSpanForFn(self: *Lowerer, fn_id: Lifted.FnId) Allocator.Error!CaptureSpanId {
-        const raw_fn = @intFromEnum(fn_id);
+        const raw_fn = @backingInt(fn_id);
         if (raw_fn >= self.own_capture_spans.len) Common.invariant("own capture span requested for a missing lifted function");
         if (self.own_capture_spans[raw_fn]) |existing| return existing;
 
@@ -585,14 +585,14 @@ const Lowerer = struct {
 
         try self.own_captures.ensureUnusedCapacity(self.allocator, capture_locals.len);
         for (capture_locals) |capture| {
-            const local = self.solved.lifted.locals[@intFromEnum(capture.local)];
+            const local = self.solved.lifted.locals[@backingInt(capture.local)];
             self.own_captures.appendAssumeCapacity(.{
                 .local = capture.local,
                 .symbol = local.symbol,
                 .binder = local.binder,
                 .capture_id = local.capture_id,
                 .checked_capture_id = local.checked_capture_id,
-                .ty = self.solved.local_tys[@intFromEnum(capture.local)],
+                .ty = self.solved.local_tys[@backingInt(capture.local)],
             });
         }
 
@@ -636,7 +636,7 @@ const Lowerer = struct {
     }
 
     fn lowerExpr(self: *Lowerer, expr_id: Lifted.ExprId) Allocator.Error!Ast.ExprId {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (self.expr_map[index]) |cached| return cached;
 
         const expr = self.solved.lifted.exprs[index];
@@ -665,7 +665,7 @@ const Lowerer = struct {
             .@"unreachable" => .@"unreachable",
             .uninitialized => .uninitialized,
             .uninitialized_payload => |payload| .{ .uninitialized_payload = .{
-                .condition = try self.localFor(payload.condition, try self.lowerType(self.solved.local_tys[@intFromEnum(payload.condition)])),
+                .condition = try self.localFor(payload.condition, try self.lowerType(self.solved.local_tys[@backingInt(payload.condition)])),
                 .mask = payload.mask,
             } },
             .list => |items| .{ .list = try self.lowerExprSpan(items) },
@@ -747,22 +747,22 @@ const Lowerer = struct {
             .if_initialized_payload => |payload_switch| .{ .if_initialized_payload = .{
                 .cond = try self.lowerExpr(payload_switch.cond),
                 .cond_mask = payload_switch.cond_mask,
-                .payload = try self.localFor(payload_switch.payload, try self.lowerType(self.solved.local_tys[@intFromEnum(payload_switch.payload)])),
+                .payload = try self.localFor(payload_switch.payload, try self.lowerType(self.solved.local_tys[@backingInt(payload_switch.payload)])),
                 .uninitialized_is_cold = payload_switch.uninitialized_is_cold,
                 .initialized = try self.lowerExpr(payload_switch.initialized),
                 .uninitialized = try self.lowerExpr(payload_switch.uninitialized),
             } },
             .try_sequence => |sequence| .{ .try_sequence = .{
                 .try_expr = try self.lowerExpr(sequence.try_expr),
-                .ok_local = try self.localFor(sequence.ok_local, try self.lowerType(self.solved.local_tys[@intFromEnum(sequence.ok_local)])),
+                .ok_local = try self.localFor(sequence.ok_local, try self.lowerType(self.solved.local_tys[@backingInt(sequence.ok_local)])),
                 .err_is_cold = sequence.err_is_cold,
                 .ok_body = try self.lowerExpr(sequence.ok_body),
             } },
             .try_record_sequence => |sequence| .{ .try_record_sequence = .{
                 .try_expr = try self.lowerExpr(sequence.try_expr),
-                .value_local = try self.localFor(sequence.value_local, try self.lowerType(self.solved.local_tys[@intFromEnum(sequence.value_local)])),
+                .value_local = try self.localFor(sequence.value_local, try self.lowerType(self.solved.local_tys[@backingInt(sequence.value_local)])),
                 .value_field = sequence.value_field,
-                .rest_local = try self.localFor(sequence.rest_local, try self.lowerType(self.solved.local_tys[@intFromEnum(sequence.rest_local)])),
+                .rest_local = try self.localFor(sequence.rest_local, try self.lowerType(self.solved.local_tys[@backingInt(sequence.rest_local)])),
                 .rest_field = sequence.rest_field,
                 .err_is_cold = sequence.err_is_cold,
                 .ok_body = try self.lowerExpr(sequence.ok_body),
@@ -823,7 +823,7 @@ const Lowerer = struct {
     }
 
     fn lowerComptimeSite(self: *Lowerer, site: Lifted.ComptimeSiteId) Allocator.Error!Ast.ComptimeSiteId {
-        const index = @intFromEnum(site);
+        const index = @backingInt(site);
         if (self.comptime_site_map[index]) |existing| return existing;
 
         const source = self.solved.lifted.comptimeSite(site);
@@ -841,12 +841,12 @@ const Lowerer = struct {
     ) Allocator.Error!Ast.ExprData {
         const captures = self.memberCapturesForExpr(expr_id, fn_id);
         const capture_operands = self.solved.lifted.captureOperandSpan(captures_span);
-        if (self.solved.lifted.typedLocalSpan(self.solved.lifted.fns[@intFromEnum(fn_id)].captures).len != capture_operands.len) {
+        if (self.solved.lifted.typedLocalSpan(self.solved.lifted.fns[@backingInt(fn_id)].captures).len != capture_operands.len) {
             Common.invariant("function reference capture operand count differed from lifted function captures");
         }
         return switch (self.program.types.get(ty)) {
             .callable => |variants| blk: {
-                const fn_symbol = self.solved.lifted.fns[@intFromEnum(fn_id)].symbol;
+                const fn_symbol = self.solved.lifted.fns[@backingInt(fn_id)].symbol;
                 const variant_span = self.program.types.fnVariantSpan(variants);
                 for (0..variant_span.len) |index| {
                     const variant = GuardedList.at(variant_span, index);
@@ -860,7 +860,7 @@ const Lowerer = struct {
                 Common.invariant("finite callable type did not contain referenced function");
             },
             .erased_fn => |erased| blk: {
-                const fn_symbol = self.solved.lifted.fns[@intFromEnum(fn_id)].symbol;
+                const fn_symbol = self.solved.lifted.fns[@backingInt(fn_id)].symbol;
                 const variant_span = self.program.types.fnVariantSpan(erased.members);
                 for (0..variant_span.len) |index| {
                     const variant = GuardedList.at(variant_span, index);
@@ -877,8 +877,8 @@ const Lowerer = struct {
     }
 
     fn memberCapturesForExpr(self: *Lowerer, expr_id: Lifted.ExprId, fn_id: Lifted.FnId) CaptureSpanId {
-        const fn_symbol = self.solved.lifted.fns[@intFromEnum(fn_id)].symbol;
-        const expr_ty = self.solved.expr_tys[@intFromEnum(expr_id)];
+        const fn_symbol = self.solved.lifted.fns[@backingInt(fn_id)].symbol;
+        const expr_ty = self.solved.expr_tys[@backingInt(expr_id)];
         const callable = switch (self.solved.types.rootContent(expr_ty)) {
             .func => |func| func.callable,
             .lambda_set, .erased => expr_ty,
@@ -910,7 +910,7 @@ const Lowerer = struct {
             const capture_operands = self.solved.lifted.captureOperandSpan(capture_operands_span);
             if (capture_operands.len != capture_items.len) Common.invariant("direct call capture operand count differed from callee capture count");
             const target_fn = try self.ensureOwnFnSpec(fn_id, .finite);
-            const capture_ty = self.fn_specs.items[@intFromEnum(target_fn)].capture_ty orelse
+            const capture_ty = self.fn_specs.items[@backingInt(target_fn)].capture_ty orelse
                 Common.invariant("capturing direct call target had no capture record type");
             const call_args = try self.allocator.alloc(Ast.ExprId, args.len + 1);
             defer self.allocator.free(call_args);
@@ -1047,7 +1047,7 @@ const Lowerer = struct {
     }
 
     fn lowerPat(self: *Lowerer, pat_id: Lifted.PatId) Allocator.Error!Ast.PatId {
-        const index = @intFromEnum(pat_id);
+        const index = @backingInt(pat_id);
         if (self.pat_map[index]) |cached| return cached;
         const pat = self.solved.lifted.pats[index];
         const ty = try self.lowerTypeForSolvedPat(pat_id);
@@ -1105,7 +1105,7 @@ const Lowerer = struct {
     }
 
     fn lowerStmt(self: *Lowerer, stmt_id: Lifted.StmtId) Allocator.Error!Ast.StmtId {
-        const index = @intFromEnum(stmt_id);
+        const index = @backingInt(stmt_id);
         if (self.stmt_map[index]) |cached| return cached;
         const saved_loc = self.program.current_loc;
         defer self.program.current_loc = saved_loc;
@@ -1152,11 +1152,11 @@ const Lowerer = struct {
     }
 
     fn lowerExprTy(self: *Lowerer, expr_id: Lifted.ExprId) Allocator.Error!Type.TypeId {
-        return try self.lowerType(self.solved.expr_tys[@intFromEnum(expr_id)]);
+        return try self.lowerType(self.solved.expr_tys[@backingInt(expr_id)]);
     }
 
     fn lowerTypeForSolvedPat(self: *Lowerer, pat_id: Lifted.PatId) Allocator.Error!Type.TypeId {
-        return try self.lowerType(self.solved.pat_tys[@intFromEnum(pat_id)]);
+        return try self.lowerType(self.solved.pat_tys[@backingInt(pat_id)]);
     }
 
     fn lowerType(self: *Lowerer, solved_ty: SolvedType.TypeVarId) Allocator.Error!Type.TypeId {
@@ -1301,7 +1301,7 @@ const Lowerer = struct {
                 .id = undefined, // assigned by addFnVariants before the variant is stored
                 .source = member.lambda,
                 .target = target,
-                .capture_ty = self.fn_specs.items[@intFromEnum(target)].capture_ty,
+                .capture_ty = self.fn_specs.items[@backingInt(target)].capture_ty,
             };
         }
         return try self.program.types.addFnVariants(variants);
@@ -1315,7 +1315,7 @@ const Lowerer = struct {
             const source = self.sourceFnForSymbol(member.lambda);
             const target = try self.ensureFnSpec(
                 source,
-                self.solved.types.root(self.solved.fn_tys[@intFromEnum(source)]),
+                self.solved.types.root(self.solved.fn_tys[@backingInt(source)]),
                 abi,
                 CaptureSpanId.fromSolved(member.captures),
             );
@@ -1323,7 +1323,7 @@ const Lowerer = struct {
                 .id = undefined, // assigned by addFnVariants before the variant is stored
                 .source = member.lambda,
                 .target = target,
-                .capture_ty = self.fn_specs.items[@intFromEnum(target)].capture_ty,
+                .capture_ty = self.fn_specs.items[@backingInt(target)].capture_ty,
             };
         }
         return try self.program.types.addFnVariants(variants);
@@ -1364,11 +1364,11 @@ const Lowerer = struct {
     }
 
     fn localFor(self: *Lowerer, local: Lifted.LocalId, ty: Type.TypeId) Allocator.Error!Ast.LocalId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.local_map[index]) |existing| return existing;
         const lifted_local = self.solved.lifted.locals[index];
         const lowered = try self.program.addLocalWithBinder(lifted_local.symbol, ty, lifted_local.binder);
-        try self.program.setLocalName(lowered, self.solved.lifted.localName(@enumFromInt(index)));
+        try self.program.setLocalName(lowered, self.solved.lifted.localName(@fromBackingInt(@intCast(index))));
         self.local_map[index] = lowered;
         return lowered;
     }
@@ -1414,7 +1414,7 @@ const Lowerer = struct {
         defer self.allocator.free(lowered);
         for (0..input_items.len) |i| {
             const item = GuardedList.at(input_items, i);
-            const lifted_local = self.solved.lifted.locals[@intFromEnum(item.local)];
+            const lifted_local = self.solved.lifted.locals[@backingInt(item.local)];
             const ty = try self.lowerTypeByLiftedLocal(lifted_local.id);
             lowered[i] = .{ .local = try self.localFor(item.local, ty), .ty = ty };
         }
@@ -1422,8 +1422,8 @@ const Lowerer = struct {
     }
 
     fn lowerTypeByLiftedLocal(self: *Lowerer, local: Lifted.LocalId) Allocator.Error!Type.TypeId {
-        const mapped = self.local_map[@intFromEnum(local)] orelse {
-            return try self.lowerType(self.solved.local_tys[@intFromEnum(local)]);
+        const mapped = self.local_map[@backingInt(local)] orelse {
+            return try self.lowerType(self.solved.local_tys[@backingInt(local)]);
         };
         return self.program.getLocal(mapped).ty;
     }

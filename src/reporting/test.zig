@@ -12,6 +12,12 @@ const ReportingConfig = @import("config.zig").ReportingConfig;
 
 const reporting = @import("mod.zig");
 
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
+
 // Test cases for canonicalize error reports
 
 test "SYNTAX_PROBLEM report along with all four render types" {
@@ -146,8 +152,9 @@ test "terminal diagnostic layout has exact plain and ANSI output" {
     defer writer.deinit();
 
     try reporting.renderReportToPlain(&report, &writer.writer, config);
+    const expected_rule = repeatBytes("─", 38);
     try testing.expectEqualStrings(
-        "── ● duplicate definition " ++ ("─" ** 38) ++ " example.roc:2:1\n" ++
+        "── ● duplicate definition " ++ expected_rule ++ " example.roc:2:1\n" ++
             "\n" ++
             "The name c is being redeclared here:\n" ++
             "\n" ++
@@ -169,7 +176,7 @@ test "terminal diagnostic layout has exact plain and ANSI output" {
     const cyan = "\x1b[36m";
     const reset = "\x1b[0m";
     try testing.expectEqualStrings(
-        gray ++ "── " ++ yellow ++ "● duplicate definition " ++ gray ++ ("─" ** 38) ++ " " ++ cyan ++ "example.roc" ++ gray ++ ":2:1" ++ reset ++ "\n" ++
+        gray ++ "── " ++ yellow ++ "● duplicate definition " ++ gray ++ expected_rule ++ " " ++ cyan ++ "example.roc" ++ gray ++ ":2:1" ++ reset ++ "\n" ++
             "\n" ++
             "The name " ++ cyan ++ "c" ++ reset ++ " is being redeclared here:\n" ++
             "\n" ++

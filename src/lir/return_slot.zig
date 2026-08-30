@@ -50,7 +50,7 @@ pub fn run(store: *LirStore, layouts: *layout_mod.Store) ResourceError!void {
     const proc_count = store.procSpecCount();
     var proc_index: usize = 0;
     while (proc_index < proc_count) : (proc_index += 1) {
-        try pass.transformProc(@enumFromInt(proc_index));
+        try pass.transformProc(@fromBackingInt(@intCast(proc_index)));
     }
 }
 

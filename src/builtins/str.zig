@@ -74,6 +74,19 @@ pub const RocStr = extern struct {
     /// low bit stays free for the seamless-slice tag.
     pub const capacity_shift = 1;
 
+    /// Copy the exact in-memory representation used by the small-string form.
+    pub inline fn rawBytes(self: RocStr) [@sizeOf(RocStr)]u8 {
+        var value = self;
+        return std.mem.asBytes(&value)[0..@sizeOf(RocStr)].*;
+    }
+
+    /// Construct a string value from its exact in-memory representation.
+    pub inline fn fromRawBytes(bytes: [@sizeOf(RocStr)]u8) RocStr {
+        var result: RocStr = undefined;
+        @memcpy(std.mem.asBytes(&result), &bytes);
+        return result;
+    }
+
     comptime {
         std.debug.assert(word_count * @sizeOf(usize) == @sizeOf(RocStr));
         std.debug.assert(SMALL_STR_BIT == @as(usize, small_str_flag) << (@bitSizeOf(usize) - 8));
@@ -274,7 +287,7 @@ pub const RocStr = extern struct {
         const alloc_ptr = (str_alloc_ptr & ~slice_mask) | (slice_alloc_ptr & slice_mask);
 
         // Verify the computed allocation pointer is properly aligned
-        if (comptime builtin.mode == .Debug) {
+        if (comptime builtin.mode == .debug) {
             if (alloc_ptr != 0 and alloc_ptr % @alignOf(usize) != 0) {
                 // This indicates memory corruption - the allocation pointer should always be aligned
                 unreachable;
@@ -337,8 +350,8 @@ pub const RocStr = extern struct {
         }
 
         if (self.isSmallStr() and other.isSmallStr()) {
-            const self_bytes: [@sizeOf(RocStr)]u8 = @bitCast(self);
-            const other_bytes: [@sizeOf(RocStr)]u8 = @bitCast(other);
+            const self_bytes = self.rawBytes();
+            const other_bytes = other.rawBytes();
             return smallBytesEqual(self_bytes, other_bytes, self_len);
         }
 
@@ -704,7 +717,7 @@ inline fn bytesEqualStaticSmall(bytes: [*]const u8, len: usize, word0: u64, word
 
 inline fn staticSmallRuntimeWord(str: RocStr, offset: usize, active_len: usize) u64 {
     if (str.isSmallStr()) {
-        const bytes: [@sizeOf(RocStr)]u8 = @bitCast(str);
+        const bytes = str.rawBytes();
         return readSmallStringU64(bytes, offset);
     }
 
@@ -887,7 +900,7 @@ fn expectFloatToStr(comptime T: type, value: T, expected: []const u8) FloatToStr
 
     if (std.math.isFinite(value)) {
         const parsed = try parse_float.parseFloat(T, actual);
-        const Bits = std.meta.Int(.unsigned, @bitSizeOf(T));
+        const Bits = @Int(.unsigned, @bitSizeOf(T));
         try testing.expectEqual(@as(Bits, @bitCast(value)), @as(Bits, @bitCast(parsed)));
     }
 }
@@ -2582,7 +2595,7 @@ pub fn strCloneTo(
 ) callconv(.c) usize {
     const WIDTH: usize = @sizeOf(RocStr);
     if (string.isSmallStr()) {
-        const array: [@sizeOf(RocStr)]u8 = @as([@sizeOf(RocStr)]u8, @bitCast(string));
+        const array = string.rawBytes();
 
         var i: usize = 0;
         while (i < WIDTH) : (i += 1) {
@@ -4892,12 +4905,12 @@ test "default-platform RocStr view matches canonical RocStr layout" {
     try std.testing.expectEqual(@sizeOf(RocStr), @sizeOf(View));
     try std.testing.expectEqual(@alignOf(RocStr), @alignOf(View));
 
-    const canonical_fields = @typeInfo(RocStr).@"struct".fields;
-    const view_fields = @typeInfo(View).@"struct".fields;
-    try std.testing.expectEqual(canonical_fields.len, view_fields.len);
-    inline for (canonical_fields, view_fields) |cf, vf| {
-        try std.testing.expect(std.mem.eql(u8, cf.name, vf.name));
-        try std.testing.expectEqual(cf.type, vf.type);
-        try std.testing.expectEqual(@offsetOf(RocStr, cf.name), @offsetOf(View, vf.name));
+    const canonical_info = @typeInfo(RocStr).@"struct";
+    const view_info = @typeInfo(View).@"struct";
+    try std.testing.expectEqual(canonical_info.field_names.len, view_info.field_names.len);
+    inline for (canonical_info.field_names, canonical_info.field_types, view_info.field_names, view_info.field_types) |canonical_name, canonical_type, view_name, view_type| {
+        try std.testing.expect(std.mem.eql(u8, canonical_name, view_name));
+        try std.testing.expectEqual(canonical_type, view_type);
+        try std.testing.expectEqual(@offsetOf(RocStr, canonical_name), @offsetOf(View, view_name));
     }
 }

@@ -217,7 +217,7 @@ pub fn recomputeCaptures(allocator: Allocator, program: *Ast.Program) Allocator.
     try graph.finalizePostLiftOperands();
 
     for (0..program.fnCount()) |index| {
-        const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+        const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
         program.setFnCaptures(fn_id, try program.addTypedLocalSpan(graph.states[index].captures.items));
     }
 
@@ -230,7 +230,7 @@ pub fn recomputeCaptures(allocator: Allocator, program: *Ast.Program) Allocator.
 /// they are deliberately absent from the active capture graph and cannot reach
 /// downstream compilation.
 fn verifyActiveCaptureInvariants(program: *const Ast.Program, graph: *const CaptureDependencyGraph) void {
-    if (@import("builtin").mode != .Debug) return;
+    if (@import("builtin").mode != .debug) return;
     const violation = checkActiveCaptureInvariants(program, graph) catch |err| switch (err) {
         error.OutOfMemory => Common.invariant("verifyActiveCaptureInvariants: out of memory during structural check"),
     };
@@ -253,7 +253,7 @@ fn verifyActiveCaptureInvariants(program: *const Ast.Program, graph: *const Capt
 ///     CaptureId sequence (same ids, same sorted order), and each operand's
 ///     value type equals its slot's type.
 pub fn verifyCaptureInvariants(program: *const Ast.Program) void {
-    if (@import("builtin").mode != .Debug) return;
+    if (@import("builtin").mode != .debug) return;
     const violation = checkCaptureInvariants(program) catch |err| switch (err) {
         error.OutOfMemory => Common.invariant("verifyCaptureInvariants: out of memory during structural check"),
     };
@@ -327,8 +327,8 @@ fn checkCaptureSlotSpan(program: *const Ast.Program, slots: anytype) ?[]const u8
             if (id != checked.CaptureId.fromBinder(binder)) return "binder-derived CaptureId did not match its binder";
         }
         if (previous) |prev| {
-            if (@intFromEnum(prev) > @intFromEnum(id)) return "capture slots not sorted by CaptureId";
-            if (@intFromEnum(prev) == @intFromEnum(id)) return "duplicate CaptureId in a capture set";
+            if (@backingInt(prev) > @backingInt(id)) return "capture slots not sorted by CaptureId";
+            if (@backingInt(prev) == @backingInt(id)) return "duplicate CaptureId in a capture set";
         }
         previous = id;
     }
@@ -458,7 +458,7 @@ const Lifter = struct {
         }
 
         for (0..self.output.fnCount()) |index| {
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             if (self.initialized_fns.contains(fn_id)) continue;
             Common.invariant("Monotype Lifted function was reserved but not initialized");
         }
@@ -466,7 +466,7 @@ const Lifter = struct {
         try self.completeFunctionReferenceCaptures();
 
         for (self.source.roots) |root| {
-            const raw = @intFromEnum(root.def);
+            const raw = @backingInt(root.def);
             if (raw >= self.def_map.len) Common.invariant("Monotype root references a missing definition");
             const fn_id = self.def_map[raw] orelse
                 Common.invariant("Monotype root definition was not lifted");
@@ -478,7 +478,7 @@ const Lifter = struct {
 
         for (self.source.layout_requests) |request| {
             const fn_id = if (request.def) |def| blk: {
-                const raw = @intFromEnum(def);
+                const raw = @backingInt(def);
                 if (raw >= self.def_map.len) Common.invariant("Monotype static data layout request references a missing definition");
                 break :blk self.def_map[raw] orelse
                     Common.invariant("Monotype static data layout request definition was not lifted");
@@ -497,7 +497,7 @@ const Lifter = struct {
     }
 
     fn lowerTopLevelDef(self: *Lifter, fn_id: Ast.FnId, def: Mono.Def) Allocator.Error!void {
-        if (self.fn_captures[@intFromEnum(fn_id)].items.len != 0) {
+        if (self.fn_captures[@backingInt(fn_id)].items.len != 0) {
             Common.invariant("top-level Monotype definition has free locals after checked closure collection");
         }
 
@@ -526,7 +526,7 @@ const Lifter = struct {
 
     fn lowerNestedDef(self: *Lifter, fn_id: Ast.FnId, def: Mono.NestedDef) Allocator.Error!void {
         try self.rewriteExpr(def.body);
-        const capture_span = try self.output.addTypedLocalSpan(self.fn_captures[@intFromEnum(fn_id)].items);
+        const capture_span = try self.output.addTypedLocalSpan(self.fn_captures[@backingInt(fn_id)].items);
         const source = self.nestedSource(def.fn_id, def.fn_def);
         self.output.setFn(fn_id, .{
             .symbol = def.symbol,
@@ -544,7 +544,7 @@ const Lifter = struct {
     }
 
     fn rewriteStmt(self: *Lifter, stmt_id: Mono.StmtId) Allocator.Error!void {
-        const index = @intFromEnum(stmt_id);
+        const index = @backingInt(stmt_id);
         if (self.stmt_done[index]) return;
         self.stmt_done[index] = true;
 
@@ -605,7 +605,7 @@ const Lifter = struct {
     }
 
     fn rewriteExpr(self: *Lifter, expr_id: Mono.ExprId) Allocator.Error!void {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (self.expr_done[index]) return;
         self.expr_done[index] = true;
 
@@ -655,7 +655,7 @@ const Lifter = struct {
             },
             .lambda => |lambda| try self.liftLambda(expr_id, expr.ty, lambda),
             .def_ref => |def_id| {
-                const raw = @intFromEnum(def_id);
+                const raw = @backingInt(def_id);
                 if (raw >= self.def_map.len) Common.invariant("Monotype definition reference was outside the definition table");
                 const fn_id = self.def_map[raw] orelse
                     Common.invariant("Monotype definition reference reached lifting before its function was registered");
@@ -817,7 +817,7 @@ const Lifter = struct {
     }
 
     fn reserveFn(self: *Lifter, mono_fn_id: Mono.FnId) Allocator.Error!Ast.FnId {
-        const raw = @intFromEnum(mono_fn_id);
+        const raw = @backingInt(mono_fn_id);
         if (raw >= self.fn_map.len) Common.invariant("Monotype lambda referenced a missing function specialization");
         if (self.fn_map[raw]) |existing| return existing;
 
@@ -828,7 +828,7 @@ const Lifter = struct {
     }
 
     fn setFnBody(self: *Lifter, fn_id: Ast.FnId, body: MonoFnBody) Allocator.Error!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.fn_bodies.items.len) Common.invariant("lifted function body id was outside body table");
         self.fn_bodies.items[raw] = body;
     }
@@ -856,7 +856,7 @@ const Lifter = struct {
     }
 
     fn registerFn(self: *Lifter, mono_fn_id: Mono.FnId, fn_id: Ast.FnId) void {
-        const raw = @intFromEnum(mono_fn_id);
+        const raw = @backingInt(mono_fn_id);
         if (raw >= self.fn_map.len) Common.invariant("Monotype definition referenced a missing function specialization");
         if (self.fn_map[raw]) |existing| {
             if (existing != fn_id) Common.invariant("Monotype function specialization was assigned two lifted function ids");
@@ -866,14 +866,14 @@ const Lifter = struct {
     }
 
     fn liftedFn(self: *Lifter, mono_fn_id: Mono.FnId) Ast.FnId {
-        const raw = @intFromEnum(mono_fn_id);
+        const raw = @backingInt(mono_fn_id);
         if (raw >= self.fn_map.len) Common.invariant("Monotype expression referenced a missing function specialization");
         return self.fn_map[raw] orelse
             Common.invariant("Monotype expression referenced a function specialization before lifting registered it");
     }
 
     fn captureExprSpanForFn(self: *Lifter, fn_id: Ast.FnId, call_expr: Mono.ExprId) Allocator.Error!Ast.Span(Ast.CaptureOperand) {
-        return try self.captureOperandSpanForSlots(self.fn_captures[@intFromEnum(fn_id)].items, &.{}, call_expr);
+        return try self.captureOperandSpanForSlots(self.fn_captures[@backingInt(fn_id)].items, &.{}, call_expr);
     }
 
     /// Build the keyed capture operand span for a function reference. `slots`
@@ -919,7 +919,7 @@ const Lifter = struct {
         call_expr: Mono.ExprId,
     ) Allocator.Error!Ast.Span(Ast.CaptureOperand) {
         const explicit = self.output.fnDefCaptureSpan(explicit_span);
-        return try self.captureOperandSpanForSlots(self.fn_captures[@intFromEnum(fn_id)].items, explicit, call_expr);
+        return try self.captureOperandSpanForSlots(self.fn_captures[@backingInt(fn_id)].items, explicit, call_expr);
     }
 
     fn defSource(self: *Lifter, mono_fn_id: Mono.FnId, expected: ?Mono.FnTemplate) ?Mono.FnTemplate {
@@ -1037,7 +1037,7 @@ fn finalizeProgramFunctionReferenceCaptures(
     for (0..program.fnCount()) |raw| {
         walker.clear();
         bound.clear();
-        const fn_: Ast.FnId = @enumFromInt(@as(u32, @intCast(raw)));
+        const fn_: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(raw))));
         const body = program.getFn(fn_);
         try bindTypedLocals(program, &bound, program.typedLocalSpan(body.args));
         switch (body.body) {
@@ -1056,7 +1056,7 @@ fn slotCaptureId(program: *const Ast.Program, slot: Ast.TypedLocal) checked.Capt
 }
 
 fn captureSlotLessThan(program: *const Ast.Program, lhs: Ast.TypedLocal, rhs: Ast.TypedLocal) bool {
-    return @intFromEnum(slotCaptureId(program, lhs)) < @intFromEnum(slotCaptureId(program, rhs));
+    return @backingInt(slotCaptureId(program, lhs)) < @backingInt(slotCaptureId(program, rhs));
 }
 
 /// Sort a capture set into ascending CaptureId order so operand↔slot joins are
@@ -1064,7 +1064,7 @@ fn captureSlotLessThan(program: *const Ast.Program, lhs: Ast.TypedLocal, rhs: As
 /// debug) that no CaptureId appears twice.
 fn sortCaptureSlots(program: *const Ast.Program, items: []Ast.TypedLocal) void {
     std.sort.pdq(Ast.TypedLocal, items, program, captureSlotLessThan);
-    if (@import("builtin").mode == .Debug) {
+    if (@import("builtin").mode == .debug) {
         var index: usize = 1;
         while (index < items.len) : (index += 1) {
             if (slotCaptureId(program, items[index - 1]) == slotCaptureId(program, items[index])) {
@@ -1272,7 +1272,7 @@ const CaptureSet = struct {
                     try self.collectExpr(operand.value, bound);
                 }
                 if (self.finalize_operands) {
-                    const fn_index = @intFromEnum(fn_ref.fn_id);
+                    const fn_index = @backingInt(fn_ref.fn_id);
                     // Inline lambdas are reserved while lifting expressions,
                     // after the initial def/nested-def fixed-point table was
                     // sized. Their function records already contain the exact
@@ -1383,7 +1383,7 @@ const CaptureSet = struct {
                         // slot through lifting and have no local capture set.
                         .func => return,
                     };
-                    const fn_index = @intFromEnum(fn_id);
+                    const fn_index = @backingInt(fn_id);
                     if (fn_index >= self.fn_captures.len) Common.invariant("direct call target missing recomputed captures");
                     const finalized = try rebuildCaptureOperandSpan(
                         self.program,
@@ -1505,7 +1505,7 @@ const CaptureSet = struct {
     /// recursive references. During the fixpoint the read set is the previous
     /// round's value, which is exactly what makes recursion converge.
     fn collectFnCaptures(self: *CaptureSet, fn_id: Ast.FnId, caller_bound: *BoundSet) Allocator.Error!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         // Only defs and nested defs are reachable here (direct and
         // devirtualized calls and `fn_def` references never target an inline
         // lambda), and every one has a fixpoint entry. An out-of-range id
@@ -1522,7 +1522,7 @@ const CaptureSet = struct {
         explicit: anytype,
         caller_bound: *BoundSet,
     ) Allocator.Error!void {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.fn_captures.len) Common.invariant("capture collection referenced a function without a solved capture set");
         for (self.fn_captures[raw].items) |capture| {
             if (explicitProvidesCaptureSlot(self.program, explicit, capture)) continue;
@@ -1705,13 +1705,13 @@ const CaptureDependencyGraph = struct {
     }
 
     fn addNode(self: *CaptureDependencyGraph, owner: Ast.FnId) Allocator.Error!CaptureNodeId {
-        const id: CaptureNodeId = @enumFromInt(@as(u32, @intCast(self.nodes.items.len)));
+        const id: CaptureNodeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.nodes.items.len))));
         try self.nodes.append(self.allocator, .{ .owner = owner });
         return id;
     }
 
     fn addScopeEntry(self: *CaptureDependencyGraph, parent: ?CaptureScopeId, local: Ast.LocalId) Allocator.Error!CaptureScopeId {
-        const id: CaptureScopeId = @enumFromInt(@as(u32, @intCast(self.scopes.items.len)));
+        const id: CaptureScopeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.scopes.items.len))));
         try self.scopes.append(self.allocator, .{ .parent = parent, .local = local });
         return id;
     }
@@ -1721,7 +1721,7 @@ const CaptureDependencyGraph = struct {
         const binder = local_data.binder;
         var current = scope;
         while (current) |id| {
-            const entry = self.scopes.items[@intFromEnum(id)];
+            const entry = self.scopes.items[@backingInt(id)];
             if (entry.local == local) return entry.local;
             if (binder) |identity| {
                 const candidate = self.program.getLocal(entry.local);
@@ -1743,7 +1743,7 @@ const CaptureDependencyGraph = struct {
         defer builder.deinit();
         for (bodies, 0..) |maybe_body, raw| {
             const body = maybe_body orelse continue;
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(raw)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(raw))));
             const root = try self.addNode(fn_id);
             try self.roots.append(self.allocator, root);
             builder.reset();
@@ -1760,7 +1760,7 @@ const CaptureDependencyGraph = struct {
         var builder = CaptureGraphBuilder.init(self);
         defer builder.deinit();
         for (0..self.program.fnCount()) |raw| {
-            const fn_id: Ast.FnId = @enumFromInt(@as(u32, @intCast(raw)));
+            const fn_id: Ast.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(raw))));
             const fn_ = self.program.getFn(fn_id);
             const root = try self.addNode(fn_id);
             try self.roots.append(self.allocator, root);
@@ -1774,7 +1774,7 @@ const CaptureDependencyGraph = struct {
     }
 
     fn queueNode(self: *CaptureDependencyGraph, node_id: CaptureNodeId) Allocator.Error!void {
-        const node = &self.nodes.items[@intFromEnum(node_id)];
+        const node = &self.nodes.items[@backingInt(node_id)];
         if (node.active) return;
         node.active = true;
         try self.pending_nodes.append(self.allocator, node_id);
@@ -1784,7 +1784,7 @@ const CaptureDependencyGraph = struct {
         const local_data = self.program.getLocal(capture.local);
         if (capture.ty != local_data.ty) Common.invariant("capture graph entry type differed from its local type");
         const id = self.program.ensureLiftCaptureId(capture.local);
-        const state = &self.states[@intFromEnum(fn_id)];
+        const state = &self.states[@backingInt(fn_id)];
         const result = try state.by_id.getOrPut(id);
         if (result.found_existing) {
             if (result.value_ptr.local != capture.local or result.value_ptr.ty != capture.ty) {
@@ -1798,7 +1798,7 @@ const CaptureDependencyGraph = struct {
     }
 
     fn processNode(self: *CaptureDependencyGraph, node_id: CaptureNodeId) Allocator.Error!void {
-        const node_index = @intFromEnum(node_id);
+        const node_index = @backingInt(node_id);
         const owner = self.nodes.items[node_index].owner;
         var direct_index: usize = 0;
         while (direct_index < self.nodes.items[node_index].direct.items.len) : (direct_index += 1) {
@@ -1811,11 +1811,11 @@ const CaptureDependencyGraph = struct {
     }
 
     fn activateEdge(self: *CaptureDependencyGraph, edge_id: CaptureEdgeId) Allocator.Error!void {
-        const edge_index = @intFromEnum(edge_id);
+        const edge_index = @backingInt(edge_id);
         if (self.edges.items[edge_index].active) return;
         self.edges.items[edge_index].active = true;
         const target = self.edges.items[edge_index].target;
-        const state = &self.states[@intFromEnum(target)];
+        const state = &self.states[@backingInt(target)];
         try state.reverse_edges.append(self.allocator, edge_id);
         var capture_index: usize = 0;
         while (capture_index < state.captures.items.len) : (capture_index += 1) {
@@ -1824,16 +1824,16 @@ const CaptureDependencyGraph = struct {
     }
 
     fn supplyLessThan(_: void, lhs: CaptureSupply, rhs: CaptureSupply) bool {
-        return @intFromEnum(lhs.id) < @intFromEnum(rhs.id);
+        return @backingInt(lhs.id) < @backingInt(rhs.id);
     }
 
     fn findSupply(supplies: []const CaptureSupply, id: checked.CaptureId) ?CaptureSupply {
         var low: usize = 0;
         var high: usize = supplies.len;
-        const wanted = @intFromEnum(id);
+        const wanted = @backingInt(id);
         while (low < high) {
             const mid = low + (high - low) / 2;
-            const found = @intFromEnum(supplies[mid].id);
+            const found = @backingInt(supplies[mid].id);
             if (found < wanted) {
                 low = mid + 1;
             } else if (found > wanted) {
@@ -1846,7 +1846,7 @@ const CaptureDependencyGraph = struct {
     }
 
     fn edgeSupply(self: *const CaptureDependencyGraph, edge_id: CaptureEdgeId, capture: Ast.TypedLocal) ?CaptureSupply {
-        const edge = self.edges.items[@intFromEnum(edge_id)];
+        const edge = self.edges.items[@backingInt(edge_id)];
         const local = self.program.getLocal(capture.local);
         const id = if (self.lifter != null)
             local.checked_capture_id orelse slotCaptureId(self.program, capture)
@@ -1860,14 +1860,14 @@ const CaptureDependencyGraph = struct {
             try self.queueNode(supply.node);
             return;
         }
-        const edge = self.edges.items[@intFromEnum(edge_id)];
+        const edge = self.edges.items[@backingInt(edge_id)];
         if (try self.scopeBindingFor(edge.scope, capture.local) == null) {
             try self.addCaptureUpdate(edge.owner, capture);
         }
     }
 
     fn processUpdate(self: *CaptureDependencyGraph, update: CaptureUpdate) Allocator.Error!void {
-        const state = &self.states[@intFromEnum(update.function)];
+        const state = &self.states[@backingInt(update.function)];
         var index: usize = 0;
         while (index < state.reverse_edges.items.len) : (index += 1) {
             try self.applyCaptureToEdge(state.reverse_edges.items[index], update.capture);
@@ -1891,7 +1891,7 @@ const CaptureDependencyGraph = struct {
     }
 
     fn resolvedOperandValue(self: *CaptureDependencyGraph, edge_id: CaptureEdgeId, slot: Ast.TypedLocal) Allocator.Error!Ast.ExprId {
-        const edge = self.edges.items[@intFromEnum(edge_id)];
+        const edge = self.edges.items[@backingInt(edge_id)];
         if (self.edgeSupply(edge_id, slot)) |supply| {
             const data = self.program.getExpr(supply.value).data;
             if (data != .local) return supply.value;
@@ -1905,8 +1905,8 @@ const CaptureDependencyGraph = struct {
     }
 
     fn finalizedSpan(self: *CaptureDependencyGraph, edge_id: CaptureEdgeId, call_expr: Ast.ExprId) Allocator.Error!Ast.Span(Ast.CaptureOperand) {
-        const edge = self.edges.items[@intFromEnum(edge_id)];
-        const slots = self.states[@intFromEnum(edge.target)].captures.items;
+        const edge = self.edges.items[@backingInt(edge_id)];
+        const slots = self.states[@backingInt(edge.target)].captures.items;
         if (slots.len == 0) return .empty();
 
         const saved_loc = self.program.current_loc;
@@ -1931,7 +1931,7 @@ const CaptureDependencyGraph = struct {
 
     fn finalizePostLiftOperands(self: *CaptureDependencyGraph) Allocator.Error!void {
         for (self.edges.items, 0..) |edge, raw| {
-            const edge_id: CaptureEdgeId = @enumFromInt(@as(u32, @intCast(raw)));
+            const edge_id: CaptureEdgeId = @fromBackingInt(@intCast(@as(u32, @intCast(raw))));
             switch (edge.site) {
                 .pre_lift => {},
                 .fn_ref => |expr_id| {
@@ -1996,7 +1996,7 @@ const CaptureGraphBuilder = struct {
 
     fn removeLocal(self: *CaptureGraphBuilder, local: Ast.LocalId) void {
         const scope_id = self.current_scope orelse Common.invariant("capture graph scope stack underflow");
-        const entry = self.graph.scopes.items[@intFromEnum(scope_id)];
+        const entry = self.graph.scopes.items[@backingInt(scope_id)];
         if (entry.local != local) Common.invariant("capture graph removed a lexical binding out of order");
         self.current_scope = entry.parent;
         self.bound.remove(self.graph.program, local);
@@ -2032,7 +2032,7 @@ const CaptureGraphBuilder = struct {
         if (try self.bound.contains(self.graph.program, local)) return;
         _ = self.graph.program.ensureLiftCaptureId(local);
         const local_data = self.graph.program.getLocal(local);
-        try self.graph.nodes.items[@intFromEnum(node_id)].direct.append(self.graph.allocator, .{
+        try self.graph.nodes.items[@backingInt(node_id)].direct.append(self.graph.allocator, .{
             .local = local,
             .ty = local_data.ty,
         });
@@ -2051,16 +2051,16 @@ const CaptureGraphBuilder = struct {
                 if (current.id == previous.id) Common.invariant("capture edge declared one CaptureId more than once");
             }
         }
-        const edge_id: CaptureEdgeId = @enumFromInt(@as(u32, @intCast(self.graph.edges.items.len)));
+        const edge_id: CaptureEdgeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.graph.edges.items.len))));
         try self.graph.edges.append(self.graph.allocator, .{
-            .owner = self.graph.nodes.items[@intFromEnum(parent)].owner,
+            .owner = self.graph.nodes.items[@backingInt(parent)].owner,
             .target = target,
             .scope = self.current_scope,
             .site = site,
             .supplies = supplies.*,
         });
         supplies.* = .empty;
-        try self.graph.nodes.items[@intFromEnum(parent)].edges.append(self.graph.allocator, edge_id);
+        try self.graph.nodes.items[@backingInt(parent)].edges.append(self.graph.allocator, edge_id);
     }
 
     fn addCaptureOperandEdge(
@@ -2075,7 +2075,7 @@ const CaptureGraphBuilder = struct {
         const operands = self.graph.program.captureOperandSpan(span);
         for (0..operands.len) |index| {
             const operand = GuardedList.at(operands, index);
-            const child = try self.graph.addNode(self.graph.nodes.items[@intFromEnum(parent)].owner);
+            const child = try self.graph.addNode(self.graph.nodes.items[@backingInt(parent)].owner);
             try self.collectExpr(operand.value, child);
             const supply = CaptureSupply{ .id = operand.id, .value = operand.value, .node = child };
             try supplies.append(self.graph.allocator, supply);
@@ -2093,7 +2093,7 @@ const CaptureGraphBuilder = struct {
             const runtime_id = capture_local.capture_id orelse
                 Common.invariant("pre-lift explicit capture local had no CaptureId");
             const declared_id = capture_local.checked_capture_id orelse runtime_id;
-            const child = try self.graph.addNode(self.graph.nodes.items[@intFromEnum(parent)].owner);
+            const child = try self.graph.addNode(self.graph.nodes.items[@backingInt(parent)].owner);
             try self.collectExpr(capture.value, child);
             try supplies.append(self.graph.allocator, .{ .id = declared_id, .value = capture.value, .node = child });
         }
@@ -2382,15 +2382,15 @@ test "monotype lifting preserves imported direct call slots" {
 
     const unit_ty = try mono.types.add(.zst);
     const imported = try mono.addImportedFn(.{
-        .shard = @enumFromInt(1),
-        .fn_id = @enumFromInt(1),
+        .shard = @fromBackingInt(@intCast(1)),
+        .fn_id = @fromBackingInt(@intCast(1)),
     });
     const body = try mono.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
         .callee = Mono.importedProcCallee(imported),
         .args = Mono.Span(Mono.ExprId).empty(),
     } } });
     _ = try mono.addDef(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Mono.Span(Mono.TypedLocal).empty(),
         .body = .{ .roc = body },
         .ret = unit_ty,
@@ -2457,11 +2457,11 @@ test "checkCaptureInvariants accepts a well-formed capture and catches a corrupt
     // One capturing function: a single binder-backed capture slot, and a
     // function reference that supplies it with a keyed operand.
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
-    const cap_local = try program.addLocalWithBinder(@enumFromInt(1), ty, binder);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
+    const cap_local = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, binder);
     const cap_span = try program.addTypedLocalSpan(&.{.{ .local = cap_local, .ty = ty }});
     const fn_id = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = Ast.Span(Ast.TypedLocal).empty(),
         .captures = cap_span,
         .body = .hosted,
@@ -2480,7 +2480,7 @@ test "checkCaptureInvariants accepts a well-formed capture and catches a corrupt
     // Intentionally skip capture maintenance: give the operand a CaptureId that
     // no longer matches its slot. The debug pass must catch it deterministically.
     program.setCaptureOperandInSpan(op_span, 0, .{
-        .id = checked.CaptureId.fromBinder(@enumFromInt(2)),
+        .id = checked.CaptureId.fromBinder(@fromBackingInt(@intCast(2))),
         .value = value,
     });
     try std.testing.expectEqualStrings(
@@ -2532,13 +2532,13 @@ test "capture finalization supplies the caller's active binder local" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
-    const captured_outer = try program.addLocalWithBinder(@enumFromInt(1), ty, binder);
-    const active_arg = try program.addLocalWithBinder(@enumFromInt(2), ty, binder);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
+    const captured_outer = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, binder);
+    const active_arg = try program.addLocalWithBinder(@fromBackingInt(@intCast(2)), ty, binder);
 
     const callee_body = try program.addExpr(.{ .ty = ty, .data = .{ .local = captured_outer } });
     const callee = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = .empty(),
         .captures = .empty(),
         .body = .{ .roc = callee_body },
@@ -2551,7 +2551,7 @@ test "capture finalization supplies the caller's active binder local" {
         .captures = .empty(),
     } } });
     _ = try program.addFn(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = try program.addTypedLocalSpan(&.{.{ .local = active_arg, .ty = ty }}),
         .captures = .empty(),
         .body = .{ .roc = call },
@@ -2579,10 +2579,10 @@ test "capture finalization preserves explicitly keyed capture permutation" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const first_binder: checked.PatternBinderId = @enumFromInt(1);
-    const second_binder: checked.PatternBinderId = @enumFromInt(2);
-    const first_capture = try program.addLocalWithBinder(@enumFromInt(1), ty, first_binder);
-    const second_capture = try program.addLocalWithBinder(@enumFromInt(2), ty, second_binder);
+    const first_binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
+    const second_binder: checked.PatternBinderId = @fromBackingInt(@intCast(2));
+    const first_capture = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, first_binder);
+    const second_capture = try program.addLocalWithBinder(@fromBackingInt(@intCast(2)), ty, second_binder);
     const first_capture_ref = try program.addExpr(.{ .ty = ty, .data = .{ .local = first_capture } });
     const second_capture_ref = try program.addExpr(.{ .ty = ty, .data = .{ .local = second_capture } });
     const callee_body = try program.addExpr(.{
@@ -2590,15 +2590,15 @@ test "capture finalization preserves explicitly keyed capture permutation" {
         .data = .{ .tuple = try program.addExprSpan(&.{ first_capture_ref, second_capture_ref }) },
     });
     const callee = try program.addFn(.{
-        .symbol = @enumFromInt(3),
+        .symbol = @fromBackingInt(@intCast(3)),
         .args = .empty(),
         .captures = .empty(),
         .body = .{ .roc = callee_body },
         .ret = ty,
     });
 
-    const first_arg = try program.addLocalWithBinder(@enumFromInt(4), ty, first_binder);
-    const second_arg = try program.addLocalWithBinder(@enumFromInt(5), ty, second_binder);
+    const first_arg = try program.addLocalWithBinder(@fromBackingInt(@intCast(4)), ty, first_binder);
+    const second_arg = try program.addLocalWithBinder(@fromBackingInt(@intCast(5)), ty, second_binder);
     const first_arg_ref = try program.addExpr(.{ .ty = ty, .data = .{ .local = first_arg } });
     const second_arg_ref = try program.addExpr(.{ .ty = ty, .data = .{ .local = second_arg } });
     const operands = try program.addCaptureOperandSpan(&.{
@@ -2610,7 +2610,7 @@ test "capture finalization preserves explicitly keyed capture permutation" {
         .captures = operands,
     } } });
     const caller = try program.addFn(.{
-        .symbol = @enumFromInt(6),
+        .symbol = @fromBackingInt(@intCast(6)),
         .args = try program.addTypedLocalSpan(&.{
             .{ .local = first_arg, .ty = ty },
             .{ .local = second_arg, .ty = ty },
@@ -2639,11 +2639,11 @@ test "lift boundary normalizes checked capture identity" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
     const checked_id = checked.CaptureId.fromBinder(binder);
     const rewritten_id = program.nextLiftCaptureId();
     const rewritten_capture = try program.addLocalWithCaptureIdentity(
-        @enumFromInt(1),
+        @fromBackingInt(@intCast(1)),
         ty,
         binder,
         rewritten_id,
@@ -2671,11 +2671,11 @@ test "lift boundary preserves an already-lifted capture identity" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
     const checked_id = checked.CaptureId.fromBinder(binder);
     const lifted_id = program.nextLiftCaptureId();
     const capture = try program.addLocalWithCaptureIdentity(
-        @enumFromInt(1),
+        @fromBackingInt(@intCast(1)),
         ty,
         binder,
         lifted_id,
@@ -2703,12 +2703,12 @@ test "capture graph does not activate an operand for a removed target slot" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
-    const stale_capture = try program.addLocalWithBinder(@enumFromInt(1), ty, binder);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
+    const stale_capture = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, binder);
     const stale_slots = try program.addTypedLocalSpan(&.{.{ .local = stale_capture, .ty = ty }});
     const callee_body = try program.addExpr(.{ .ty = ty, .data = .unit });
     const callee = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = .empty(),
         .captures = stale_slots,
         .body = .{ .roc = callee_body },
@@ -2725,7 +2725,7 @@ test "capture graph does not activate an operand for a removed target slot" {
         .captures = supplied_span,
     } } });
     const caller = try program.addFn(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = .empty(),
         .captures = .empty(),
         .body = .{ .roc = reference },
@@ -2748,12 +2748,12 @@ test "capture recomputation excludes replaced bodies from the active invariant" 
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(1);
-    const stale_capture = try program.addLocalWithBinder(@enumFromInt(1), ty, binder);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(1));
+    const stale_capture = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, binder);
     const stale_slots = try program.addTypedLocalSpan(&.{.{ .local = stale_capture, .ty = ty }});
     const callee_body = try program.addExpr(.{ .ty = ty, .data = .unit });
     const callee = try program.addFn(.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = .empty(),
         .captures = stale_slots,
         .body = .{ .roc = callee_body },
@@ -2789,7 +2789,7 @@ test "capture graph propagates recursive captures with a worklist" {
     defer program.deinit();
 
     const ty = try program.types.add(.zst);
-    const captured = try program.addLocalWithBinder(@enumFromInt(1), ty, @enumFromInt(1));
+    const captured = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), ty, @fromBackingInt(@intCast(1)));
     const first = try program.reserveFnSlot();
     const second = try program.reserveFnSlot();
 
@@ -2806,14 +2806,14 @@ test "capture graph propagates recursive captures with a worklist" {
         .captures = .empty(),
     } } });
     program.setFn(first, .{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .args = .empty(),
         .captures = .empty(),
         .body = .{ .roc = first_body },
         .ret = ty,
     });
     program.setFn(second, .{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .args = .empty(),
         .captures = .empty(),
         .body = .{ .roc = call_first },

@@ -171,7 +171,7 @@ test "record-tail evidence path is normalized to its logical row field" {
 
     try std.testing.expectEqual(@as(usize, 1), params.items.len);
     try std.testing.expectEqual(@as(usize, 1), params.items[0].path.len);
-    try std.testing.expectEqual(@intFromEnum(dispatch_evidence.PathStep.Kind.record_field), params.items[0].path[0].kind);
+    try std.testing.expectEqual(@backingInt(dispatch_evidence.PathStep.Kind.record_field), params.items[0].path[0].kind);
     try std.testing.expectEqual(@as(u32, @bitCast(tail_name)), params.items[0].path[0].data);
 }
 
@@ -201,9 +201,9 @@ test "tag-tail evidence path is normalized to its logical tag payload" {
 
     try std.testing.expectEqual(@as(usize, 1), params.items.len);
     try std.testing.expectEqual(@as(usize, 2), params.items[0].path.len);
-    try std.testing.expectEqual(@intFromEnum(dispatch_evidence.PathStep.Kind.tag_payload_tag), params.items[0].path[0].kind);
+    try std.testing.expectEqual(@backingInt(dispatch_evidence.PathStep.Kind.tag_payload_tag), params.items[0].path[0].kind);
     try std.testing.expectEqual(@as(u32, @bitCast(tail_name)), params.items[0].path[0].data);
-    try std.testing.expectEqual(@intFromEnum(dispatch_evidence.PathStep.Kind.tag_payload_index), params.items[0].path[1].kind);
+    try std.testing.expectEqual(@backingInt(dispatch_evidence.PathStep.Kind.tag_payload_index), params.items[0].path[1].kind);
     try std.testing.expectEqual(@as(u32, 0), params.items[0].path[1].data);
 }
 
@@ -255,11 +255,11 @@ test "imported scheme copy enumerates the same param list as the defining module
     const env_b = test_env_b.module_env;
     var found_matching_record = false;
     for (env_b.scheme_uses.items.items) |record| {
-        if (record.slot_kind != @intFromEnum(ModuleEnv.SchemeUseRecord.Slot.dispatch_target)) continue;
+        if (record.slot_kind != @backingInt(ModuleEnv.SchemeUseRecord.Slot.dispatch_target)) continue;
 
         var params_b = std.ArrayListUnmanaged(dispatch_evidence.EvidenceParam).empty;
         defer params_b.deinit(gpa);
-        try enumerate(gpa, env_b, @enumFromInt(record.scheme_root), &params_b);
+        try enumerate(gpa, env_b, @fromBackingInt(@intCast(record.scheme_root)), &params_b);
         if (params_b.items.len != 1) continue;
 
         const name_b = env_b.getIdentStoreConst().getText(params_b.items[0].constraint.fn_name);

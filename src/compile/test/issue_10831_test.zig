@@ -12,7 +12,7 @@ fn expectSingleSourceRefreshSpecialization(
 ) harness.LowerToLirHarnessError!void {
     var refresh_count: usize = 0;
     for (0..store.procSpecCount()) |index| {
-        const proc: lir.LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(index)));
+        const proc: lir.LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
         const name = store.procDebugName(proc) orelse continue;
         if (std.mem.eql(u8, name, "refresh")) refresh_count += 1;
     }

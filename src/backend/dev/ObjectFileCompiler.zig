@@ -343,10 +343,10 @@ fn compileWithCodeGen(
         symbols.append(allocator, sym) catch return CompilationError.OutOfMemory;
     }
     for (proc_specs, 0..) |_, i| {
-        const proc_id: lir.LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(i)));
+        const proc_id: lir.LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(i))));
         if (proc_specs[i].is_static_initializer) continue;
         const proc_symbol = codegen.compiledProcSymbol(proc_id) orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("ObjectFileCompiler invariant violated: LIR proc {d} was not compiled before symbol publication", .{i});
             }
             unreachable;
@@ -380,7 +380,7 @@ fn compileWithCodeGen(
     }
     for (static_rc_helpers) |helper_key| {
         const helper = codegen.compiledStaticDataRcHelperInfo(helper_key) orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic(
                     "ObjectFileCompiler invariant violated: static RC helper {x} was not compiled before symbol publication",
                     .{helper_key.encode()},
@@ -602,7 +602,7 @@ fn appendStaticDataExport(
     };
 
     const symbol_offset: usize = @intCast(data_export.symbol_offset);
-    if (builtin.mode == .Debug and symbol_offset > data_export.bytes.len) {
+    if (builtin.mode == .debug and symbol_offset > data_export.bytes.len) {
         std.debug.panic(
             "ObjectFileCompiler invariant violated: static data symbol offset {d} exceeds byte length {d}",
             .{ data_export.symbol_offset, data_export.bytes.len },
@@ -733,8 +733,8 @@ fn crossCompileDispatch(
 ) CompilationError!CompilationResult {
     const enum_info = @typeInfo(RocTarget).@"enum";
     const default_target = target.defaultCpuTarget();
-    inline for (enum_info.fields) |field| {
-        const comptime_target: RocTarget = @enumFromInt(field.value);
+    inline for (enum_info.field_values) |field_value| {
+        const comptime_target: RocTarget = @fromBackingInt(@intCast(field_value));
         if (comptime comptime_target.defaultCpuTarget() != comptime_target) continue;
         if (default_target == comptime_target) {
             const arch = comptime comptime_target.toCpuArch();

@@ -152,7 +152,7 @@ pub const ImportedFnId = Mono.ImportedFnId;
 pub const InlineScopeId = enum(u32) {
     _,
 
-    pub const none: InlineScopeId = @enumFromInt(std.math.maxInt(u32));
+    pub const none: InlineScopeId = @fromBackingInt(@intCast(std.math.maxInt(u32)));
 };
 
 /// One source-level procedure frame retained across post-check inlining.
@@ -214,45 +214,45 @@ pub const ProgramView = struct {
     }
 
     pub fn exprLoc(self: ProgramView, id: ExprId) base.SourceLoc {
-        return self.expr_locs[@intFromEnum(id)];
+        return self.expr_locs[@backingInt(id)];
     }
 
     pub fn exprRegion(self: ProgramView, id: ExprId) base.Region {
-        return self.expr_regions[@intFromEnum(id)];
+        return self.expr_regions[@backingInt(id)];
     }
 
     pub fn stmtLoc(self: ProgramView, id: StmtId) base.SourceLoc {
-        return self.stmt_locs[@intFromEnum(id)];
+        return self.stmt_locs[@backingInt(id)];
     }
 
     pub fn stmtRegion(self: ProgramView, id: StmtId) base.Region {
-        return self.stmt_regions[@intFromEnum(id)];
+        return self.stmt_regions[@backingInt(id)];
     }
 
     pub fn exprInlineScope(self: ProgramView, id: ExprId) InlineScopeId {
-        return self.expr_inline_scopes[@intFromEnum(id)];
+        return self.expr_inline_scopes[@backingInt(id)];
     }
 
     pub fn stmtInlineScope(self: ProgramView, id: StmtId) InlineScopeId {
-        return self.stmt_inline_scopes[@intFromEnum(id)];
+        return self.stmt_inline_scopes[@backingInt(id)];
     }
 
     pub fn inlineScope(self: ProgramView, id: InlineScopeId) InlineScope {
-        return self.inline_scopes[@intFromEnum(id)];
+        return self.inline_scopes[@backingInt(id)];
     }
 
     pub fn comptimeSite(self: ProgramView, id: ComptimeSiteId) ComptimeSite {
-        return self.comptime_sites[@intFromEnum(id)];
+        return self.comptime_sites[@backingInt(id)];
     }
 
     pub fn localName(self: ProgramView, id: LocalId) []const u8 {
-        return self.local_names[@intFromEnum(id)];
+        return self.local_names[@backingInt(id)];
     }
 
     /// The CaptureId of a local. Every local that participates in a capture set
     /// carries one; asserts it is present.
     pub fn captureIdOfLocal(self: ProgramView, id: LocalId) check.CheckedModule.CaptureId {
-        return self.locals[@intFromEnum(id)].capture_id orelse
+        return self.locals[@backingInt(id)].capture_id orelse
             Common.invariant("lifted capture local had no CaptureId");
     }
 
@@ -322,19 +322,19 @@ pub const ProgramView = struct {
     }
 
     pub fn exprTy(self: ProgramView, id: ExprId) Type.TypeId {
-        return self.exprs[@intFromEnum(id)].ty;
+        return self.exprs[@backingInt(id)].ty;
     }
 
     pub fn patTy(self: ProgramView, id: PatId) Type.TypeId {
-        return self.pats[@intFromEnum(id)].ty;
+        return self.pats[@backingInt(id)].ty;
     }
 
     pub fn pat(self: ProgramView, id: PatId) Pat {
-        return self.pats[@intFromEnum(id)];
+        return self.pats[@backingInt(id)];
     }
 
     pub fn stmt(self: ProgramView, id: StmtId) Stmt {
-        return self.stmts[@intFromEnum(id)];
+        return self.stmts[@backingInt(id)];
     }
 
     /// The two pieces direct LIR lowering needs to consider folding away the
@@ -356,14 +356,14 @@ pub const ProgramView = struct {
         scrutinee: ExprId,
         branches_span: Span(Branch),
     ) ?ListMapCanReuseMatch {
-        const scrutinee_data = self.exprs[@intFromEnum(scrutinee)].data;
+        const scrutinee_data = self.exprs[@backingInt(scrutinee)].data;
         if (std.meta.activeTag(scrutinee_data) != .call_proc) return null;
         const call = scrutinee_data.call_proc;
         const callee = switch (call.callee) {
             .lifted => |fn_id| fn_id,
             .func => return null,
         };
-        const callee_body = switch (self.fns[@intFromEnum(callee)].body) {
+        const callee_body = switch (self.fns[@backingInt(callee)].body) {
             .roc => |body| body,
             .hosted => return null,
         };
@@ -371,7 +371,7 @@ pub const ProgramView = struct {
 
         for (self.branchSpan(branches_span)) |branch| {
             if (branch.guard != null or branch.bindings.len != 0) return null;
-            const pat_data = self.pats[@intFromEnum(branch.pat)].data;
+            const pat_data = self.pats[@backingInt(branch.pat)].data;
             const tag = std.meta.activeTag(pat_data);
             if (tag == .wildcard or (tag == .int_lit and pat_data.int_lit.toI128() == 0)) {
                 return .{ .call_args = call.args, .zero_branch_body = branch.body };
@@ -382,7 +382,7 @@ pub const ProgramView = struct {
     }
 
     fn exprIsListMapCanReuseOp(self: ProgramView, expr_id: ExprId) bool {
-        const data = self.exprs[@intFromEnum(expr_id)].data;
+        const data = self.exprs[@backingInt(expr_id)].data;
         const tag = std.meta.activeTag(data);
         if (tag == .low_level) return data.low_level.op == .list_map_can_reuse;
         return tag == .block and data.block.statements.len == 0 and self.exprIsListMapCanReuseOp(data.block.final_expr);
@@ -792,19 +792,19 @@ pub const Program = struct {
     }
 
     pub fn addFn(self: *Program, fn_: Fn) std.mem.Allocator.Error!FnId {
-        const id: FnId = @enumFromInt(@as(u32, @intCast(self.fns.len())));
+        const id: FnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.fns.len()))));
         try self.fns.append(self.allocator, fn_);
         return id;
     }
 
     pub fn reserveFnSlot(self: *Program) std.mem.Allocator.Error!FnId {
-        const id: FnId = @enumFromInt(@as(u32, @intCast(self.fns.len())));
+        const id: FnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.fns.len()))));
         try self.fns.append(self.allocator, undefined);
         return id;
     }
 
     pub fn setFn(self: *Program, id: FnId, fn_: Fn) void {
-        self.fns.set(@intFromEnum(id), fn_);
+        self.fns.set(@backingInt(id), fn_);
     }
 
     pub fn setFnAt(self: *Program, index: usize, fn_: Fn) void {
@@ -812,7 +812,7 @@ pub const Program = struct {
     }
 
     pub fn setFnCaptures(self: *Program, id: FnId, captures: Span(TypedLocal)) void {
-        self.fns.getPtrImmediate(@intFromEnum(id)).captures = captures;
+        self.fns.getPtrImmediate(@backingInt(id)).captures = captures;
     }
 
     pub fn setProcDebugName(self: *Program, symbol: Common.Symbol, name: names.ExportNameId) std.mem.Allocator.Error!void {
@@ -824,7 +824,7 @@ pub const Program = struct {
     }
 
     pub fn addExpr(self: *Program, expr: Expr) std.mem.Allocator.Error!ExprId {
-        const id: ExprId = @enumFromInt(@as(u32, @intCast(self.exprs.len())));
+        const id: ExprId = @fromBackingInt(@intCast(@as(u32, @intCast(self.exprs.len()))));
         try self.exprs.append(self.allocator, expr);
         try self.expr_locs.append(self.allocator, self.current_loc);
         try self.expr_regions.append(self.allocator, self.current_region);
@@ -834,50 +834,50 @@ pub const Program = struct {
 
     /// Source location of an expression.
     pub fn exprLoc(self: *const Program, id: ExprId) base.SourceLoc {
-        return self.expr_locs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.expr_locs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Checked source region of an expression.
     pub fn exprRegion(self: *const Program, id: ExprId) base.Region {
-        return self.expr_regions.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.expr_regions.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Source location of a statement.
     pub fn stmtLoc(self: *const Program, id: StmtId) base.SourceLoc {
-        return self.stmt_locs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmt_locs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Checked source region of a statement.
     pub fn stmtRegion(self: *const Program, id: StmtId) base.Region {
-        return self.stmt_regions.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmt_regions.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn exprInlineScope(self: *const Program, id: ExprId) InlineScopeId {
-        return self.expr_inline_scopes.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.expr_inline_scopes.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn stmtInlineScope(self: *const Program, id: StmtId) InlineScopeId {
-        return self.stmt_inline_scopes.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmt_inline_scopes.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn inlineScope(self: *const Program, id: InlineScopeId) InlineScope {
-        return self.inline_scopes.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.inline_scopes.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn addInlineScope(self: *Program, scope: InlineScope) std.mem.Allocator.Error!InlineScopeId {
-        const id: InlineScopeId = @enumFromInt(@as(u32, @intCast(self.inline_scopes.len())));
+        const id: InlineScopeId = @fromBackingInt(@intCast(@as(u32, @intCast(self.inline_scopes.len()))));
         try self.inline_scopes.append(self.allocator, scope);
         return id;
     }
 
     pub fn addPat(self: *Program, pat_: Pat) std.mem.Allocator.Error!PatId {
-        const id: PatId = @enumFromInt(@as(u32, @intCast(self.pats.len())));
+        const id: PatId = @fromBackingInt(@intCast(@as(u32, @intCast(self.pats.len()))));
         try self.pats.append(self.allocator, pat_);
         return id;
     }
 
     pub fn addStmt(self: *Program, stmt_: Stmt) std.mem.Allocator.Error!StmtId {
-        const id: StmtId = @enumFromInt(@as(u32, @intCast(self.stmts.len())));
+        const id: StmtId = @fromBackingInt(@intCast(@as(u32, @intCast(self.stmts.len()))));
         try self.stmts.append(self.allocator, stmt_);
         try self.stmt_locs.append(self.allocator, self.current_loc);
         try self.stmt_regions.append(self.allocator, self.current_region);
@@ -886,7 +886,7 @@ pub const Program = struct {
     }
 
     pub fn comptimeSite(self: *const Program, id: ComptimeSiteId) ComptimeSite {
-        return self.comptime_sites.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.comptime_sites.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn comptimeSiteCount(self: *const Program) usize {
@@ -899,7 +899,7 @@ pub const Program = struct {
 
     /// Source-level name of a local; empty for compiler-generated temporaries.
     pub fn localName(self: *const Program, id: LocalId) []const u8 {
-        return self.local_names.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.local_names.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn sourceFileNames(self: *const Program) []const []const u8 {
@@ -935,7 +935,7 @@ pub const Program = struct {
     }
 
     pub fn getFn(self: *const Program, id: FnId) Fn {
-        return self.fns.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.fns.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getFnAt(self: *const Program, index: usize) Fn {
@@ -947,7 +947,7 @@ pub const Program = struct {
     }
 
     pub fn getExpr(self: *const Program, id: ExprId) Expr {
-        return self.exprs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.exprs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn exprsView(self: *const Program) []const Expr {
@@ -955,7 +955,7 @@ pub const Program = struct {
     }
 
     pub fn setExpr(self: *Program, id: ExprId, expr: Expr) void {
-        self.exprs.set(@intFromEnum(id), expr);
+        self.exprs.set(@backingInt(id), expr);
     }
 
     pub fn getExprAt(self: *const Program, index: usize) Expr {
@@ -963,7 +963,7 @@ pub const Program = struct {
     }
 
     pub fn setExprData(self: *Program, id: ExprId, data: ExprData) void {
-        self.exprs.getPtrImmediate(@intFromEnum(id)).data = data;
+        self.exprs.getPtrImmediate(@backingInt(id)).data = data;
     }
 
     pub fn setExprDataAt(self: *Program, index: usize, data: ExprData) void {
@@ -971,7 +971,7 @@ pub const Program = struct {
     }
 
     pub fn getPat(self: *const Program, id: PatId) Pat {
-        return self.pats.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.pats.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getPatAt(self: *const Program, index: usize) Pat {
@@ -979,7 +979,7 @@ pub const Program = struct {
     }
 
     pub fn getStmt(self: *const Program, id: StmtId) Stmt {
-        return self.stmts.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmts.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getStmtAt(self: *const Program, index: usize) Stmt {
@@ -991,7 +991,7 @@ pub const Program = struct {
     }
 
     pub fn getLocal(self: *const Program, id: LocalId) Local {
-        return self.locals.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.locals.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getLocalAt(self: *const Program, index: usize) Local {
@@ -1003,11 +1003,11 @@ pub const Program = struct {
     }
 
     pub fn getStringLiteral(self: *const Program, id: StringLiteralId) Mono.StringLiteral {
-        return self.string_literals.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.string_literals.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn addStringLiteral(self: *Program, text: []const u8) std.mem.Allocator.Error!StringLiteralId {
-        const id: StringLiteralId = @enumFromInt(@as(u32, @intCast(self.string_literals.len())));
+        const id: StringLiteralId = @fromBackingInt(@intCast(@as(u32, @intCast(self.string_literals.len()))));
         const owned = try self.allocator.dupe(u8, text);
         errdefer self.allocator.free(owned);
         try self.string_literals.append(self.allocator, .{
@@ -1040,7 +1040,7 @@ pub const Program = struct {
         ty: Type.TypeId,
         binder: ?check.CheckedModule.PatternBinderId,
     ) std.mem.Allocator.Error!LocalId {
-        const id: LocalId = @enumFromInt(@as(u32, @intCast(self.locals.len())));
+        const id: LocalId = @fromBackingInt(@intCast(@as(u32, @intCast(self.locals.len()))));
         const checked_capture_id = if (binder) |b| check.CheckedModule.CaptureId.fromBinder(b) else null;
         try self.locals.append(self.allocator, .{
             .id = id,
@@ -1081,7 +1081,7 @@ pub const Program = struct {
             Common.invariant("capture replacement CaptureId had no checked binder");
         }
 
-        const id: LocalId = @enumFromInt(@as(u32, @intCast(self.locals.len())));
+        const id: LocalId = @fromBackingInt(@intCast(@as(u32, @intCast(self.locals.len()))));
         try self.locals.append(self.allocator, .{
             .id = id,
             .symbol = symbol,
@@ -1191,12 +1191,12 @@ pub const Program = struct {
     /// The CaptureId of a local. Every local that participates in a capture set
     /// carries one; asserts it is present.
     pub fn captureIdOfLocal(self: *const Program, id: LocalId) check.CheckedModule.CaptureId {
-        return self.locals.unsafeRawItemsForView()[@intFromEnum(id)].capture_id orelse
+        return self.locals.unsafeRawItemsForView()[@backingInt(id)].capture_id orelse
             Common.invariant("lifted capture local had no CaptureId");
     }
 
     pub fn ensureLiftCaptureId(self: *Program, id: LocalId) check.CheckedModule.CaptureId {
-        const local = self.locals.getPtrImmediate(@intFromEnum(id));
+        const local = self.locals.getPtrImmediate(@backingInt(id));
         if (local.capture_id == null) {
             local.capture_id = self.nextLiftCaptureId();
         }
@@ -1259,14 +1259,14 @@ pub const Program = struct {
         scrutinee: ExprId,
         branches_span: Span(Branch),
     ) ?ListMapCanReuseMatch {
-        const scrutinee_data = self.exprs.unsafeRawItemsForView()[@intFromEnum(scrutinee)].data;
+        const scrutinee_data = self.exprs.unsafeRawItemsForView()[@backingInt(scrutinee)].data;
         if (std.meta.activeTag(scrutinee_data) != .call_proc) return null;
         const call = scrutinee_data.call_proc;
         const callee = switch (call.callee) {
             .lifted => |fn_id| fn_id,
             .func => return null,
         };
-        const callee_body = switch (self.fns.unsafeRawItemsForView()[@intFromEnum(callee)].body) {
+        const callee_body = switch (self.fns.unsafeRawItemsForView()[@backingInt(callee)].body) {
             .roc => |body| body,
             .hosted => return null,
         };
@@ -1276,7 +1276,7 @@ pub const Program = struct {
         for (0..branches.len) |index| {
             const branch = GuardedList.at(branches, index);
             if (branch.guard != null or branch.bindings.len != 0) return null;
-            const pat_data = self.pats.unsafeRawItemsForView()[@intFromEnum(branch.pat)].data;
+            const pat_data = self.pats.unsafeRawItemsForView()[@backingInt(branch.pat)].data;
             const tag = std.meta.activeTag(pat_data);
             if (tag == .wildcard or (tag == .int_lit and pat_data.int_lit.toI128() == 0)) {
                 return .{ .call_args = call.args, .zero_branch_body = branch.body };
@@ -1296,7 +1296,7 @@ pub const Program = struct {
     };
 
     fn exprIsListMapCanReuseOp(self: *const Program, expr_id: ExprId) bool {
-        const data = self.exprs.unsafeRawItemsForView()[@intFromEnum(expr_id)].data;
+        const data = self.exprs.unsafeRawItemsForView()[@backingInt(expr_id)].data;
         const tag = std.meta.activeTag(data);
         if (tag == .low_level) return data.low_level.op == .list_map_can_reuse;
         return tag == .block and data.block.statements.len == 0 and self.exprIsListMapCanReuseOp(data.block.final_expr);
@@ -1323,19 +1323,19 @@ pub const Program = struct {
     }
 
     pub fn exprTy(self: *const Program, id: ExprId) Type.TypeId {
-        return self.exprs.unsafeRawItemsForView()[@intFromEnum(id)].ty;
+        return self.exprs.unsafeRawItemsForView()[@backingInt(id)].ty;
     }
 
     pub fn patTy(self: *const Program, id: PatId) Type.TypeId {
-        return self.pats.unsafeRawItemsForView()[@intFromEnum(id)].ty;
+        return self.pats.unsafeRawItemsForView()[@backingInt(id)].ty;
     }
 
     pub fn pat(self: *const Program, id: PatId) Pat {
-        return self.pats.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.pats.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn stmt(self: *const Program, id: StmtId) Stmt {
-        return self.stmts.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmts.unsafeRawItemsForView()[@backingInt(id)];
     }
 };
 

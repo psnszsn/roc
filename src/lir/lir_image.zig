@@ -84,7 +84,7 @@ pub const Header = extern struct {
     magic: u32,
     format_version: u32,
     image_size: u64,
-    _padding: [8]u8 = [_]u8{0} ** 8,
+    _padding: [8]u8 = @as([8]u8, @splat(0)),
     root_procs: ArrayRef,
     platform_entrypoints: ArrayRef,
     store: LirStoreImage,
@@ -832,9 +832,9 @@ comptime {
     // this file, then update the expected field count below. A same-build
     // omission (a new store field left out of the image plumbing) is otherwise
     // silent, since `FORMAT_VERSION` only guards cross-version mismatches.
-    std.debug.assert(@typeInfo(LirStore).@"struct".fields.len == 30);
-    std.debug.assert(@typeInfo(layout_mod.Store).@"struct".fields.len == 12);
-    std.debug.assert(@typeInfo(base.StringLiteral.Store).@"struct".fields.len == 1);
+    std.debug.assert(@typeInfo(LirStore).@"struct".field_names.len == 30);
+    std.debug.assert(@typeInfo(layout_mod.Store).@"struct".field_names.len == 12);
+    std.debug.assert(@typeInfo(base.StringLiteral.Store).@"struct".field_names.len == 1);
 }
 
 /// Fill the reserved LIR image header in a contiguous buffer.
@@ -1127,15 +1127,15 @@ test "LIR image views empty and populated boxy tables" {
     try std.testing.expectEqual(@as(usize, 0), empty_view.boxy_method_hidden_desc_sources.len);
     try std.testing.expectEqual(@as(usize, 0), empty_view.boxy_erased_arg_layouts.len);
 
-    try lowered.boxy_desc_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try lowered.boxy_desc_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     try lowered.boxy_payload_steps.append(allocator, .{ .dynamic = .{
         .op = .copy,
-        .desc = .{ .static = @enumFromInt(fixtureTableIndex(0)) },
+        .desc = .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) },
     } });
     try lowered.boxy_method_arg_layouts.append(allocator, .zst);
     try lowered.boxy_erased_arg_layouts.append(allocator, .u64);
     try lowered.boxy_method_hidden_desc_sources.append(allocator, .{ .slot = 0 });
-    try lowered.boxy_dict_refs.append(allocator, .{ .static = @enumFromInt(fixtureTableIndex(0)) });
+    try lowered.boxy_dict_refs.append(allocator, .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) });
     try lowered.boxy_tag_variants.append(allocator, .{
         .name = try lowered.store.insertString("Ok"),
         .discriminant = 0,
@@ -1145,11 +1145,11 @@ test "LIR image views empty and populated boxy tables" {
     });
     try lowered.boxy_tag_payload_descs.append(allocator, .{
         .payload_index = 0,
-        .desc = .{ .static = @enumFromInt(fixtureTableIndex(0)) },
+        .desc = .{ .static = @fromBackingInt(@intCast(fixtureTableIndex(0))) },
     });
     try lowered.boxy_method_slots.append(allocator, .{
-        .method = @enumFromInt(fixtureTableIndex(0)),
-        .proc = @enumFromInt(fixtureTableIndex(0)),
+        .method = @fromBackingInt(@intCast(fixtureTableIndex(0))),
+        .proc = @fromBackingInt(@intCast(fixtureTableIndex(0))),
         .adapter = .{
             .arg_layouts = .{ .start = 0, .len = 1 },
             .arg_descs = .{ .start = 0, .len = 1 },
@@ -1165,7 +1165,7 @@ test "LIR image views empty and populated boxy tables" {
         .tag_variants = .{ .start = 0, .len = 1 },
         .copy_plan = .{ .start = 0, .len = 1 },
         .presence_slot_present_discriminant = 1,
-        .inspect_method = @enumFromInt(fixtureTableIndex(0)),
+        .inspect_method = @fromBackingInt(@intCast(fixtureTableIndex(0))),
     });
     try lowered.boxy_dicts.append(allocator, .{
         .method_slots = .{ .start = 0, .len = 1 },
@@ -1225,7 +1225,7 @@ test "LIR image views empty and populated boxy tables" {
     try std.testing.expectEqual(@as(usize, 1), populated_view.boxy_erased_arg_layouts.len);
     try std.testing.expect(populated_view.boxy_type_descs[0].contains_refcounted);
     try std.testing.expectEqual(@as(?u16, 1), populated_view.boxy_type_descs[0].presence_slot_present_discriminant);
-    try std.testing.expectEqual(@as(u32, 0), @intFromEnum(populated_view.boxy_type_descs[0].inspect_method.?));
+    try std.testing.expectEqual(@as(u32, 0), @backingInt(populated_view.boxy_type_descs[0].inspect_method.?));
     try std.testing.expectEqual(@as(u16, 0), populated_view.boxy_tag_variants[0].discriminant);
     try std.testing.expectEqualStrings("Ok", populated_view.store.getString(populated_view.boxy_tag_variants[0].name));
     try std.testing.expectEqual(@as(u32, 0), populated_view.boxy_tag_payload_descs[0].payload_index);
@@ -1321,7 +1321,7 @@ test "LIR image copies and round-trips every populated store field" {
             if (T == bool) return ordinal & 1 == 1;
             const info = @typeInfo(T);
             if (info == .int) return @truncate(ordinal);
-            if (info == .@"enum") return @enumFromInt(@as(info.@"enum".tag_type, @truncate(ordinal)));
+            if (info == .@"enum") return @fromBackingInt(@intCast(@as(info.@"enum".tag_type, @truncate(ordinal))));
             @compileError("distinctValue: unhandled field type " ++ @typeName(T));
         }
         /// Build a populated `SafeMultiList(T)` backed by the fixed buffer,
@@ -1331,10 +1331,11 @@ test "LIR image copies and round-trips every populated store field" {
             var mal: std.MultiArrayList(T) = .{};
             try mal.resize(alloc, count);
             const slice = mal.slice();
-            inline for (std.meta.fields(T), 0..) |field, field_index| {
-                const column = slice.items(@field(std.MultiArrayList(T).Field, field.name));
+            const info = @typeInfo(T).@"struct";
+            inline for (info.field_names, info.field_types, 0..) |field_name, FieldType, field_index| {
+                const column = slice.items(@field(std.MultiArrayList(T).Field, field_name));
                 for (column, 0..) |*value, i| {
-                    value.* = distinctValue(field.type, seed + field_index * 64 + i);
+                    value.* = distinctValue(FieldType, seed + field_index * 64 + i);
                 }
             }
             return .{ .items = mal };

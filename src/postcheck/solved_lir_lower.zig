@@ -168,7 +168,7 @@ pub fn run(
     try lowerer.bindRoots();
     try lowerer.lowerReachableFns();
     try lowerer.writeRuntimeSchemas();
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         try lowerer.verifyMaterializedDecisions();
     }
 
@@ -286,14 +286,14 @@ const FnSpec = struct {
 const FnSpecContext = struct {
     pub fn hash(_: FnSpecContext, spec: FnSpec) u64 {
         var hasher = std.hash.Wyhash.init(0);
-        std.hash.autoHash(&hasher, @intFromEnum(spec.source));
-        std.hash.autoHash(&hasher, @intFromEnum(spec.solved_fn_ty));
+        std.hash.autoHash(&hasher, @backingInt(spec.source));
+        std.hash.autoHash(&hasher, @backingInt(spec.solved_fn_ty));
         std.hash.autoHash(&hasher, spec.abi);
         std.hash.autoHash(&hasher, spec.captures.source);
         std.hash.autoHash(&hasher, spec.captures.start);
         std.hash.autoHash(&hasher, spec.captures.len);
         if (spec.capture_ty) |capture_ty| {
-            std.hash.autoHash(&hasher, @intFromEnum(capture_ty));
+            std.hash.autoHash(&hasher, @backingInt(capture_ty));
         } else {
             std.hash.autoHash(&hasher, @as(u32, std.math.maxInt(u32)));
         }
@@ -301,7 +301,7 @@ const FnSpecContext = struct {
             .none => std.hash.autoHash(&hasher, @as(u8, 0)),
             .erased_callable => |capture_ty| {
                 std.hash.autoHash(&hasher, @as(u8, 1));
-                std.hash.autoHash(&hasher, if (capture_ty) |ty| @intFromEnum(ty) else std.math.maxInt(u32));
+                std.hash.autoHash(&hasher, if (capture_ty) |ty| @backingInt(ty) else std.math.maxInt(u32));
             },
         }
         return hasher.final();
@@ -327,7 +327,7 @@ const CaptureSpanContext = struct {
         std.hash.autoHash(&hasher, span.source);
         std.hash.autoHash(&hasher, span.start);
         std.hash.autoHash(&hasher, span.len);
-        std.hash.autoHash(&hasher, @intFromEnum(span.solved_fn_ty));
+        std.hash.autoHash(&hasher, @backingInt(span.solved_fn_ty));
         return hasher.final();
     }
 
@@ -778,7 +778,7 @@ const Lowerer = struct {
         const lifted = self.solved.lifted.view();
         try self.result.store.inline_scopes.ensureTotalCapacity(self.allocator, lifted.inline_scopes.len);
         for (lifted.inline_scopes, 0..) |scope, index| {
-            const expected: LIR.InlineScopeId = @enumFromInt(@as(u32, @intCast(index)));
+            const expected: LIR.InlineScopeId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const actual = try self.result.store.addInlineScope(.{
                 .source_symbol = lirSymbol(scope.source_symbol),
                 .source_name = try self.lowerInlineScopeSourceName(scope.source_symbol),
@@ -839,7 +839,7 @@ const Lowerer = struct {
 
     fn indexSourceFns(self: *Lowerer) Common.LowerError!void {
         for (0..self.solved.lifted.fnCount()) |index| {
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             const fn_ = self.solved.lifted.getFn(fn_id);
             const result = try self.source_symbols.getOrPut(fn_.symbol);
             if (result.found_existing) Common.invariant("two lifted functions had the same symbol");
@@ -878,7 +878,7 @@ const Lowerer = struct {
         while (fn_queue_index < self.fn_reach_queue.items.len or initializer_queue_index < self.static_initializer_queue.items.len) {
             while (fn_queue_index < self.fn_reach_queue.items.len) : (fn_queue_index += 1) {
                 const fn_id = self.fn_reach_queue.items[fn_queue_index];
-                const fn_index = @intFromEnum(fn_id);
+                const fn_index = @backingInt(fn_id);
                 if (self.fn_written.items[fn_index]) continue;
                 try self.lowerFnSpec(fn_id, self.fn_specs.items[fn_index]);
             }
@@ -946,7 +946,7 @@ const Lowerer = struct {
 
     fn lowerFnSpec(self: *Lowerer, fn_id: Type.FnId, spec: FnSpec) Common.LowerError!void {
         const proc_id = try self.procPlaceholder(fn_id);
-        const entry = self.fn_entries.items[@intFromEnum(fn_id)];
+        const entry = self.fn_entries.items[@backingInt(fn_id)];
         const source_fn = self.solved.lifted.getFn(spec.source);
 
         self.captures.clearRetainingCapacity();
@@ -978,7 +978,7 @@ const Lowerer = struct {
             const arg = GuardedList.at(lifted_args, i);
             const proc_arg = GuardedList.at(proc_args, i);
             const arg_ty = try self.lowerType(GuardedList.at(solved_args, i));
-            self.local_map[@intFromEnum(arg.local)] = proc_arg;
+            self.local_map[@backingInt(arg.local)] = proc_arg;
             try self.typed_local_map.put(.{
                 .local = arg.local,
                 .ty = arg_ty,
@@ -1078,7 +1078,7 @@ const Lowerer = struct {
             },
         }
 
-        self.fn_written.items[@intFromEnum(fn_id)] = true;
+        self.fn_written.items[@backingInt(fn_id)] = true;
     }
 
     fn hostedProcForSource(self: *Lowerer, source: ?Mono.FnTemplate) Common.LowerError!?LIR.HostedProc {
@@ -1102,7 +1102,7 @@ const Lowerer = struct {
     }
 
     fn ensureOwnFnSpec(self: *Lowerer, fn_id: Lifted.FnId, abi: CaptureAbi) Common.LowerError!Type.FnId {
-        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys.items[@intFromEnum(fn_id)]);
+        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys.items[@backingInt(fn_id)]);
         if (self.solved.types.rootContent(solved_fn_ty) != .func) Common.invariant("direct Lambda Mono function table contains a non-function type");
         return try self.ensureFnSpec(fn_id, solved_fn_ty, abi, try self.ownCaptureSpanForFn(fn_id), .none);
     }
@@ -1112,7 +1112,7 @@ const Lowerer = struct {
         fn_id: Lifted.FnId,
         capture_ty: ?Type.TypeId,
     ) Common.LowerError!Type.FnId {
-        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys.items[@intFromEnum(fn_id)]);
+        const solved_fn_ty = self.solved.types.root(self.solved.fn_tys.items[@backingInt(fn_id)]);
         if (self.solved.types.rootContent(solved_fn_ty) != .func) Common.invariant("direct Lambda Mono function table contains a non-function type");
         return try self.ensureFnSpec(
             fn_id,
@@ -1145,7 +1145,7 @@ const Lowerer = struct {
         const result = try self.fn_spec_map.getOrPut(spec);
         if (result.found_existing) return result.value_ptr.*;
 
-        const fn_id: Type.FnId = @enumFromInt(@as(u32, @intCast(self.fn_specs.items.len)));
+        const fn_id: Type.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.fn_specs.items.len))));
         result.value_ptr.* = fn_id;
         try self.fn_specs.append(self.allocator, spec);
         try self.fn_written.append(self.allocator, false);
@@ -1172,7 +1172,7 @@ const Lowerer = struct {
             .erased => try self.erasedCapturePtrType(),
         };
 
-        self.fn_entries.items[@intFromEnum(fn_id)] = .{
+        self.fn_entries.items[@backingInt(fn_id)] = .{
             .spec = spec,
             .symbol = symbol,
             .source = source_fn.source,
@@ -1185,7 +1185,7 @@ const Lowerer = struct {
     }
 
     fn markReachableFn(self: *Lowerer, fn_id: Type.FnId) Common.LowerError!LIR.LirProcSpecId {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         if (index >= self.fn_entries.items.len) Common.invariant("direct LIR reachability referenced a missing function spec");
         const proc = try self.procPlaceholder(fn_id);
         if (!self.fn_reachable.items[index]) {
@@ -1196,13 +1196,13 @@ const Lowerer = struct {
     }
 
     fn procPlaceholder(self: *Lowerer, fn_id: Type.FnId) Common.LowerError!LIR.LirProcSpecId {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         if (self.fn_entries.items[index].proc) |existing| return existing;
         return try self.finalizeFnProc(fn_id);
     }
 
     fn finalizeFnProc(self: *Lowerer, fn_id: Type.FnId) Common.LowerError!LIR.LirProcSpecId {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         var entry = self.fn_entries.items[index];
         const spec = entry.spec;
         const source_fn = self.solved.lifted.getFn(spec.source);
@@ -1315,7 +1315,7 @@ const Lowerer = struct {
     }
 
     fn ownCaptureSpanForFn(self: *Lowerer, fn_id: Lifted.FnId) std.mem.Allocator.Error!CaptureSpanId {
-        const raw_fn = @intFromEnum(fn_id);
+        const raw_fn = @backingInt(fn_id);
         if (raw_fn >= self.own_capture_spans.len) Common.invariant("own capture span requested for a missing lifted function");
         if (self.own_capture_spans[raw_fn]) |existing| return existing;
 
@@ -1340,7 +1340,7 @@ const Lowerer = struct {
                 .binder = local.binder,
                 .capture_id = local.capture_id,
                 .checked_capture_id = local.checked_capture_id,
-                .ty = self.solved.local_tys.items[@intFromEnum(capture.local)],
+                .ty = self.solved.local_tys.items[@backingInt(capture.local)],
             });
         }
 
@@ -1378,7 +1378,7 @@ const Lowerer = struct {
             try self.noteReturnForwardingLocal(target, source);
             return try self.assignTypedBoundary(target, ty, source, ty, next);
         }
-        if (self.local_map[@intFromEnum(local)]) |source| {
+        if (self.local_map[@backingInt(local)]) |source| {
             try self.noteLocal(source);
             const source_ty = try self.lowerLocalTy(local);
             try self.noteReturnForwardingLocal(target, source);
@@ -1512,7 +1512,7 @@ const Lowerer = struct {
 
     fn memberCapturesForExpr(self: *Lowerer, expr_id: Lifted.ExprId, fn_id: Lifted.FnId) CaptureSpanId {
         const fn_symbol = self.solved.lifted.getFn(fn_id).symbol;
-        const expr_ty = self.solved.expr_tys.items[@intFromEnum(expr_id)];
+        const expr_ty = self.solved.expr_tys.items[@backingInt(expr_id)];
         const expr_content = self.solved.types.rootContent(expr_ty);
         const callable = if (expr_content == .func)
             expr_content.func.callable
@@ -1589,7 +1589,7 @@ const Lowerer = struct {
     }
 
     fn lowerExprTy(self: *Lowerer, expr_id: Lifted.ExprId) Common.LowerError!Type.TypeId {
-        return try self.lowerType(self.solved.expr_tys.items[@intFromEnum(expr_id)]);
+        return try self.lowerType(self.solved.expr_tys.items[@backingInt(expr_id)]);
     }
 
     fn lowerExprContextTy(self: *Lowerer, expr_id: Lifted.ExprId) Common.LowerError!Type.TypeId {
@@ -1615,11 +1615,11 @@ const Lowerer = struct {
     }
 
     fn lowerPatTy(self: *Lowerer, pat_id: Lifted.PatId) Common.LowerError!Type.TypeId {
-        return try self.lowerType(self.solved.pat_tys.items[@intFromEnum(pat_id)]);
+        return try self.lowerType(self.solved.pat_tys.items[@backingInt(pat_id)]);
     }
 
     fn lowerLocalTy(self: *Lowerer, local: Lifted.LocalId) Common.LowerError!Type.TypeId {
-        return try self.lowerType(self.solved.local_tys.items[@intFromEnum(local)]);
+        return try self.lowerType(self.solved.local_tys.items[@backingInt(local)]);
     }
 
     fn lowerType(self: *Lowerer, solved_ty: SolvedType.TypeVarId) Common.LowerError!Type.TypeId {
@@ -1770,7 +1770,7 @@ const Lowerer = struct {
                 .id = undefined,
                 .source = member.lambda,
                 .target = target,
-                .capture_ty = self.fn_entries.items[@intFromEnum(target)].spec.capture_ty,
+                .capture_ty = self.fn_entries.items[@backingInt(target)].spec.capture_ty,
             };
         }
         return try self.types.addFnVariants(variants);
@@ -1784,7 +1784,7 @@ const Lowerer = struct {
             const source = self.sourceFnForSymbol(member.lambda);
             const target = try self.ensureFnSpec(
                 source,
-                self.solved.types.root(self.solved.fn_tys.items[@intFromEnum(source)]),
+                self.solved.types.root(self.solved.fn_tys.items[@backingInt(source)]),
                 abi,
                 CaptureSpanId.fromSolved(member.captures),
                 .none,
@@ -1793,7 +1793,7 @@ const Lowerer = struct {
                 .id = undefined,
                 .source = member.lambda,
                 .target = target,
-                .capture_ty = self.fn_entries.items[@intFromEnum(target)].spec.capture_ty,
+                .capture_ty = self.fn_entries.items[@backingInt(target)].spec.capture_ty,
             };
         }
         return try self.types.addFnVariants(variants);
@@ -1821,7 +1821,7 @@ const Lowerer = struct {
 
     fn noteLocal(self: *Lowerer, local: LIR.LocalId) Common.LowerError!void {
         if (self.current_proc_locals) |locals| {
-            try locals.put(self.allocator, @intFromEnum(local), {});
+            try locals.put(self.allocator, @backingInt(local), {});
         }
     }
 
@@ -1834,7 +1834,7 @@ const Lowerer = struct {
     }
 
     fn lowerComptimeSite(self: *Lowerer, site: Lifted.ComptimeSiteId) Common.LowerError!LIR.ComptimeSiteId {
-        const index = @intFromEnum(site);
+        const index = @backingInt(site);
         if (self.comptime_site_map[index]) |existing| return existing;
         const proc = self.current_proc orelse Common.invariant("compile-time site reached direct LIR lowering outside a proc");
         const source = self.solved.lifted.comptimeSite(site);
@@ -1852,7 +1852,7 @@ const Lowerer = struct {
         const sorted = try self.allocator.alloc(LIR.LocalId, raw_ids.len);
         defer self.allocator.free(sorted);
         for (raw_ids, 0..) |raw_id, i| {
-            sorted[i] = @enumFromInt(raw_id);
+            sorted[i] = @fromBackingInt(@intCast(raw_id));
         }
         std.mem.sort(LIR.LocalId, sorted, {}, localIdLessThan);
         return try self.result.store.addLocalSpan(sorted);
@@ -1866,12 +1866,12 @@ const Lowerer = struct {
     }
 
     fn localIdLessThan(_: void, a: LIR.LocalId, b: LIR.LocalId) bool {
-        return @intFromEnum(a) < @intFromEnum(b);
+        return @backingInt(a) < @backingInt(b);
     }
 
     fn bindRoots(self: *Lowerer) Common.LowerError!void {
         for (self.roots.items) |root| {
-            const entry = self.fn_entries.items[@intFromEnum(root.fn_id)];
+            const entry = self.fn_entries.items[@backingInt(root.fn_id)];
             const proc = try self.markReachableFn(root.fn_id);
             try self.result.root_procs.append(self.allocator, proc);
             var metadata = RootMetadata.fromCheckedRoot(root.request);
@@ -1912,7 +1912,7 @@ const Lowerer = struct {
     }
 
     fn layoutOnlyConstPlan(self: *Lowerer) Common.LowerError!LirProgram.ConstPlanId {
-        const id: LirProgram.ConstPlanId = @enumFromInt(@as(u32, @intCast(self.result.const_plans.items.len)));
+        const id: LirProgram.ConstPlanId = @fromBackingInt(@intCast(@as(u32, @intCast(self.result.const_plans.items.len))));
         try self.result.const_plans.append(self.allocator, .layout_only);
         return id;
     }
@@ -1930,7 +1930,7 @@ const Lowerer = struct {
             return backing_plan;
         }
 
-        const id: LirProgram.ConstPlanId = @enumFromInt(@as(u32, @intCast(self.result.const_plans.items.len)));
+        const id: LirProgram.ConstPlanId = @fromBackingInt(@intCast(@as(u32, @intCast(self.result.const_plans.items.len))));
         try self.result.const_plans.append(self.allocator, .pending);
         try self.const_plan_map.put(ty, id);
         errdefer {
@@ -1938,7 +1938,7 @@ const Lowerer = struct {
         }
 
         const plan = try self.buildConstPlan(ty);
-        self.result.const_plans.items[@intFromEnum(id)] = plan;
+        self.result.const_plans.items[@backingInt(id)] = plan;
         return id;
     }
 
@@ -1963,7 +1963,7 @@ const Lowerer = struct {
             .abi = .roc,
             .is_static_initializer = true,
         });
-        const result_id: LIR.StaticDataId = @enumFromInt(@as(u32, @intCast(self.result.static_data_values.items.len)));
+        const result_id: LIR.StaticDataId = @fromBackingInt(@intCast(@as(u32, @intCast(self.result.static_data_values.items.len))));
         try self.result.static_data_values.append(self.allocator, .{
             .initializer = proc,
         });
@@ -2374,7 +2374,7 @@ const Lowerer = struct {
             errdefer if (captures_owned) self.allocator.free(captures);
 
             variants[index] = .{
-                .id = @enumFromInt(@as(u32, @intCast(index))),
+                .id = @fromBackingInt(@intCast(@as(u32, @intCast(index)))),
                 .discriminant = @intCast(index),
                 .variant_index = @intCast(index),
                 .payload_layout = if (variant.capture_ty) |capture_ty|
@@ -2388,7 +2388,7 @@ const Lowerer = struct {
             initialized += 1;
         }
 
-        const id: LirProgram.FnSetId = @enumFromInt(@as(u32, @intCast(self.result.fn_sets.items.len)));
+        const id: LirProgram.FnSetId = @fromBackingInt(@intCast(@as(u32, @intCast(self.result.fn_sets.items.len))));
         try self.result.fn_sets.append(self.allocator, .{
             .layout = value_layout,
             .variants = variants,
@@ -2432,7 +2432,7 @@ const Lowerer = struct {
             initialized += 1;
         }
 
-        const id: LirProgram.ErasedFnsId = @enumFromInt(@as(u32, @intCast(self.result.erased_fns.items.len)));
+        const id: LirProgram.ErasedFnsId = @fromBackingInt(@intCast(@as(u32, @intCast(self.result.erased_fns.items.len))));
         try self.result.erased_fns.append(self.allocator, .{
             .layout = try self.layoutOfType(ty),
             .entries = entries,
@@ -2486,7 +2486,7 @@ const Lowerer = struct {
     }
 
     fn fnTemplateForFn(self: *Lowerer, fn_id: Type.FnId) Mono.FnTemplate {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.fn_entries.items.len) Common.invariant("function result referenced a missing function");
         return self.fn_entries.items[raw].source orelse
             Common.invariant("function result referenced a generated function without checked source identity");
@@ -2577,7 +2577,7 @@ const Lowerer = struct {
     }
 
     fn verifyMaterializedDecisions(self: *Lowerer) Common.LowerError!void {
-        if (builtin.mode != .Debug) return;
+        if (builtin.mode != .debug) return;
         var solved_clone = try cloneSolvedProgram(self.allocator, self.solved);
         var clone_owned = true;
         errdefer if (clone_owned) solved_clone.deinit();
@@ -2642,7 +2642,7 @@ const Lowerer = struct {
             if (result.found_existing) {
                 Common.invariant("debug Lambda Mono verifier saw duplicate specialization identities");
             }
-            result.value_ptr.* = @enumFromInt(@as(u32, @intCast(index)));
+            result.value_ptr.* = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
         }
 
         for (self.fn_entries.items, 0..) |entry, entry_index| {
@@ -2700,13 +2700,13 @@ const Lowerer = struct {
                 Common.invariant("debug Lambda Mono verifier saw a root mismatch");
             }
             if (!std.meta.eql(
-                specializationIdentity(self.fn_entries.items[@intFromEnum(direct.fn_id)].spec),
-                identities[@intFromEnum(expected.fn_id)],
+                specializationIdentity(self.fn_entries.items[@backingInt(direct.fn_id)].spec),
+                identities[@backingInt(expected.fn_id)],
             )) {
                 Common.invariant("debug Lambda Mono verifier saw a root specialization identity mismatch");
             }
             const expected_fn = materialized.getFn(expected.fn_id);
-            if (!try self.fnEntryMatchesMaterialized(self.fn_entries.items[@intFromEnum(direct.fn_id)], expected_fn, materialized)) {
+            if (!try self.fnEntryMatchesMaterialized(self.fn_entries.items[@backingInt(direct.fn_id)], expected_fn, materialized)) {
                 Common.invariant("debug Lambda Mono verifier saw a root mismatch");
             }
         }
@@ -3529,13 +3529,13 @@ const Lowerer = struct {
             return try self.assignLocal(target, backing_local, next);
         }
 
-        if (@import("builtin").mode == .Debug) {
+        if (@import("builtin").mode == .debug) {
             std.debug.panic(
                 "postcheck invariant violated: LIR lowering expected nominal layouts to stay on one side of layout boxing, target={d} ({s}) source={d} ({s})",
                 .{
-                    @intFromEnum(target_layout),
+                    @backingInt(target_layout),
                     @tagName(target_content.tag),
-                    @intFromEnum(backing_layout),
+                    @backingInt(backing_layout),
                     @tagName(backing_content.tag),
                 },
             );
@@ -3588,13 +3588,13 @@ const Lowerer = struct {
             return try self.assignZst(target, next);
         }
 
-        if (@import("builtin").mode == .Debug) {
+        if (@import("builtin").mode == .debug) {
             std.debug.panic(
                 "postcheck invariant violated: LIR lowering expected layouts to match or differ by an explicit Box edge, target={d} ({s}) source={d} ({s})",
                 .{
-                    @intFromEnum(target_layout),
+                    @backingInt(target_layout),
                     @tagName(target_content.tag),
-                    @intFromEnum(source_layout),
+                    @backingInt(source_layout),
                     @tagName(source_content.tag),
                 },
             );
@@ -3803,7 +3803,7 @@ const Lowerer = struct {
         visited: *std.AutoHashMap(u64, void),
     ) Common.LowerError!bool {
         if (lhs_idx == rhs_idx) return true;
-        const key = (@as(u64, @intFromEnum(lhs_idx)) << 32) | @as(u64, @intFromEnum(rhs_idx));
+        const key = (@as(u64, @backingInt(lhs_idx)) << 32) | @as(u64, @backingInt(rhs_idx));
         if (visited.contains(key)) return true;
         try visited.put(key, {});
 
@@ -4151,7 +4151,7 @@ const Lowerer = struct {
 
     fn sameErasedCaptureShapeForCurrentProc(self: *Lowerer, new_layout: ?layout.Idx) Common.LowerError!bool {
         const fn_id = self.current_fn orelse return false;
-        const spec = self.fn_entries.items[@intFromEnum(fn_id)].spec;
+        const spec = self.fn_entries.items[@backingInt(fn_id)].spec;
         const old_capture_ty = switch (spec.abi) {
             .erased => spec.capture_ty,
             .finite => switch (spec.return_reuse) {
@@ -4314,7 +4314,7 @@ const Lowerer = struct {
             return try self.lowerKnownCallInto(target, result_ty, target_fn, args, null, is_cold, next);
         }
         if (capture_items.len != capture_operands.len) Common.invariant("direct call capture operand count differed from callee capture count");
-        const capture_ty = self.fn_entries.items[@intFromEnum(target_fn)].spec.capture_ty orelse
+        const capture_ty = self.fn_entries.items[@backingInt(target_fn)].spec.capture_ty orelse
             Common.invariant("capturing direct call target had no capture record type");
         const capture_local = try self.addTemp(capture_ty);
         const call = try self.lowerKnownCallInto(target, result_ty, target_fn, args, capture_local, is_cold, next);
@@ -4337,7 +4337,7 @@ const Lowerer = struct {
         const lowered = try self.lowerExprsToTempsAtTypes(args, arg_tys);
         defer lowered.deinit(self.allocator);
 
-        const callee_ret_ty = self.fn_entries.items[@intFromEnum(callee)].ret;
+        const callee_ret_ty = self.fn_entries.items[@backingInt(callee)].ret;
         const callee_ret_layout = try self.layoutOfType(callee_ret_ty);
         const target_layout = self.result.store.getLocal(target).layout_idx;
         const call_target = if (target_layout == callee_ret_layout)
@@ -4349,7 +4349,7 @@ const Lowerer = struct {
         else
             try self.assignTypedBoundary(target, result_ty, call_target, callee_ret_ty, next);
 
-        const callee_spec = self.fn_entries.items[@intFromEnum(callee)].spec;
+        const callee_spec = self.fn_entries.items[@backingInt(callee)].spec;
         const has_return_reuse = callee_spec.return_reuse.enabled();
         // Destination-specialized helpers carry an explicit hidden ownership
         // input. The ordinary inline path has no representation for that
@@ -4395,7 +4395,7 @@ const Lowerer = struct {
     fn currentErasedReturnReuse(self: *Lowerer) ErasedReturnReuse {
         if (self.current_erased_reuse == null) return .none;
         const fn_id = self.current_fn orelse return .none;
-        const spec = self.fn_entries.items[@intFromEnum(fn_id)].spec;
+        const spec = self.fn_entries.items[@backingInt(fn_id)].spec;
         return switch (spec.abi) {
             .erased => .{ .erased_callable = spec.capture_ty },
             .finite => spec.return_reuse,
@@ -4403,7 +4403,7 @@ const Lowerer = struct {
     }
 
     fn lowerFnSpecArgTypes(self: *Lowerer, callee: Type.FnId) Common.LowerError![]Type.TypeId {
-        const spec = self.fn_specs.items[@intFromEnum(callee)];
+        const spec = self.fn_specs.items[@backingInt(callee)];
         return try self.lowerSolvedFnArgTypes(spec.solved_fn_ty);
     }
 
@@ -4421,7 +4421,7 @@ const Lowerer = struct {
     }
 
     fn inlineBodyForKnownCall(self: *Lowerer, callee: Type.FnId) Common.LowerError!?Lifted.ExprId {
-        const spec = self.fn_specs.items[@intFromEnum(callee)];
+        const spec = self.fn_specs.items[@backingInt(callee)];
         const body_expr = self.inline_plan.bodyForFn(spec.source) orelse return null;
 
         if (spec.abi != .finite) Common.invariant("inline plan selected a non-finite function spec");
@@ -4438,7 +4438,7 @@ const Lowerer = struct {
         body_expr: Lifted.ExprId,
         next: LIR.CFStmtId,
     ) Common.LowerError!LIR.CFStmtId {
-        const spec = self.fn_specs.items[@intFromEnum(callee)];
+        const spec = self.fn_specs.items[@backingInt(callee)];
         if (spec.abi != .finite) Common.invariant("attempted to inline a non-finite function spec");
         if (spec.capture_ty != null) Common.invariant("attempted to inline a capturing function spec");
 
@@ -4455,16 +4455,16 @@ const Lowerer = struct {
         defer self.allocator.free(saved);
         for (0..lifted_args.len) |i| {
             const arg = GuardedList.at(lifted_args, i);
-            saved[i] = self.local_map[@intFromEnum(arg.local)];
+            saved[i] = self.local_map[@backingInt(arg.local)];
         }
         for (0..lifted_args.len) |i| {
             const arg = GuardedList.at(lifted_args, i);
-            self.local_map[@intFromEnum(arg.local)] = arg_locals[i];
+            self.local_map[@backingInt(arg.local)] = arg_locals[i];
         }
         defer {
             for (0..lifted_args.len) |i| {
                 const arg = GuardedList.at(lifted_args, i);
-                self.local_map[@intFromEnum(arg.local)] = saved[i];
+                self.local_map[@backingInt(arg.local)] = saved[i];
             }
         }
 
@@ -4568,7 +4568,7 @@ const Lowerer = struct {
         // Local ids form a finite graph. Following at most its node count
         // either reaches a root or proves that the path contains a cycle.
         for (0..self.erased_owner_states.items.len) |_| {
-            switch (self.erased_owner_states.items[@intFromEnum(current)]) {
+            switch (self.erased_owner_states.items[@backingInt(current)]) {
                 .pending, .root => {
                     const source_layout = self.result.layouts.getLayout(self.result.store.getLocal(current).layout_idx);
                     return if (self.result.layouts.layoutContainsRefcounted(source_layout)) current else null;
@@ -4581,7 +4581,7 @@ const Lowerer = struct {
     }
 
     fn noteErasedOwnerDefinition(self: *Lowerer, target: LIR.LocalId, source: ?LIR.LocalId) void {
-        const state = &self.erased_owner_states.items[@intFromEnum(target)];
+        const state = &self.erased_owner_states.items[@backingInt(target)];
         state.* = switch (state.*) {
             .pending => if (source) |owner| .{ .alias = owner } else .root,
             .root, .alias, .ambiguous => .ambiguous,
@@ -4589,7 +4589,7 @@ const Lowerer = struct {
     }
 
     fn noteErasedOwnerAmbiguous(self: *Lowerer, target: LIR.LocalId) void {
-        self.erased_owner_states.items[@intFromEnum(target)] = .ambiguous;
+        self.erased_owner_states.items[@backingInt(target)] = .ambiguous;
     }
 
     fn addAssignRef(
@@ -4785,7 +4785,7 @@ const Lowerer = struct {
         if (list_layout.tag != .list) return none;
         const in_elem_idx = self.result.layouts.runtimeRepresentationLayoutIdx(list_layout.getIdx());
 
-        const transform_ty = self.solved.expr_tys.items[@intFromEnum(GuardedList.at(args, 1))];
+        const transform_ty = self.solved.expr_tys.items[@backingInt(GuardedList.at(args, 1))];
         const transform_root = self.solved.types.root(transform_ty);
         const transform_content = self.solved.types.get(transform_root);
         if (transform_content != .func) Common.invariant("list_map_can_reuse transform argument is not a function");
@@ -5055,7 +5055,7 @@ const Lowerer = struct {
             // backend can decide per the width it is building.
             return null;
         }
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             try self.folded_map_matches.append(self.allocator, .{
                 .scrutinee = scrutinee,
                 .body = match.zero_branch_body,
@@ -7573,7 +7573,7 @@ const Lowerer = struct {
 
     fn addLocalForLayout(self: *Lowerer, layout_idx: layout.Idx) Common.LowerError!LIR.LocalId {
         const local = try self.result.store.addLocal(.{ .layout_idx = layout_idx });
-        if (@intFromEnum(local) != self.erased_owner_states.items.len) {
+        if (@backingInt(local) != self.erased_owner_states.items.len) {
             Common.invariant("erased-owner provenance table diverged from the LIR local table");
         }
         try self.erased_owner_states.append(self.allocator, .pending);
@@ -7599,7 +7599,7 @@ const Lowerer = struct {
             try self.noteLocal(existing);
             return existing;
         }
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.local_map[index]) |existing| {
             try self.noteLocal(existing);
             return existing;
@@ -7621,7 +7621,7 @@ const Lowerer = struct {
         ty: Type.TypeId,
         target: LIR.LocalId,
     ) Common.LowerError!LIR.LocalId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.local_map[index] != null) Common.invariant("unbound local destination was already bound");
 
         // Recursive values have an explicit slot representation selected before
@@ -7652,7 +7652,7 @@ const Lowerer = struct {
         var found: ?LIR.LocalId = null;
         for (self.local_map, 0..) |maybe_existing, raw_other| {
             const existing = maybe_existing orelse continue;
-            const other: Lifted.LocalId = @enumFromInt(@as(u32, @intCast(raw_other)));
+            const other: Lifted.LocalId = @fromBackingInt(@intCast(@as(u32, @intCast(raw_other))));
             if (!self.aliasedLocalMatches(local, other)) continue;
             if (!try self.liftedLocalTypesMatch(local, other)) continue;
             if (found) |previous| {
@@ -7674,11 +7674,11 @@ const Lowerer = struct {
 
     fn existingLocalForTyped(self: *Lowerer, local: Lifted.LocalId, ty: Type.TypeId) ?LIR.LocalId {
         if (self.typed_local_map.get(.{ .local = local, .ty = ty })) |existing| return existing;
-        return self.local_map[@intFromEnum(local)];
+        return self.local_map[@backingInt(local)];
     }
 
     fn bindLocalForTyped(self: *Lowerer, local: Lifted.LocalId, ty: Type.TypeId) Common.LowerError!LIR.LocalId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         const requested_layout = try self.layoutOfType(ty);
         const declared_layout = try self.layoutOfType(try self.lowerLocalTy(local));
         if (self.local_map[index]) |existing| {
@@ -7737,7 +7737,7 @@ const Lowerer = struct {
             return .{ .slot = existing };
         }
 
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.local_map[index]) |existing| {
             const existing_layout = self.result.store.getLocal(existing).layout_idx;
             if (self.layoutsMatch(existing_layout, slot_layout)) {
@@ -7768,7 +7768,7 @@ const Lowerer = struct {
         source: LIR.LocalId,
         next: LIR.CFStmtId,
     ) Common.LowerError!LIR.CFStmtId {
-        const index = @intFromEnum(local);
+        const index = @backingInt(local);
         if (self.local_map[index]) |target| {
             return try self.assignTypedBoundary(target, try self.lowerLocalTy(local), source, source_ty, next);
         }
@@ -8534,7 +8534,7 @@ const Lowerer = struct {
             }
             return try self.assignZst(target, next);
         }
-        if (@import("builtin").mode == .Debug) {
+        if (@import("builtin").mode == .debug) {
             const target_layout = self.result.store.getLocal(target).layout_idx;
             const source_layout = self.result.store.getLocal(source).layout_idx;
             // Layout indices identify store entries, so distinct indices can
@@ -8745,7 +8745,7 @@ const Lowerer = struct {
         visited: *std.AutoHashMap(u64, void),
     ) Common.LowerError!bool {
         if (lhs_ty == rhs_ty) return true;
-        const key = (@as(u64, @intFromEnum(lhs_ty)) << 32) | @as(u64, @intFromEnum(rhs_ty));
+        const key = (@as(u64, @backingInt(lhs_ty)) << 32) | @as(u64, @backingInt(rhs_ty));
         if (visited.contains(key)) return true;
         try visited.put(key, {});
 
@@ -9079,15 +9079,15 @@ const Lowerer = struct {
         // table's ascending TypeId order rather than DenseMap insertion order.
         std.mem.sort(Type.TypeId, local_types, {}, struct {
             fn lessThan(_: void, lhs: Type.TypeId, rhs: Type.TypeId) bool {
-                return @intFromEnum(lhs) < @intFromEnum(rhs);
+                return @backingInt(lhs) < @backingInt(rhs);
             }
         }.lessThan);
         for (local_types) |local_ty| {
             const mapped_node = local_nodes.get(local_ty) orelse
                 Common.invariant("local layout node key had no mapped node");
-            try self.rememberLayoutForType(local_ty, commit.value_layouts[@intFromEnum(mapped_node)]);
+            try self.rememberLayoutForType(local_ty, commit.value_layouts[@backingInt(mapped_node)]);
         }
-        return self.knownLayoutForType(ty) orelse commit.value_layouts[@intFromEnum(node)];
+        return self.knownLayoutForType(ty) orelse commit.value_layouts[@backingInt(node)];
     }
 
     const LayoutGraphBuilder = struct {
@@ -9536,7 +9536,7 @@ const Lowerer = struct {
     }
 
     fn freshJoinPointId(self: *Lowerer) LIR.JoinPointId {
-        const id: LIR.JoinPointId = @enumFromInt(self.next_join_point);
+        const id: LIR.JoinPointId = @fromBackingInt(@intCast(self.next_join_point));
         self.next_join_point += 1;
         return id;
     }
@@ -9832,7 +9832,7 @@ fn cloneNameStore(allocator: std.mem.Allocator, source: *const check.CheckedName
     try reinternNames("external-symbol", &source.external_symbol_names, &cloned, NameStore.internExternalSymbolName);
     for (source.proc_bases.items.items, 0..) |key, index| {
         const id = try cloned.internProcBase(key);
-        if (@intFromEnum(id) != index) Common.invariant("debug name-store clone changed proc-base ids");
+        if (@backingInt(id) != index) Common.invariant("debug name-store clone changed proc-base ids");
     }
 
     return cloned;
@@ -9855,7 +9855,7 @@ fn reinternNames(
     var i: u32 = 0;
     while (i < source.count()) : (i += 1) {
         const id = try intern(dest, source.getText(i));
-        if (@intFromEnum(id) != i) Common.invariant("debug name-store clone changed " ++ label ++ " ids (duplicate text in source?)");
+        if (@backingInt(id) != i) Common.invariant("debug name-store clone changed " ++ label ++ " ids (duplicate text in source?)");
     }
 }
 
@@ -9962,11 +9962,11 @@ fn constBackingAuthority(authority: MonoType.BackingAuthority) const_store.TypeB
 }
 
 fn lirSymbol(symbol: Common.Symbol) LIR.Symbol {
-    return LIR.Symbol.fromRaw(@intCast(@intFromEnum(symbol)));
+    return LIR.Symbol.fromRaw(@intCast(@backingInt(symbol)));
 }
 
 fn lirInlineScopeId(scope: Lifted.InlineScopeId) LIR.InlineScopeId {
-    return @enumFromInt(@intFromEnum(scope));
+    return @fromBackingInt(@intCast(@backingInt(scope)));
 }
 
 fn constFnTemplateFromMono(self: *Lowerer, template: Mono.FnTemplate) std.mem.Allocator.Error!LirProgram.FnTemplate {
@@ -10068,7 +10068,7 @@ test "layout lowering accepts tag payload alias backed by primitive" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0xAB} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0xAB)));
     const repro_name = try solved.lifted.names.internTypeName("Repro");
     const alias_name = try solved.lifted.names.internTypeName("Alias");
     const wrap_name = try solved.lifted.names.internTagLabel("Wrap");
@@ -10124,7 +10124,7 @@ test "layout lowering sorts a padding-free nominal record structurally" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0x5A} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0x5A)));
     const state_name = try solved.lifted.names.internTypeName("State");
     const first_name = try solved.lifted.names.internRecordFieldLabel("first");
     const second_name = try solved.lifted.names.internRecordFieldLabel("second");
@@ -10180,7 +10180,7 @@ test "layout lowering keeps opted-in nominal record declaration order" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0x5B} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0x5B)));
     const state_name = try solved.lifted.names.internTypeName("State");
     const first_name = try solved.lifted.names.internRecordFieldLabel("first");
     const second_name = try solved.lifted.names.internRecordFieldLabel("second");
@@ -10224,7 +10224,7 @@ test "sparse local layout nodes commit in type id order" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0xD5} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0xD5)));
     const first_name = try solved.lifted.names.internTypeName("FirstLocal");
     const second_name = try solved.lifted.names.internTypeName("SecondLocal");
     const probe_name = try solved.lifted.names.internTypeName("ProbeLocal");
@@ -10296,7 +10296,7 @@ test "named layout index reuses only representation-equivalent instantiations" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0xC3} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0xC3)));
     const first_name = try solved.lifted.names.internTypeName("First");
     const equivalent_name = try solved.lifted.names.internTypeName("Equivalent");
     const different_name = try solved.lifted.names.internTypeName("Different");
@@ -10362,7 +10362,7 @@ test "named layout index reuses structurally equivalent recursive types" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0xD3} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0xD3)));
     const first_name = try solved.lifted.names.internTypeName("FirstRecursive");
     const equivalent_name = try solved.lifted.names.internTypeName("EquivalentRecursive");
     const next_name = try solved.lifted.names.internRecordFieldLabel("next");
@@ -10417,7 +10417,7 @@ test "named layout index applies backing metadata by named type policy" {
     var solved = emptySolvedProgramForTest(allocator);
     defer solved.deinit();
 
-    const module_identity = try solved.lifted.names.internModuleIdentity(&([_]u8{0xD4} ** 32));
+    const module_identity = try solved.lifted.names.internModuleIdentity(&@as([32]u8, @splat(0xD4)));
     const type_name = try solved.lifted.names.internTypeName("MetadataPolicy");
 
     var lowerer = try Lowerer.init(allocator, .u64, &solved, .{});

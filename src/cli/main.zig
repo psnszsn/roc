@@ -21,6 +21,12 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 /// Configure std library logging to suppress debug messages in production.
 /// This prevents debug logs from polluting stderr which should only contain
 /// actual program output (like Stderr.line! calls).
@@ -609,7 +615,7 @@ const BuiltinsObjects = struct {
     pub fn filename(target: RocTarget) []const u8 {
         return switch (target.toOsTag()) {
             .windows => "roc_builtins.obj",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins.o",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins.o",
         };
     }
 
@@ -617,7 +623,7 @@ const BuiltinsObjects = struct {
     pub fn filenameExtern(target: RocTarget) []const u8 {
         return switch (target.toOsTag()) {
             .windows => "roc_builtins_extern.obj",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins_extern.o",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins_extern.o",
         };
     }
 };
@@ -1050,8 +1056,8 @@ fn createHardlink(ctx: *CliCtx, source: []const u8, dest: []const u8) (Allocator
         }
     } else {
         // On POSIX systems, use the link system call
-        const source_c = try ctx.arena.dupeZ(u8, source);
-        const dest_c = try ctx.arena.dupeZ(u8, dest);
+        const source_c = try ctx.arena.dupeSentinel(u8, source, 0);
+        const dest_c = try ctx.arena.dupeSentinel(u8, dest, 0);
 
         const result = c.link(source_c, dest_c);
         if (result != 0) {
@@ -1321,7 +1327,7 @@ pub fn main(init: std.process.Init) Allocator.Error!void {
     // This gives us a helpful error message instead of a generic segfault
     // if the compiler blows the stack (e.g., due to infinite recursion in type translation).
     const stack_overflow_installed = base.stack_overflow.installForCurrentThread();
-    if (comptime builtin.mode == .Debug) {
+    if (comptime builtin.mode == .debug) {
         std.debug.assert(stack_overflow_installed);
     } else if (!stack_overflow_installed) {
         unreachable;
@@ -1333,7 +1339,7 @@ pub fn main(init: std.process.Init) Allocator.Error!void {
         // in release builds too (e.g. to leak-check a ReleaseSafe binary). Everything
         // else uses the fast target allocator—see base.defaultGpa.
         const use_debug_allocator = builtin.os.tag != .freestanding and
-            (builtin.mode == .Debug or build_options.debug_gpa);
+            (builtin.mode == .debug or build_options.debug_gpa);
         if (use_debug_allocator) {
             // Under Valgrind, use libc's malloc instead: Valgrind can't see the
             // debug allocator's sub-allocations (it carves them out of mmap'd
@@ -1963,7 +1969,7 @@ fn appendHostedCacheEntriesFromView(
             .module_key = view.key.bytes,
             .order_key = proc.orderKey(view.hosted_procs),
             .external_symbol_name = view.canonical_names.externalSymbolNameText(proc.external_symbol_name),
-            .def_idx = @intFromEnum(proc.def_idx),
+            .def_idx = @backingInt(proc.def_idx),
             .deterministic_index = proc.deterministic_index,
         });
     }
@@ -2020,9 +2026,9 @@ fn applyHostedBindings(
     for (bindings, 0..) |binding, dispatch_index| {
         const entry_index = declared_by_target.get(.{
             .module_key = binding.target_checked_module.bytes,
-            .def_idx = @intFromEnum(binding.target_def),
+            .def_idx = @backingInt(binding.target_def),
         }) orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("default roc command invariant violated: the hosted section names a function with no hosted declaration in scope", .{});
             }
             unreachable;
@@ -2144,7 +2150,7 @@ const LayoutHashContext = struct {
         const size_align = self.layouts.layoutSizeAlign(layout_val);
         updateHashBytes(hasher, "layout-node");
         updateHashU32(hasher, seen_index);
-        updateHashU32(hasher, @intCast(@intFromEnum(layout_val.tag)));
+        updateHashU32(hasher, @intCast(@backingInt(layout_val.tag)));
         updateHashU32(hasher, @intCast(size_align.size));
         updateHashU32(hasher, @intCast(size_align.alignment.toByteUnits()));
         updateHashBool(hasher, self.layouts.layoutContainsRefcounted(layout_val));
@@ -2152,11 +2158,11 @@ const LayoutHashContext = struct {
         switch (layout_val.tag) {
             .scalar => {
                 const scalar = layout_val.getScalar();
-                updateHashU32(hasher, @intCast(@intFromEnum(scalar.tag)));
+                updateHashU32(hasher, @intCast(@backingInt(scalar.tag)));
                 switch (scalar.tag) {
-                    .int => updateHashU32(hasher, @intCast(@intFromEnum(scalar.getInt()))),
-                    .frac => updateHashU32(hasher, @intCast(@intFromEnum(scalar.getFrac()))),
-                    .vector => updateHashU32(hasher, @intCast(@intFromEnum(scalar.getVector()))),
+                    .int => updateHashU32(hasher, @intCast(@backingInt(scalar.getInt()))),
+                    .frac => updateHashU32(hasher, @intCast(@backingInt(scalar.getFrac()))),
+                    .vector => updateHashU32(hasher, @intCast(@backingInt(scalar.getVector()))),
                     .str, .opaque_ptr => {},
                 }
             },
@@ -2218,18 +2224,18 @@ fn updatePlatformAppRelationIdentity(
     const relations = root_artifact.platform_requirement_relations.relations;
     updateHashU32(hasher, @intCast(relations.len));
     for (relations) |relation| {
-        updateHashU32(hasher, @intFromEnum(relation.declaration));
+        updateHashU32(hasher, @backingInt(relation.declaration));
         updateHashU32(hasher, relation.requires_idx);
-        updateHashU32(hasher, @intFromEnum(relation.value_kind));
+        updateHashU32(hasher, @backingInt(relation.value_kind));
     }
 
     const bindings = root_artifact.platform_required_bindings.bindings;
     updateHashU32(hasher, @intCast(bindings.len));
     for (bindings) |binding| {
-        updateHashU32(hasher, @intFromEnum(binding.declaration));
+        updateHashU32(hasher, @backingInt(binding.declaration));
         updateHashU32(hasher, binding.requires_idx);
-        updateHashU32(hasher, @intFromEnum(binding.checked_relation));
-        updateHashU32(hasher, @intFromEnum(std.meta.activeTag(binding.value_use)));
+        updateHashU32(hasher, @backingInt(binding.checked_relation));
+        updateHashU32(hasher, @backingInt(std.meta.activeTag(binding.value_use)));
     }
 
     const checked_error_requires = root_artifact.platform_required_bindings.checked_error_requires;
@@ -2271,7 +2277,7 @@ fn checkedInterpreterHostIdentity(
 ) Allocator.Error![32]u8 {
     var hasher = std.crypto.hash.sha2.Sha256.init(.{});
     updateHashBytes(&hasher, "roc-run-checked-host-interface-v2");
-    updateHashU32(&hasher, @intFromEnum(target_usize));
+    updateHashU32(&hasher, @backingInt(target_usize));
 
     const declarations_hash = root_artifact.platform_required_declarations.identityHash(&root_artifact.canonical_names);
     hasher.update(&declarations_hash);
@@ -2355,17 +2361,17 @@ fn entrypointAbiDigestFromLirData(
                 .indirect => updateHashU32(h, 1),
                 .registers => |registers| {
                     updateHashU32(h, 2);
-                    updateHashU32(h, @intFromEnum(std.meta.activeTag(registers.carrier)));
+                    updateHashU32(h, @backingInt(std.meta.activeTag(registers.carrier)));
                     switch (registers.carrier) {
                         .array => |alignment| updateHashU32(h, alignment orelse 0),
                         .piecewise, .structure, .integer => {},
                     }
                     updateHashU32(h, @intCast(registers.pieces.len));
                     for (registers.pieces) |piece| {
-                        updateHashU32(h, @intFromEnum(piece.class));
+                        updateHashU32(h, @backingInt(piece.class));
                         updateHashU32(h, piece.offset);
                         updateHashU32(h, piece.size);
-                        updateHashU32(h, if (piece.vector_kind) |kind| @intFromEnum(kind) + 1 else 0);
+                        updateHashU32(h, if (piece.vector_kind) |kind| @backingInt(kind) + 1 else 0);
                     }
                 },
             }
@@ -2500,7 +2506,7 @@ fn shimHostExeCacheName(
 }
 
 fn testDigest(byte: u8) [32]u8 {
-    return [_]u8{byte} ** 32;
+    return @as([32]u8, @splat(byte));
 }
 
 fn testCacheDigest(checked_host_identity: [32]u8, link_inputs_identity: [32]u8) [32]u8 {
@@ -3061,14 +3067,14 @@ fn rocRunSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, arg0: []const u8
     reporter.finish();
 
     if (entrypoint_names.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("default roc command invariant violated: no platform entrypoints in checked LIR root metadata", .{});
         }
         unreachable;
     }
 
     const selected_target = validated_link_spec.target;
-    const enable_debug = builtin.mode == .Debug;
+    const enable_debug = builtin.mode == .debug;
     const shim_kind: ShimLibraryKind = switch (args.opt) {
         .dev => .machine_code,
         .interpreter => .lir,
@@ -3177,7 +3183,7 @@ fn rocRunSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, arg0: []const u8
             },
             .interpreter => blk: {
                 const shm_handle = shm_handle_opt orelse {
-                    if (builtin.mode == .Debug) {
+                    if (builtin.mode == .debug) {
                         std.debug.panic("interpreter run invariant violated: missing LIR shared-memory handle", .{});
                     }
                     unreachable;
@@ -3284,7 +3290,7 @@ fn rocRunSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, arg0: []const u8
                 },
                 .interpreter => blk: {
                     const shm_handle = shm_handle_opt orelse {
-                        if (builtin.mode == .Debug) {
+                        if (builtin.mode == .debug) {
                             std.debug.panic("interpreter run invariant violated: missing LIR shared-memory handle", .{});
                         }
                         unreachable;
@@ -3363,7 +3369,7 @@ fn rocRunSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, arg0: []const u8
     }
 
     const shm_handle = shm_handle_opt orelse {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("default roc command invariant violated: missing shared-memory handle before launching shim", .{});
         }
         unreachable;
@@ -3372,7 +3378,7 @@ fn rocRunSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, arg0: []const u8
     std.log.debug("Launching shim executable: {s}", .{exe_path});
     if (args.watch) {
         const result = if (lowered_result) |*value| value else {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("hot reload invariant violated: missing lowered result for dev shim watch run", .{});
             }
             unreachable;
@@ -3542,11 +3548,11 @@ fn spawnExecutableWithArgv0(
             ) c_int;
         };
 
-        const exe_path_z = try ctx.arena.dupeZ(u8, exe_path);
+        const exe_path_z = try ctx.arena.dupeSentinel(u8, exe_path, 0);
         const argv = try ctx.arena.allocSentinel(?[*:0]const u8, 1 + app_args.len, null);
-        argv[0] = (try ctx.arena.dupeZ(u8, argv0)).ptr;
+        argv[0] = (try ctx.arena.dupeSentinel(u8, argv0, 0)).ptr;
         for (app_args, 0..) |arg, i| {
-            argv[1 + i] = (try ctx.arena.dupeZ(u8, arg)).ptr;
+            argv[1 + i] = (try ctx.arena.dupeSentinel(u8, arg, 0)).ptr;
         }
 
         var pid: std.c.pid_t = undefined;
@@ -3609,7 +3615,7 @@ fn finishRunTermination(
             std.process.exit(code);
         },
         .signal => |signal| {
-            const sig_num = @intFromEnum(signal);
+            const sig_num = @backingInt(signal);
             std.log.debug("Child process {s} killed by signal: {}", .{ exe_path, sig_num });
             const result = platform_validation.targets_validator.ValidationResult{
                 .process_signaled = .{ .signal = sig_num },
@@ -3623,7 +3629,7 @@ fn finishRunTermination(
             try failOnCheckErrors(diagnostics);
             return ctx.fail(.{ .child_process_signaled = .{
                 .command = exe_path,
-                .signal = @intFromEnum(signal),
+                .signal = @backingInt(signal),
             } });
         },
         .unknown => |status| {
@@ -3920,14 +3926,14 @@ fn rocRunDefaultAppSharedMemoryShim(ctx: *CliCtx, args: cli_args.RunArgs, staged
 
     const entrypoint_names = lowered_result.entrypoint_names;
     if (entrypoint_names.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("default app run invariant violated: no platform entrypoints", .{});
         }
         unreachable;
     }
 
     const lowered = &lowered_result.lowered;
-    const enable_debug = builtin.mode == .Debug;
+    const enable_debug = builtin.mode == .debug;
     const exe_checked_host_identity = defaultRunCheckedHostIdentity(selected_target, entrypoint_names, lowered_result.hosted_symbols);
     const link_inputs_identity = defaultRunLinkInputsIdentity(selected_target) orelse {
         return rejectRunTargetNotExecutable(ctx, selected_target);
@@ -4307,7 +4313,7 @@ fn runWithPosixFdInheritance(
     }
 
     // Debug-only verification that fd flags were actually cleared
-    if (comptime builtin.mode == .Debug) {
+    if (comptime builtin.mode == .debug) {
         const verify_flags = std.c.fcntl(shm_handle.fd, std.c.F.GETFD);
         if (verify_flags == -1) {
             return ctx.fail(.{ .shared_memory_failed = .{
@@ -4390,10 +4396,10 @@ const HotShimChild = struct {
         const pid = self.child.id orelse return;
         switch (builtin.os.tag) {
             .windows => {
-                _ = std.os.windows.ntdll.NtTerminateProcess(pid, @enumFromInt(1));
+                _ = std.os.windows.ntdll.NtTerminateProcess(pid, @fromBackingInt(@intCast(1)));
             },
             .wasi => {},
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => std.posix.kill(pid, .KILL) catch {},
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => std.posix.kill(pid, .KILL) catch {},
         }
     }
 };
@@ -5889,8 +5895,9 @@ test "diagnostic summary header has exact colors and bounded width" {
     plain_config.color_preference = .never;
     plain_config.max_line_width = 80;
     try renderSummaryHeaderLine(&output.writer, 1, 1, "example.roc", plain_config);
+    const expected_rule = repeatBytes("─", 43);
     try std.testing.expectEqualStrings(
-        "── 1 error and 1 warning " ++ ("─" ** 43) ++ " example.roc\n\n",
+        "── 1 error and 1 warning " ++ expected_rule ++ " example.roc\n\n",
         output.written(),
     );
 
@@ -5902,7 +5909,7 @@ test "diagnostic summary header has exact colors and bounded width" {
         ansi_term.bright_black ++ "── " ++
             ansi_term.red ++ "1 error" ++ ansi_term.reset ++ " and " ++
             ansi_term.yellow ++ "1 warning" ++ ansi_term.bright_black ++ " " ++
-            ("─" ** 43) ++ " " ++ ansi_term.cyan ++ "example.roc" ++ ansi_term.reset ++ "\n\n",
+            expected_rule ++ " " ++ ansi_term.cyan ++ "example.roc" ++ ansi_term.reset ++ "\n\n",
         output.written(),
     );
 
@@ -5941,7 +5948,7 @@ const LoweredCoordinatorResult = struct {
 
 fn successfulInternalStaticData(result: *const LoweredCoordinatorResult, label: []const u8) []const backend.StaticDataExport {
     return result.internal_static_data orelse {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("{s} invariant violated: dev RunImage lowering produced no internal static data bundle", .{label});
         }
         unreachable;
@@ -6406,9 +6413,9 @@ fn writeDevRunImageToSharedMemory(
         }
         for (proc_specs, 0..) |proc, i| {
             if (proc.is_static_initializer) continue;
-            const proc_id: lir.LIR.LirProcSpecId = @enumFromInt(@as(u32, @intCast(i)));
+            const proc_id: lir.LIR.LirProcSpecId = @fromBackingInt(@intCast(@as(u32, @intCast(i))));
             const compiled = codegen.compiledProcSymbol(proc_id) orelse {
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic("dev run invariant violated: LIR proc {d} was not compiled before image symbol publication", .{i});
                 }
                 unreachable;
@@ -6421,7 +6428,7 @@ fn writeDevRunImageToSharedMemory(
         }
         for (static_rc_helpers) |helper_key| {
             const code_offset = codegen.compiledStaticDataRcHelperOffset(helper_key) orelse {
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic(
                         "dev run invariant violated: static RC helper {x} was not compiled before image symbol publication",
                         .{helper_key.encode()},
@@ -6445,7 +6452,7 @@ fn writeDevRunImageToSharedMemory(
         for (platform_entrypoints, 0..) |platform_entrypoint, i| {
             const ordinal: usize = @intCast(platform_entrypoint.ordinal);
             if (ordinal >= entrypoint_names.len) {
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic("dev run invariant violated: platform entrypoint ordinal {d} exceeds name table length {d}", .{ ordinal, entrypoint_names.len });
                 }
                 unreachable;
@@ -6661,7 +6668,7 @@ fn evaluateLirImageEntrypoint(
 
     _ = interpreter.runEntrypoint(view, ordinal, arg_ptr, ret_ptr) catch |err| switch (err) {
         error.EntrypointNotFound => {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("CLI LIR image invariant violated: missing platform entrypoint ordinal {d}", .{ordinal});
             }
             unreachable;
@@ -6800,7 +6807,7 @@ fn lowerLirWithBuildEnv(
     const watch_inputs = try build_env.collectWatchInputStates();
     errdefer compile.watch_inputs.deinit(ctx.gpa, watch_inputs);
 
-    if (builtin.mode == .Debug and !build_env.executable_artifacts_finalized) {
+    if (builtin.mode == .debug and !build_env.executable_artifacts_finalized) {
         std.debug.panic("CLI lowering invariant violated: executable artifacts were not finalized", .{});
     }
     if (!build_env.executable_artifacts_finalized) unreachable;
@@ -7102,7 +7109,7 @@ fn getRocCacheDir(allocator: std.mem.Allocator) (Allocator.Error || error{NoCach
 /// Cross-platform helper to get environment variable.
 /// Returns null if the variable is not set. Caller must free the returned slice.
 fn getEnvVar(allocator: std.mem.Allocator, key: []const u8) std.mem.Allocator.Error!?[]const u8 {
-    const key_z = try allocator.dupeZ(u8, key);
+    const key_z = try allocator.dupeSentinel(u8, key, 0);
     defer allocator.free(key_z);
     const value = std.c.getenv(key_z) orelse return null;
     const len = std.mem.len(value);
@@ -8445,7 +8452,7 @@ fn defaultBuildPlatformSource(args: cli_args.BuildArgs) []const u8 {
 
     return switch (RocTarget.detectNative().toOsTag()) {
         .macos, .windows, .openbsd => echo_platform.build_c_platform_main_source,
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => echo_platform.build_platform_main_source,
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => echo_platform.build_platform_main_source,
     };
 }
 
@@ -8466,7 +8473,7 @@ fn nativeBuildEntrypoints(
     const root_procs = lowered.lir_result.root_procs.items;
     const root_metadata = lowered.lir_result.root_metadata.items;
     if (root_procs.len != root_metadata.len) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic(
                 "native build invariant violated: root metadata mismatch roots={d} metadata={d}",
                 .{ root_procs.len, root_metadata.len },
@@ -8481,7 +8488,7 @@ fn nativeBuildEntrypoints(
     for (root_procs, root_metadata) |root_proc, metadata| {
         if (metadata.abi != .platform or metadata.exposure != .exported) continue;
         const root = root_artifact.lookupRootRequestByOrder(metadata.order) orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("native build invariant violated: missing root request order {d}", .{metadata.order});
             }
             unreachable;
@@ -8513,7 +8520,7 @@ fn nativeEntrypointSymbolName(
     root: check.CheckedArtifact.RootRequest,
 ) Allocator.Error![]const u8 {
     const entrypoint_name = root_artifact.providedEntrypointName(root) orelse {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic(
                 "platform entrypoint invariant violated: exported platform root has no published FFI symbol",
                 .{},
@@ -9107,7 +9114,7 @@ fn writeDevWasmObject(
     cpu_level: roc_target.CpuLevel,
 ) CliMainError![]const u8 {
     if (entrypoints.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("wasm object invariant violated: no exported platform entrypoints", .{});
         }
         unreachable;
@@ -9208,7 +9215,7 @@ fn rocBuildWasm(
     static_data_exports: []const backend.StaticDataExport,
 ) CliMainError!void {
     if (entrypoints.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("wasm build invariant violated: no exported platform entrypoints", .{});
         }
         unreachable;
@@ -9368,7 +9375,7 @@ fn llvmOptimizationLevel(opt: cli_args.OptLevel) builder.OptimizationLevel {
         .size => .size,
         .speed => .speed,
         .dev, .interpreter => {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("LLVM build invariant violated: non-LLVM opt level {s}", .{@tagName(opt)});
             }
             unreachable;
@@ -9380,7 +9387,7 @@ fn devBackendPhaseName(target_arch: std.Target.Cpu.Arch) []const u8 {
     if (target_arch == .x86_64) return "x64 Backend";
     if (target_arch == .aarch64) return "arm64 Backend";
     if (target_arch == .wasm32) return "wasm32 Bytecode Generation";
-    if (builtin.mode == .Debug) {
+    if (builtin.mode == .debug) {
         std.debug.panic(
             "dev code-generation timing requested for unsupported architecture {s}",
             .{@tagName(target_arch)},
@@ -9420,7 +9427,7 @@ test "dev backend timing labels name the backend and emitted instruction format"
 fn noTargetLibcallsForLlvmBuild(target: RocTarget) bool {
     return switch (target.toOsTag()) {
         .macos, .windows => false,
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => true,
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => true,
     };
 }
 
@@ -9650,7 +9657,7 @@ fn rocBuildWasmLlvm(
     reporter: *progress.Reporter,
 ) CliMainError!void {
     if (entrypoints.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("LLVM wasm build invariant violated: no exported platform entrypoints", .{});
         }
         unreachable;
@@ -9897,7 +9904,7 @@ fn rocBuildLlvm(ctx: *CliCtx, args: cli_args.BuildArgs) CliMainError!BuildResult
     defer compile.static_data_exports.deinitStaticData(ctx.gpa, static_data_exports);
 
     if (entrypoints.len == 0 and static_data_exports.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("LLVM build invariant violated: no exported platform entrypoints or data symbols", .{});
         }
         unreachable;
@@ -10299,7 +10306,7 @@ fn rocBuildNative(ctx: *CliCtx, args: cli_args.BuildArgs) CliMainError!BuildResu
 
     reporter.begin(code_generation_phase_name);
     if (entrypoints.len == 0 and static_data_exports.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("native build invariant violated: no exported platform entrypoints or data symbols", .{});
         }
         unreachable;
@@ -10628,7 +10635,7 @@ fn rocBuildEmbedded(ctx: *CliCtx, args: cli_args.BuildArgs) CliMainError!BuildRe
     const lir_image = try ctx.arena.dupe(u8, shm.base_ptr[0..shm.getUsedSize()]);
     const entrypoint_names = try lowered.platformEntrypointNames(ctx.arena, root_artifact);
     if (entrypoint_names.len == 0) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("embedded build invariant violated: no platform entrypoints", .{});
         }
         unreachable;
@@ -10644,7 +10651,7 @@ fn rocBuildEmbedded(ctx: *CliCtx, args: cli_args.BuildArgs) CliMainError!BuildRe
         };
     };
 
-    const enable_debug = args.debug or (builtin.mode == .Debug);
+    const enable_debug = args.debug or (builtin.mode == .debug);
     const platform_shim_path = try generatePlatformHostShim(
         ctx,
         build_cache_dir,
@@ -10880,7 +10887,7 @@ const CliTestPlanModule = struct {
 
     fn releaseCachedResults(self: *CliTestPlanModule) []CliTestResultItem {
         const results = self.cached_results orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("CLI test invariant violated: cached results were released from an uncached plan module", .{});
             }
             unreachable;
@@ -11039,7 +11046,7 @@ fn cliTestCacheKey(
 
 test "CLI test cache key includes specialization strategy" {
     const artifact_key: check.CheckedArtifact.CheckedModuleArtifactKey = .{
-        .bytes = [_]u8{0x5a} ** 32,
+        .bytes = @as([32]u8, @splat(0x5a)),
     };
     const lss_key = cliTestCacheKey(artifact_key, .lss);
     const boxy_key = cliTestCacheKey(artifact_key, .boxy);
@@ -11083,15 +11090,15 @@ fn storeCliTestResultsInCache(
         });
         try appendU32(&bytes, ctx.gpa, @intCast(result.transcript.len));
         for (result.transcript) |event| {
-            try bytes.append(ctx.gpa, @intFromEnum(event.kind));
-            try bytes.append(ctx.gpa, @intFromEnum(event.stream));
+            try bytes.append(ctx.gpa, @backingInt(event.kind));
+            try bytes.append(ctx.gpa, @backingInt(event.stream));
             const payload = cliTestTranscriptEventPayload(event);
             try appendU32(&bytes, ctx.gpa, @intCast(payload.len));
             try bytes.appendSlice(ctx.gpa, payload);
         }
         if (result.failure_detail) |message| {
             try bytes.append(ctx.gpa, 1);
-            try bytes.append(ctx.gpa, @intFromEnum(result.failure_detail_visibility));
+            try bytes.append(ctx.gpa, @backingInt(result.failure_detail_visibility));
             try appendU32(&bytes, ctx.gpa, @intCast(message.len));
             try bytes.appendSlice(ctx.gpa, message);
         } else {
@@ -11355,7 +11362,7 @@ fn testRootRegion(
     return switch (root.source) {
         .statement => |statement| env.store.getStatementRegion(statement),
         .def, .expr, .required_binding, .hoisted => {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("CLI test invariant violated: test root was not published from an expect statement", .{});
             }
             unreachable;
@@ -11846,7 +11853,7 @@ fn collectCliTestRootRuns(
     const root_procs = lowered.lir_result.root_procs.items;
     const root_metadata = lowered.lir_result.root_metadata.items;
     if (root_procs.len != root_metadata.len) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("CLI test invariant violated: root proc count differs from root metadata count", .{});
         }
         unreachable;
@@ -11855,13 +11862,13 @@ fn collectCliTestRootRuns(
     for (root_procs, root_metadata) |root_proc, metadata| {
         if (metadata.kind != .test_expect) continue;
         const test_plan = metadata.test_plan orelse {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic("CLI test invariant violated: lowered test root metadata is missing its explicit test-plan slot", .{});
             }
             unreachable;
         };
         if (test_plan.root_index >= planned.test_roots.len or test_plan.result_index >= plan_entries.len) {
-            if (builtin.mode == .Debug) {
+            if (builtin.mode == .debug) {
                 std.debug.panic(
                     "CLI test invariant violated: lowered test-plan slot root/result ({d}/{d}) is outside module roots/results ({d}/{d})",
                     .{ test_plan.root_index, test_plan.result_index, planned.test_roots.len, plan_entries.len },
@@ -11872,7 +11879,7 @@ fn collectCliTestRootRuns(
         const root_index: usize = @intCast(test_plan.root_index);
         const root = planned.test_roots[root_index];
         const plan_entry = plan_entries[@intCast(test_plan.result_index)];
-        if (builtin.mode == .Debug and
+        if (builtin.mode == .debug and
             (metadata.order != root.order or
                 plan_entry.result_index != test_plan.result_index or
                 plan_entry.module_index != test_plan.module_index or
@@ -11910,7 +11917,7 @@ fn collectCliTestRootRuns(
     }
 
     if (runs.items.len != planned.test_roots.len) {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic(
                 "CLI test invariant violated: lowered {d} test roots for {d} checked test roots",
                 .{ runs.items.len, planned.test_roots.len },
@@ -12522,7 +12529,7 @@ fn lowerPlannedTestModule(
     for (planned.test_roots, 0..) |root, root_index| {
         const entry_index: usize = @intCast(planned.first_entry_index + @as(u32, @intCast(root_index)));
         const plan_entry = plan_entries[entry_index];
-        if (builtin.mode == .Debug and (plan_entry.root_index != root_index or plan_entry.root_order != root.order)) {
+        if (builtin.mode == .debug and (plan_entry.root_index != root_index or plan_entry.root_order != root.order)) {
             std.debug.panic(
                 "CLI test invariant violated: plan entry root index/order ({d}/{d}) differs from lowered root ({d}/{d})",
                 .{ plan_entry.root_index, plan_entry.root_order, root_index, root.order },
@@ -13975,10 +13982,10 @@ fn spawnWatchChild(ctx: *CliCtx, argv: []const []const u8) WatchSpawnChildError!
 fn terminateWatchChild(child: *WatchChild) void {
     switch (builtin.os.tag) {
         .windows => {
-            _ = std.os.windows.ntdll.NtTerminateProcess(child.id, @enumFromInt(1));
+            _ = std.os.windows.ntdll.NtTerminateProcess(child.id, @fromBackingInt(@intCast(1)));
         },
         .wasi => {},
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => {
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => {
             std.posix.kill(child.id, .KILL) catch {};
         },
     }
@@ -14393,8 +14400,8 @@ fn appendCliTestTranscriptEventRecord(
     allocator: Allocator,
     event: CliTestTranscriptEvent,
 ) Allocator.Error!void {
-    try bytes.append(allocator, @intFromEnum(event.kind));
-    try bytes.append(allocator, @intFromEnum(event.stream));
+    try bytes.append(allocator, @backingInt(event.kind));
+    try bytes.append(allocator, @backingInt(event.stream));
     try appendU32(bytes, allocator, @intCast(event.payload.len));
     try bytes.appendSlice(allocator, event.payload);
 }
@@ -14678,7 +14685,7 @@ const CliTestTranscriptCoordinator = struct {
         result_index: usize,
         event: CliTestTranscriptEvent,
     ) ReportRenderError!void {
-        if (builtin.mode == .Debug and result_index >= self.entries.len) {
+        if (builtin.mode == .debug and result_index >= self.entries.len) {
             std.debug.panic("CLI test transcript coordinator received out-of-range event index {d} for {d} entries", .{ result_index, self.entries.len });
         }
         if (result_index < self.next_to_print) return;
@@ -14703,7 +14710,7 @@ const CliTestTranscriptCoordinator = struct {
         result_index: usize,
         entry: CliTestRenderEntry,
     ) ReportRenderError!void {
-        if (builtin.mode == .Debug and result_index >= self.entries.len) {
+        if (builtin.mode == .debug and result_index >= self.entries.len) {
             std.debug.panic("CLI test transcript coordinator received out-of-range result index {d} for {d} entries", .{ result_index, self.entries.len });
         }
         self.entries[result_index] = entry;
@@ -14809,10 +14816,10 @@ const CliOptimizedLiveTestOutput = struct {
         defer self.unlock();
 
         if (self.err != null) return;
-        if (builtin.mode == .Debug and result_index >= self.owned_results.len) {
+        if (builtin.mode == .debug and result_index >= self.owned_results.len) {
             std.debug.panic("CLI optimized live output received out-of-range result index {d} for {d} entries", .{ result_index, self.owned_results.len });
         }
-        if (builtin.mode == .Debug and self.owned_results[result_index] != null) {
+        if (builtin.mode == .debug and self.owned_results[result_index] != null) {
             std.debug.panic("CLI optimized live output received duplicate result index {d}", .{result_index});
         }
 
@@ -14835,7 +14842,7 @@ const CliOptimizedLiveTestOutput = struct {
         call_index: usize,
         eval_result: eval.Inspected.BoolRootEvalResult,
     ) void {
-        if (builtin.mode == .Debug and call_index >= self.runs.len) {
+        if (builtin.mode == .debug and call_index >= self.runs.len) {
             std.debug.panic("CLI optimized live output received out-of-range call index {d} for {d} roots", .{ call_index, self.runs.len });
         }
         const run = self.runs[call_index];
@@ -14854,10 +14861,10 @@ const CliOptimizedLiveTestOutput = struct {
             return;
         }
         const result_index: usize = @intCast(run.result_index);
-        if (builtin.mode == .Debug and result_index >= self.owned_results.len) {
+        if (builtin.mode == .debug and result_index >= self.owned_results.len) {
             std.debug.panic("CLI optimized live output received out-of-range result index {d} for {d} entries", .{ result_index, self.owned_results.len });
         }
-        if (builtin.mode == .Debug and self.owned_results[result_index] != null) {
+        if (builtin.mode == .debug and self.owned_results[result_index] != null) {
             std.debug.panic("CLI optimized live output received duplicate result index {d}", .{result_index});
         }
 
@@ -14876,7 +14883,7 @@ const CliOptimizedLiveTestOutput = struct {
         call_index: usize,
         event_view: eval.Inspected.BoolRootEventView,
     ) void {
-        if (builtin.mode == .Debug and call_index >= self.runs.len) {
+        if (builtin.mode == .debug and call_index >= self.runs.len) {
             std.debug.panic("CLI optimized live output received out-of-range event call index {d} for {d} roots", .{ call_index, self.runs.len });
         }
         const run = self.runs[call_index];
@@ -15040,7 +15047,7 @@ fn renderCliTestResultEntry(
     report_config: reporting.ReportingConfig,
     transcript_events_already_rendered: usize,
 ) ReportRenderError!void {
-    if (builtin.mode == .Debug and transcript_events_already_rendered > entry.result.transcript.len) {
+    if (builtin.mode == .debug and transcript_events_already_rendered > entry.result.transcript.len) {
         std.debug.panic(
             "CLI test transcript coordinator rendered {d} events before finished result with {d} events",
             .{ transcript_events_already_rendered, entry.result.transcript.len },
@@ -17325,7 +17332,7 @@ fn rocBump(ctx: *CliCtx, args_in: cli_args.BumpArgs) CliMainError!void {
                 .message = try std.fmt.allocPrint(ctx.arena, "The expected version {f} does not move forward from {f}.", .{ expected, old_version_value }),
             } });
         };
-        if (@intFromEnum(declared) < @intFromEnum(result.magnitude)) {
+        if (@backingInt(declared) < @backingInt(result.magnitude)) {
             return ctx.fail(.{ .bump_failed = .{
                 .title = "Insufficient Version Bump",
                 .message = try std.fmt.allocPrint(
@@ -18223,10 +18230,10 @@ test "classifyNativeRunTermination preserves successful exit" {
 test "classifyNativeRunTermination preserves signal termination" {
     const testing = std.testing;
 
-    const result = classifyNativeRunTermination(.{ .signal = @enumFromInt(11) });
+    const result = classifyNativeRunTermination(.{ .signal = @fromBackingInt(@intCast(11)) });
 
     try testing.expect(result == .signal);
-    try testing.expectEqual(@as(std.posix.SIG, @enumFromInt(11)), result.signal);
+    try testing.expectEqual(@as(std.posix.SIG, @fromBackingInt(@intCast(11))), result.signal);
 }
 
 test "check errors determine command failure after work completes" {

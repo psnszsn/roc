@@ -122,7 +122,7 @@ pub const Conversion = struct {
 /// Look up the conversion that `op` performs, or null if it does not convert
 /// between number types.
 pub fn getConversionSpec(op: LowLevel) ?Conversion {
-    return conversion_by_op[@intFromEnum(op)];
+    return conversion_by_op[@backingInt(op)];
 }
 
 /// A number to text, or text to a number.
@@ -137,7 +137,7 @@ pub const StringConversion = struct {
 /// Look up the number type and direction of `op`, or null if it does not
 /// convert between a number and its text.
 pub fn getStringConversionSpec(op: LowLevel) ?StringConversion {
-    return string_conversion_by_op[@intFromEnum(op)];
+    return string_conversion_by_op[@backingInt(op)];
 }
 
 /// What a `*_from_str` op needs in order to parse text into its number type.
@@ -171,16 +171,16 @@ pub fn getNumericParseSpec(op: LowLevel) ?NumericParseSpec {
 /// Hand-rolled because `std.meta.stringToEnum` builds a comptime map on every
 /// call, which costs most of the branch budget.
 fn numTypeFromName(name: []const u8) ?NumType {
-    inline for (@typeInfo(NumType).@"enum".fields) |field| {
-        if (std.mem.eql(u8, name, field.name)) return @field(NumType, field.name);
+    inline for (@typeInfo(NumType).@"enum".field_names) |field_name| {
+        if (std.mem.eql(u8, name, field_name)) return @field(NumType, field_name);
     }
     return null;
 }
 
 /// Look up a `Mode` by name. Returns null when no variant has that name.
 fn modeFromName(name: []const u8) ?Mode {
-    inline for (@typeInfo(Mode).@"enum".fields) |field| {
-        if (std.mem.eql(u8, name, field.name)) return @field(Mode, field.name);
+    inline for (@typeInfo(Mode).@"enum".field_names) |field_name| {
+        if (std.mem.eql(u8, name, field_name)) return @field(Mode, field_name);
     }
     return null;
 }
@@ -208,8 +208,8 @@ fn rebuildName(comptime conversion: Conversion) []const u8 {
 /// Split an op name into a number type and a direction. Returns null unless the
 /// prefix is a `NumType` and the name ends in `_to_str` or `_from_str`.
 fn stringConversionFromName(name: []const u8) ?StringConversion {
-    inline for (@typeInfo(StringDirection).@"enum".fields) |field| {
-        const direction: StringDirection = @enumFromInt(field.value);
+    inline for (@typeInfo(StringDirection).@"enum".field_values) |field_value| {
+        const direction: StringDirection = @fromBackingInt(@intCast(field_value));
         const affix = switch (direction) {
             .to_str => "_to_str",
             .from_str => "_from_str",
@@ -235,9 +235,11 @@ fn rebuildStringName(comptime conversion: StringConversion) []const u8 {
 /// numeric conversion. Built by parsing every name at comptime.
 const conversion_by_op = blk: {
     @setEvalBranchQuota(eval_branch_quota);
-    const fields = @typeInfo(LowLevel).@"enum".fields;
-    var entries: [fields.len]?Conversion = @splat(null);
-    for (fields) |field| entries[field.value] = conversionFromName(field.name);
+    const enum_info = @typeInfo(LowLevel).@"enum";
+    var entries: [enum_info.field_names.len]?Conversion = @splat(null);
+    for (enum_info.field_names, enum_info.field_values) |field_name, field_value| {
+        entries[field_value] = conversionFromName(field_name);
+    }
     break :blk entries;
 };
 
@@ -245,9 +247,11 @@ const conversion_by_op = blk: {
 /// not convert between a number and its text.
 const string_conversion_by_op = blk: {
     @setEvalBranchQuota(eval_branch_quota);
-    const fields = @typeInfo(LowLevel).@"enum".fields;
-    var entries: [fields.len]?StringConversion = @splat(null);
-    for (fields) |field| entries[field.value] = stringConversionFromName(field.name);
+    const enum_info = @typeInfo(LowLevel).@"enum";
+    var entries: [enum_info.field_names.len]?StringConversion = @splat(null);
+    for (enum_info.field_names, enum_info.field_values) |field_name, field_value| {
+        entries[field_value] = stringConversionFromName(field_name);
+    }
     break :blk entries;
 };
 
@@ -273,14 +277,15 @@ const not_conversions = [_]LowLevel{
 /// conversion, or is listed in `not_conversions`.
 fn assertClassificationIsComplete() void {
     @setEvalBranchQuota(eval_branch_quota);
-    for (@typeInfo(LowLevel).@"enum".fields) |field| {
-        if (std.mem.find(u8, field.name, "_to_") == null) continue;
-        if (conversion_by_op[field.value] != null) continue;
-        if (string_conversion_by_op[field.value] != null) continue;
+    const enum_info = @typeInfo(LowLevel).@"enum";
+    for (enum_info.field_names, enum_info.field_values) |field_name, field_value| {
+        if (std.mem.find(u8, field_name, "_to_") == null) continue;
+        if (conversion_by_op[field_value] != null) continue;
+        if (string_conversion_by_op[field_value] != null) continue;
         for (not_conversions) |excluded| {
-            if (field.value == @intFromEnum(excluded)) break;
+            if (field_value == @backingInt(excluded)) break;
         } else {
-            @compileError("'" ++ field.name ++ "' is named like a numeric conversion but does not" ++
+            @compileError("'" ++ field_name ++ "' is named like a numeric conversion but does not" ++
                 " classify as one; add it to not_conversions if that is right, or fix `conversionFromName`");
         }
     }
@@ -289,10 +294,11 @@ fn assertClassificationIsComplete() void {
 /// Rebuilding a name from its three parts reproduces the original.
 fn assertClassificationIsLossless() void {
     @setEvalBranchQuota(eval_branch_quota);
-    for (@typeInfo(LowLevel).@"enum".fields) |field| {
-        const conversion = conversion_by_op[field.value] orelse continue;
-        if (!std.mem.eql(u8, rebuildName(conversion), field.name)) {
-            @compileError("numeric conversion '" ++ field.name ++ "' parses as '" ++
+    const enum_info = @typeInfo(LowLevel).@"enum";
+    for (enum_info.field_names, enum_info.field_values) |field_name, field_value| {
+        const conversion = conversion_by_op[field_value] orelse continue;
+        if (!std.mem.eql(u8, rebuildName(conversion), field_name)) {
+            @compileError("numeric conversion '" ++ field_name ++ "' parses as '" ++
                 rebuildName(conversion) ++ "', so its name and its parts disagree");
         }
     }
@@ -302,10 +308,11 @@ fn assertClassificationIsLossless() void {
 /// original.
 fn assertStringClassificationIsLossless() void {
     @setEvalBranchQuota(eval_branch_quota);
-    for (@typeInfo(LowLevel).@"enum".fields) |field| {
-        const conversion = string_conversion_by_op[field.value] orelse continue;
-        if (!std.mem.eql(u8, rebuildStringName(conversion), field.name)) {
-            @compileError("string conversion '" ++ field.name ++ "' parses as '" ++
+    const enum_info = @typeInfo(LowLevel).@"enum";
+    for (enum_info.field_names, enum_info.field_values) |field_name, field_value| {
+        const conversion = string_conversion_by_op[field_value] orelse continue;
+        if (!std.mem.eql(u8, rebuildStringName(conversion), field_name)) {
+            @compileError("string conversion '" ++ field_name ++ "' parses as '" ++
                 rebuildStringName(conversion) ++ "', so its name and its parts disagree");
         }
     }

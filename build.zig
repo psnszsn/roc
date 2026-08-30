@@ -2,7 +2,6 @@ const std = @import("std");
 const builtin = @import("builtin");
 const modules = @import("src/build/modules.zig");
 const glibc_stub_build = @import("src/build/glibc_stub.zig");
-const ci_steps = @import("src/build/ci_steps.zig");
 const roc_target = @import("src/target/mod.zig");
 const Dependency = std.Build.Dependency;
 const OptimizeMode = std.builtin.OptimizeMode;
@@ -245,6 +244,11 @@ fn testHostNeedsLibc(options: TestHostOptions, target: ResolvedTarget) bool {
         .maccatalyst,
         .windows,
         .uefi,
+        .wiiu,
+        .@"switch",
+        .psx,
+        .tios,
+        .ashetos,
         .@"3ds",
         .ps3,
         .ps4,
@@ -365,33 +369,21 @@ fn getReleaseTargetQuery(b: *std.Build, target: ResolvedTarget) std.Target.Query
 }
 
 const TestsSummaryStep = struct {
-    step: Step,
-    has_filters: bool,
-    test_filters: []const []const u8,
-    forced_passes: u64,
+    step: *Step,
     serialize_runs: bool,
     last_run: ?*Step,
-    run_steps: std.ArrayList(*Step),
 
     fn create(
         b: *std.Build,
-        test_filters: []const []const u8,
-        forced_passes: usize,
+        _: []const []const u8,
+        _: usize,
     ) *TestsSummaryStep {
         const self = b.allocator.create(TestsSummaryStep) catch @panic("OOM");
+        const run = addBuildAction(b, &.{"tests-summary"});
         self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "tests_summary",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .has_filters = test_filters.len > 0,
-            .test_filters = test_filters,
-            .forced_passes = @intCast(forced_passes),
+            .step = &run.step,
             .serialize_runs = false,
             .last_run = null,
-            .run_steps = .empty,
         };
         return self;
     }
@@ -407,7 +399,6 @@ const TestsSummaryStep = struct {
     /// `run-test-zig-*` step. Prefer `TestSuiteRegistry.register`, which
     /// guarantees that by construction.
     fn addRun(self: *TestsSummaryStep, run_step: *Step) void {
-        self.run_steps.append(self.step.owner.allocator, run_step) catch @panic("OOM");
         if (self.serialize_runs) {
             if (self.last_run) |last_run| {
                 run_step.dependOn(last_run);
@@ -415,87 +406,6 @@ const TestsSummaryStep = struct {
             self.last_run = run_step;
         }
         self.step.dependOn(run_step);
-    }
-
-    /// Returns the position of the last '.' within the common prefix of a and b.
-    /// Returns 0 if there is no shared dot-delimited prefix.
-    fn commonDotPrefix(a: []const u8, b: []const u8) usize {
-        const min_len = @min(a.len, b.len);
-        var last_dot: usize = 0;
-        for (0..min_len) |i| {
-            if (a[i] != b[i]) break;
-            if (a[i] == '.') last_dot = i;
-        }
-        return last_dot;
-    }
-
-    /// Returns true if the test name contains any of the user's filter strings.
-    fn matchesUserFilter(test_filters: []const []const u8, name: []const u8) bool {
-        for (test_filters) |filter| {
-            if (std.mem.find(u8, name, filter) != null) return true;
-        }
-        return false;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-
-        const self: *TestsSummaryStep = @fieldParentPtr("step", step);
-
-        var passed: u64 = 0;
-
-        for (self.run_steps.items) |dependency| {
-            const module_pass_count = dependency.test_results.passCount();
-            passed += @intCast(module_pass_count);
-        }
-
-        var effective_passed = passed;
-        if (self.has_filters and self.forced_passes != 0) {
-            const subtract = @min(effective_passed, self.forced_passes);
-            effective_passed -= subtract;
-        }
-
-        // When filters are active, print the names of all tests that matched.
-        // Consecutive tests sharing a common dot-delimited prefix are shown
-        // in a compact form to avoid visual repetition.
-        if (self.has_filters and effective_passed > 0) {
-            const max_indent = 256;
-            const spaces = [_]u8{' '} ** max_indent;
-            var prev_module: []const u8 = "";
-            var prev_name: []const u8 = "";
-
-            for (self.run_steps.items) |dependency| {
-                if (dependency.id != .run) continue;
-                const run: *std.Build.Step.Run = @fieldParentPtr("step", dependency);
-                const tm = run.cached_test_metadata orelse continue;
-                const module_name = if (run.producer) |p| p.name else "unknown";
-                for (tm.names) |name_offset| {
-                    const name = std.mem.sliceTo(tm.string_bytes[name_offset..], 0);
-                    if (name.len == 0) continue;
-                    if (!matchesUserFilter(self.test_filters, name)) continue;
-
-                    const shared_dot = if (std.mem.eql(u8, module_name, prev_module))
-                        commonDotPrefix(name, prev_name)
-                    else
-                        0;
-
-                    if (shared_dot > 0) {
-                        const indent_len = @min(2 + module_name.len + 2 + shared_dot, max_indent);
-                        std.debug.print("{s}{s}\n", .{ spaces[0..indent_len], name[shared_dot..] });
-                    } else {
-                        std.debug.print("  {s}: {s}\n", .{ module_name, name });
-                    }
-                    prev_module = module_name;
-                    prev_name = name;
-                }
-            }
-        }
-
-        if (effective_passed == 0) {
-            std.debug.print("No tests ran (all tests filtered out).\n", .{});
-        } else {
-            std.debug.print("All {d} tests passed.\n", .{effective_passed});
-        }
     }
 };
 
@@ -524,6 +434,9 @@ const TestSuiteSpec = struct {
     deps: []const *Step = &.{},
     /// Environment variables both runs need.
     env: []const TestSuiteEnv = &.{},
+    /// Working directory for both runs. Tests use this when a generated
+    /// fixture is installed at a make-phase-resolved prefix.
+    cwd: ?std.Build.LazyPath = null,
     /// Whether a bare `zig build` should also build this test binary.
     default_step: bool = false,
 };
@@ -615,1503 +528,12 @@ const TestSuiteRegistry = struct {
     /// never a second copy of the configuration to fall out of sync.
     fn configuredRun(self: TestSuiteRegistry, spec: TestSuiteSpec) *Step.Run {
         const run = self.b.addRunArtifact(spec.compile);
+        run.addPassthruArgs();
         if (self.run_args.len != 0) run.addArgs(self.run_args);
+        if (spec.cwd) |cwd| run.setCwd(cwd);
         for (spec.env) |entry| run.setEnvironmentVariable(entry.key, entry.value);
         for (spec.deps) |dep| run.step.dependOn(dep);
         return run;
-    }
-};
-
-/// Build step that checks for forbidden patterns in the type checker code.
-///
-/// During type checking, we NEVER do string or byte comparisons because:
-/// 1. They take linear time, which can cause performance issues
-/// 2. They are brittle to changes that type-checking should not be sensitive to
-///
-/// Instead, we always compare indices - either into node stores or to interned string indices.
-/// This step enforces that rule by failing the build if `std.mem.` is found in src/canonicalize/, src/check/, src/layout/, or src/eval/.
-const CheckTypeCheckerPatternsStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckTypeCheckerPatternsStep {
-        const self = b.allocator.create(CheckTypeCheckerPatternsStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-type-checker-patterns",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const allocator = b.allocator;
-
-        var violations = std.ArrayList(Violation).empty;
-        defer violations.deinit(allocator);
-
-        // Recursively scan src/canonicalize/, src/check/, src/layout/, and src/eval/ for .zig files
-        // TODO: uncomment "src/canonicalize" once its std.mem violations are fixed
-        const dirs_to_scan = [_][]const u8{ "src/check", "src/layout", "src/eval" };
-        for (dirs_to_scan) |dir_path| {
-            const io = step.owner.graph.io;
-            var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| {
-                return step.fail("Failed to open {s} directory: {}", .{ dir_path, err });
-            };
-            defer dir.close(io);
-
-            try scanDirectory(allocator, io, dir, dir_path, &violations);
-        }
-
-        if (violations.items.len > 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 80 ++ "\n", .{});
-            std.debug.print("FORBIDDEN PATTERN DETECTED\n", .{});
-            std.debug.print("=" ** 80 ++ "\n\n", .{});
-
-            std.debug.print(
-                \\Code in src/canonicalize/, src/check/, src/layout/, and src/eval/ must NOT do raw string comparison or manipulation.
-                \\
-                \\WHY THIS RULE EXISTS:
-                \\  We NEVER do string or byte comparisons because:
-                \\
-                \\  1. PERFORMANCE: String comparisons take O(n) time where n is the string
-                \\     length. These code paths can involve many comparisons, so this adds up.
-                \\
-                \\  2. BRITTLENESS: String comparisons make the code sensitive to changes it
-                \\     shouldn't care about (e.g., how identifiers are rendered, whitespace,
-                \\     formatting). This leads to subtle bugs.
-                \\
-                \\WHAT TO DO INSTEAD:
-                \\  Always compare indices rather than strings:
-                \\
-                \\  - For identifiers: Compare Ident.Idx values (interned string indices)
-                \\  - For types: Compare type variable indices or node store indices
-                \\  - For expressions: Compare Expr.Idx values from the node store
-                \\
-                \\  Example - WRONG:
-                \\    if (std.mem.eql(u8, ident_name, "is_eq")) {{ ... }}
-                \\
-                \\  Example - RIGHT:
-                \\    if (ident_idx == module_env.idents.is_eq) {{ ... }}
-                \\
-                \\VIOLATIONS FOUND:
-                \\
-            , .{});
-
-            for (violations.items) |violation| {
-                std.debug.print("  {s}:{d}: {s}\n", .{
-                    violation.file_path,
-                    violation.line_number,
-                    violation.line_content,
-                });
-            }
-
-            std.debug.print("\n" ++ "=" ** 80 ++ "\n", .{});
-
-            return step.fail(
-                "Found {d} forbidden patterns (raw string comparison or manipulation) in src/canonicalize/, src/check/, src/layout/, or src/eval/. " ++
-                    "See above for details on why this is forbidden and what to do instead.",
-                .{violations.items.len},
-            );
-        }
-    }
-
-    const Violation = struct {
-        file_path: []const u8,
-        line_number: usize,
-        line_content: []const u8,
-    };
-
-    const ExcludedRange = struct { file: []const u8, start: usize, end: usize };
-    const excluded_ranges = [_]ExcludedRange{
-        // Cross-module name matching in Check.zig requires string comparison (lines 5530-5547)
-        // This is necessary because origin_module is an ident from the type's defining module,
-        // while module_name is from the importing module's ident store - no way to compare without strings
-        .{ .file = "Check.zig", .start = 5530, .end = 5547 },
-        // Cross-module nominal type matching in store.zig requires string comparison
-        // because ident indices are module-local—same nominal from different modules
-        // has different Ident.Idx values, so we must compare the underlying strings
-        .{ .file = "store.zig", .start = 340, .end = 355 },
-        // Cross-module ident matching in cir_to_lir.zig requires string comparison
-        // because platform and app modules have separate ident stores—the same alias
-        // name has different Ident.Idx values across modules, so we must compare via text.
-        .{ .file = "cir_to_lir.zig", .start = 110, .end = 115 },
-        // inspected.zig resolves a type module's import statement from the caller's
-        // module name, which arrives as text from outside this module's ident store.
-        .{ .file = "inspected.zig", .start = 226, .end = 232 },
-        // inspected.zig trims the trailing newline off a rendered report. This is
-        // presentation text on its way out, not a type-checker comparison.
-        .{ .file = "inspected.zig", .start = 2211, .end = 2211 },
-        // inspected.zig converts a NUL-terminated dylib path from the linker into a
-        // slice. Path bytes, not identifiers.
-        .{ .file = "inspected.zig", .start = 3000, .end = 3004 },
-        // inspected_run.zig dispatches on a hosted function's ABI symbol, which is
-        // matched by name at the host boundary and has no Ident.Idx.
-        .{ .file = "inspected_run.zig", .start = 107, .end = 107 },
-    };
-
-    fn isInExcludedRange(file_path: []const u8, line_number: usize) bool {
-        for (excluded_ranges) |range| {
-            if (std.mem.endsWith(u8, file_path, range.file)) {
-                if (line_number >= range.start and line_number <= range.end) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    fn scanDirectory(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        dir: std.Io.Dir,
-        path_prefix: []const u8,
-        violations: *std.ArrayList(Violation),
-    ) !void {
-        var walker = try dir.walk(allocator);
-        defer walker.deinit();
-
-        while (try walker.next(io)) |entry| {
-            if (entry.kind != .file) continue;
-            if (!std.mem.endsWith(u8, entry.path, ".zig")) continue;
-
-            // Skip test files - they may legitimately need string comparison for assertions
-            if (std.mem.endsWith(u8, entry.path, "_test.zig")) continue;
-            if (std.mem.find(u8, entry.path, "test/") != null) continue;
-            if (std.mem.startsWith(u8, entry.path, "test")) continue;
-
-            const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path_prefix, entry.path });
-
-            const content = dir.readFileAlloc(io, entry.path, allocator, .limited(10 * 1024 * 1024)) catch continue;
-            defer allocator.free(content);
-
-            var line_number: usize = 1;
-            var line_start: usize = 0;
-
-            for (content, 0..) |char, i| {
-                if (char == '\n') {
-                    const line = content[line_start..i];
-
-                    const trimmed = std.mem.trim(u8, line, " \t");
-                    // Skip comments
-                    if (std.mem.startsWith(u8, trimmed, "//")) {
-                        line_number += 1;
-                        line_start = i + 1;
-                        continue;
-                    }
-
-                    // Check for std.mem. usage (but allow safe patterns)
-                    if (std.mem.find(u8, line, "std.mem.")) |idx| {
-                        const after_match = line[idx + 8 ..];
-
-                        // Allow these safe patterns that don't involve string/byte comparison:
-                        // - std.mem.Allocator: a type, not a comparison
-                        // - std.mem.Alignment: a type, not a comparison
-                        // - std.mem.sort: sorting by custom comparator, not string comparison
-                        // - std.mem.asBytes: type punning, not string comparison
-                        // - std.mem.reverse: reversing arrays, not string comparison
-                        // - std.mem.alignForward: memory alignment arithmetic, not string comparison
-                        // - std.mem.order: sort ordering (used by sort comparators), not string comparison
-                        // - std.mem.copyForwards: byte copying, not string comparison
-                        const is_allowed =
-                            std.mem.startsWith(u8, after_match, "Allocator") or
-                            std.mem.startsWith(u8, after_match, "Alignment") or
-                            std.mem.startsWith(u8, after_match, "sort") or
-                            std.mem.startsWith(u8, after_match, "asBytes") or
-                            std.mem.startsWith(u8, after_match, "reverse") or
-                            std.mem.startsWith(u8, after_match, "alignForward") or
-                            std.mem.startsWith(u8, after_match, "order") or
-                            std.mem.startsWith(u8, after_match, "copyForwards");
-
-                        if (!is_allowed and !isInExcludedRange(full_path, line_number)) {
-                            try violations.append(allocator, .{
-                                .file_path = full_path,
-                                .line_number = line_number,
-                                .line_content = try allocator.dupe(u8, trimmed),
-                            });
-                        }
-                    }
-
-                    // Check for findByString usage - should use Ident.Idx comparison instead
-                    if (std.mem.find(u8, line, "findByString") != null and !isInExcludedRange(full_path, line_number)) {
-                        try violations.append(allocator, .{
-                            .file_path = full_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                        });
-                    }
-
-                    // Check for findIdent usage - should use pre-stored Ident.Idx instead
-                    if (std.mem.find(u8, line, "findIdent") != null and !isInExcludedRange(full_path, line_number)) {
-                        try violations.append(allocator, .{
-                            .file_path = full_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                        });
-                    }
-
-                    // Check for getMethodIdent usage - should use pre-stored Ident.Idx instead
-                    if (std.mem.find(u8, line, "getMethodIdent") != null and !isInExcludedRange(full_path, line_number)) {
-                        try violations.append(allocator, .{
-                            .file_path = full_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                        });
-                    }
-
-                    line_number += 1;
-                    line_start = i + 1;
-                }
-            }
-        }
-    }
-};
-
-/// Header marker present in files vendored from the Zig compiler. Such files
-/// are exempt from Roc's architecture-style checks (the @enumFromInt(0) and
-/// unused-suppression bans below): their idioms—e.g. zero-valued enum
-/// constants like `AddrSpace = @enumFromInt(0)` and `_ =` suppressions in
-/// upstream TODO stubs—are correct at the source and rewriting them would
-/// only diverge from upstream. This mirrors how ci/tidy.zig skips crates/.
-const vendored_zig_marker = "Adapted from the Zig compiler";
-
-/// Build step that checks for @enumFromInt(0) usage in all .zig files.
-///
-/// We forbid @enumFromInt(0) because it hides bugs and makes them harder to debug.
-/// If we need a placeholder value that we believe will never be read, we should
-/// use `undefined` instead - that way our intent is clear, and it can fail in a
-/// more obvious way if our assumption is incorrect.
-const CheckEnumFromIntZeroStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckEnumFromIntZeroStep {
-        const self = b.allocator.create(CheckEnumFromIntZeroStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-enum-from-int-zero",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-        const b = step.owner;
-        const allocator = b.allocator;
-
-        var violations = std.ArrayList(Violation).empty;
-        defer violations.deinit(allocator);
-
-        // Recursively scan src/ for .zig files
-        const io = step.owner.graph.io;
-        var dir = std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true }) catch |err| {
-            return step.fail("Failed to open src directory: {}", .{err});
-        };
-        defer dir.close(io);
-
-        try scanDirectoryForEnumFromIntZero(allocator, io, dir, "src", &violations);
-
-        if (violations.items.len > 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 80 ++ "\n", .{});
-            std.debug.print("FORBIDDEN PATTERN: @enumFromInt(0)\n", .{});
-            std.debug.print("=" ** 80 ++ "\n\n", .{});
-
-            std.debug.print(
-                \\Using @enumFromInt(0) is forbidden in this codebase.
-                \\
-                \\WHY THIS RULE EXISTS:
-                \\  @enumFromInt(0) hides bugs and makes them harder to debug. It creates
-                \\  a "valid-looking" value that can silently propagate through the code
-                \\  when something goes wrong.
-                \\
-                \\WHAT TO DO INSTEAD:
-                \\  If you need a placeholder value that you believe will never be read,
-                \\  use `undefined` instead. This makes your intent clear, and if your
-                \\  assumption is wrong and the value IS read, it will fail more obviously.
-                \\
-                \\  When using `undefined`, add a comment explaining why it's correct there
-                \\  (e.g., where it will be overwritten before being read).
-                \\
-                \\  Example - WRONG:
-                \\    .anno = @enumFromInt(0), // placeholder - will be replaced
-                \\
-                \\  Example - RIGHT:
-                \\    .anno = undefined, // overwritten in Phase 1.7 before use
-                \\
-                \\VIOLATIONS FOUND:
-                \\
-            , .{});
-
-            for (violations.items) |violation| {
-                std.debug.print("  {s}:{d}: {s}\n", .{
-                    violation.file_path,
-                    violation.line_number,
-                    violation.line_content,
-                });
-            }
-
-            std.debug.print("\n" ++ "=" ** 80 ++ "\n", .{});
-
-            return step.fail(
-                "Found {d} uses of @enumFromInt(0). Using placeholder values like this has consistently led to bugs in this code base. " ++
-                    "Do not use @enumFromInt(0) and also do not uncritically replace it with another placeholder like .first or something like that. " ++
-                    "If you want it to be uninitialized and are very confident it will be overwritten before it is ever read, then use `undefined`. " ++
-                    "Otherwise, take a step back and rethink how this code works; there should be a way to implement this in a way that does not use hardcoded placeholder indices like 0! " ++
-                    "See above for details.",
-                .{violations.items.len},
-            );
-        }
-    }
-
-    const Violation = struct {
-        file_path: []const u8,
-        line_number: usize,
-        line_content: []const u8,
-    };
-
-    fn scanDirectoryForEnumFromIntZero(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        dir: std.Io.Dir,
-        path_prefix: []const u8,
-        violations: *std.ArrayList(Violation),
-    ) !void {
-        var walker = try dir.walk(allocator);
-        defer walker.deinit();
-
-        while (try walker.next(io)) |entry| {
-            if (entry.kind != .file) continue;
-            if (!std.mem.endsWith(u8, entry.path, ".zig")) continue;
-
-            const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path_prefix, entry.path });
-
-            const content = dir.readFileAlloc(io, entry.path, allocator, .limited(10 * 1024 * 1024)) catch continue;
-            defer allocator.free(content);
-
-            // Vendored Zig-compiler files use upstream idioms this check would
-            // flag (e.g. zero-valued enum constants like `AddrSpace = @enumFromInt(0)`);
-            // exempt them, mirroring how ci/tidy.zig skips crates/.
-            if (std.mem.find(u8, content, vendored_zig_marker) != null) continue;
-
-            var line_number: usize = 1;
-            var line_start: usize = 0;
-
-            for (content, 0..) |char, i| {
-                if (char == '\n') {
-                    const line = content[line_start..i];
-
-                    const trimmed = std.mem.trim(u8, line, " \t");
-                    // Skip comments
-                    if (std.mem.startsWith(u8, trimmed, "//")) {
-                        line_number += 1;
-                        line_start = i + 1;
-                        continue;
-                    }
-
-                    // Check for @enumFromInt(0) usage
-                    if (std.mem.find(u8, line, "@enumFromInt(0)") != null) {
-                        try violations.append(allocator, .{
-                            .file_path = full_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                        });
-                    }
-
-                    line_number += 1;
-                    line_start = i + 1;
-                }
-            }
-        }
-    }
-};
-
-/// Build step that checks for unused variable suppression patterns.
-///
-/// In this codebase, we don't use `_ = variable;` to suppress unused variable warnings.
-/// Instead, we delete the unused variable/argument and update all call sites as necessary.
-const CheckUnusedSuppressionStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckUnusedSuppressionStep {
-        const self = b.allocator.create(CheckUnusedSuppressionStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-unused-suppression",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const allocator = b.allocator;
-
-        var violations = std.ArrayList(Violation).empty;
-        defer violations.deinit(allocator);
-
-        // Scan all src/ directories for .zig files
-        const io = step.owner.graph.io;
-        var dir = std.Io.Dir.cwd().openDir(io, "src", .{ .iterate = true }) catch |err| {
-            return step.fail("Failed to open src/ directory: {}", .{err});
-        };
-        defer dir.close(io);
-
-        try scanDirectoryForUnusedSuppression(allocator, io, dir, "src", &violations);
-
-        if (violations.items.len > 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 80 ++ "\n", .{});
-            std.debug.print("UNUSED VARIABLE SUPPRESSION DETECTED\n", .{});
-            std.debug.print("=" ** 80 ++ "\n\n", .{});
-
-            std.debug.print(
-                \\In this codebase, we do NOT use `_ = variable;` to suppress unused warnings.
-                \\
-                \\Instead, you should:
-                \\  1. Delete the unused variable, parameter, or argument
-                \\  2. Update all call sites as necessary
-                \\  3. Propagate the change through the codebase until tests pass
-                \\
-                \\VIOLATIONS FOUND:
-                \\
-            , .{});
-
-            for (violations.items) |violation| {
-                std.debug.print("  {s}:{d}: {s}\n", .{
-                    violation.file_path,
-                    violation.line_number,
-                    violation.line_content,
-                });
-            }
-
-            std.debug.print("\n" ++ "=" ** 80 ++ "\n", .{});
-
-            return step.fail(
-                "Found {d} unused variable suppression patterns (`_ = identifier;`). " ++
-                    "Delete the unused variables and update call sites instead.",
-                .{violations.items.len},
-            );
-        }
-    }
-
-    const Violation = struct {
-        file_path: []const u8,
-        line_number: usize,
-        line_content: []const u8,
-    };
-
-    fn scanDirectoryForUnusedSuppression(
-        allocator: std.mem.Allocator,
-        io: std.Io,
-        dir: std.Io.Dir,
-        path_prefix: []const u8,
-        violations: *std.ArrayList(Violation),
-    ) !void {
-        var walker = try dir.walk(allocator);
-        defer walker.deinit();
-
-        while (try walker.next(io)) |entry| {
-            if (entry.kind != .file) continue;
-            if (!std.mem.endsWith(u8, entry.path, ".zig")) continue;
-
-            const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ path_prefix, entry.path });
-
-            const content = dir.readFileAlloc(io, entry.path, allocator, .limited(10 * 1024 * 1024)) catch continue;
-            defer allocator.free(content);
-
-            // Vendored Zig-compiler files carry upstream idioms this check would
-            // flag (e.g. `_ =` suppressions in unimplemented TODO stubs whose
-            // signatures are fixed by their callers); exempt them.
-            if (std.mem.find(u8, content, vendored_zig_marker) != null) continue;
-
-            var line_number: usize = 1;
-            var line_start: usize = 0;
-
-            for (content, 0..) |char, i| {
-                if (char == '\n') {
-                    const line = content[line_start..i];
-                    const trimmed = std.mem.trim(u8, line, " \t");
-
-                    // Check for pattern: _ = identifier;
-                    // where identifier is alphanumeric with underscores
-                    if (isUnusedSuppression(trimmed)) {
-                        try violations.append(allocator, .{
-                            .file_path = full_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                        });
-                    }
-
-                    line_number += 1;
-                    line_start = i + 1;
-                }
-            }
-        }
-    }
-
-    fn isUnusedSuppression(line: []const u8) bool {
-        // Pattern: `_ = identifier;` where identifier is alphanumeric with underscores
-        // Must start with "_ = " and end with ";"
-        if (!std.mem.startsWith(u8, line, "_ = ")) return false;
-        if (!std.mem.endsWith(u8, line, ";")) return false;
-
-        // Extract the identifier part (between "_ = " and ";")
-        const identifier = line[4 .. line.len - 1];
-
-        // Must have at least one character
-        if (identifier.len == 0) return false;
-
-        // Check that identifier contains only alphanumeric chars and underscores
-        // Also allow dots for field access like `_ = self.field;` which we also want to catch
-        for (identifier) |c| {
-            if (!std.ascii.isAlphanumeric(c) and c != '_' and c != '.') {
-                return false;
-            }
-        }
-
-        return true;
-    }
-};
-
-/// Build step that checks for deleted post-check architecture APIs being reintroduced.
-///
-/// This enforces the cor-style lowering contract:
-/// - no output/canonicalization layer in post-check lowering
-/// - no workspace/source-var remapping layer in monotype
-/// - no canonical-source specialization lookup in compilation stages
-const CheckPostcheckArchitectureStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckPostcheckArchitectureStep {
-        const self = b.allocator.create(CheckPostcheckArchitectureStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-postcheck-architecture",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-
-        if (builtin.os.tag == .windows) {
-            std.debug.print("Skipping post-check architecture check on Windows (perl not available)\n", .{});
-            return;
-        }
-
-        var child_argv = std.ArrayList([]const u8).empty;
-        defer child_argv.deinit(b.allocator);
-
-        try child_argv.append(b.allocator, "perl");
-        try child_argv.append(b.allocator, "ci/check_postcheck_architecture.pl");
-
-        const io = b.graph.io;
-        var child = try std.process.spawn(io, .{
-            .argv = child_argv.items,
-            .environ_map = &b.graph.environ_map,
-        });
-        const term = try child.wait(io);
-
-        switch (term) {
-            .exited => |code| {
-                if (code != 0) {
-                    return step.fail(
-                        "Post-check architecture check failed. Run 'perl ci/check_postcheck_architecture.pl' to see details.",
-                        .{},
-                    );
-                }
-            },
-            .signal, .stopped, .unknown => {
-                return step.fail("ci/check_postcheck_architecture.pl terminated abnormally", .{});
-            },
-        }
-    }
-};
-
-const CheckWasmBuiltinRoutingStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckWasmBuiltinRoutingStep {
-        const self = b.allocator.create(CheckWasmBuiltinRoutingStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-wasm-builtin-routing",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        if (builtin.os.tag == .windows) {
-            std.debug.print("Skipping WASM builtin routing check on Windows (perl not available)\n", .{});
-            return;
-        }
-
-        const io = b.graph.io;
-        var child = try std.process.spawn(io, .{
-            .argv = &.{ "perl", "ci/check_wasm_builtin_routing.pl" },
-            .environ_map = &b.graph.environ_map,
-        });
-        const term = try child.wait(io);
-        switch (term) {
-            .exited => |code| if (code != 0) {
-                return step.fail(
-                    "WASM builtin routing check failed. Run 'perl ci/check_wasm_builtin_routing.pl' to see details.",
-                    .{},
-                );
-            },
-            .signal, .stopped, .unknown => return step.fail("ci/check_wasm_builtin_routing.pl terminated abnormally", .{}),
-        }
-    }
-};
-
-/// Build step that fails when tracked snapshots differ from the freshly regenerated
-/// output. Detects whether the build root is backed by Git or JJ and invokes the
-/// matching diff command directly. This deliberately avoids shelling out through
-/// `sh -c`, which is not available on Windows (it fails to spawn with FileNotFound).
-const CheckSnapshotDiffStep = struct {
-    step: Step,
-
-    const regen_hint = "Tracked snapshots changed after regeneration. Run 'zig build run-snapshot-tool' and commit the result.\n{s}";
-
-    fn create(b: *std.Build) *CheckSnapshotDiffStep {
-        const self = b.allocator.create(CheckSnapshotDiffStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-snapshot-diff",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const io = b.graph.io;
-
-        // Prefer Git when the working directory is inside a Git work tree.
-        const in_git = blk: {
-            const probe = std.process.run(b.allocator, io, .{
-                .argv = &.{ "git", "rev-parse", "--is-inside-work-tree" },
-            }) catch break :blk false;
-            defer b.allocator.free(probe.stdout);
-            defer b.allocator.free(probe.stderr);
-            break :blk probe.term == .exited and probe.term.exited == 0 and
-                std.mem.eql(u8, std.mem.trim(u8, probe.stdout, " \n\r\t"), "true");
-        };
-
-        if (in_git) {
-            const result = try std.process.run(b.allocator, io, .{
-                .argv = &.{ "git", "diff", "--exit-code", "test/snapshots" },
-            });
-            defer b.allocator.free(result.stdout);
-            defer b.allocator.free(result.stderr);
-            if (!(result.term == .exited and result.term.exited == 0)) {
-                return step.fail(regen_hint, .{result.stdout});
-            }
-            return;
-        }
-
-        // Fall back to JJ for a standalone JJ workspace (no Git backing).
-        const in_jj = blk: {
-            std.Io.Dir.cwd().access(io, ".jj", .{}) catch break :blk false;
-            break :blk true;
-        };
-
-        if (in_jj) {
-            const result = try std.process.run(b.allocator, io, .{
-                .argv = &.{ "jj", "diff", "--summary", "test/snapshots" },
-            });
-            defer b.allocator.free(result.stdout);
-            defer b.allocator.free(result.stderr);
-            if (!(result.term == .exited and result.term.exited == 0)) {
-                return step.fail("jj diff --summary test/snapshots failed:\n{s}", .{result.stderr});
-            }
-            if (std.mem.trim(u8, result.stdout, " \n\r\t").len != 0) {
-                return step.fail(regen_hint, .{result.stdout});
-            }
-            return;
-        }
-
-        return step.fail("run-check-snapshots requires a Git or JJ workspace", .{});
-    }
-};
-
-/// Build step that checks for @panic and std.debug.panic usage in interpreter and builtins.
-///
-/// In Roc's design philosophy, compile-time errors become runtime errors with helpful messages.
-/// Users can run apps despite errors, and we provide actionable feedback. Using @panic unwinds
-/// the stack and prevents showing helpful error messages.
-///
-/// Additionally, in WASM builds, @panic compiles to the `unreachable` instruction with no
-/// message output, making debugging impossible. All runtime code must use roc_ops.crash()
-/// to ensure error messages are properly displayed.
-const CheckPanicStep = struct {
-    step: Step,
-
-    // Files to scan individually
-    const scan_files = [_][]const u8{
-        "src/eval/interpreter.zig",
-    };
-
-    // Directories to scan (all .zig files within)
-    const scan_dirs = [_][]const u8{
-        "src/builtins",
-    };
-
-    // Files to exclude from scanning (test-only files)
-    const excluded_files = [_][]const u8{
-        "fuzz_sort.zig",
-    };
-
-    // Line-level allowlist patterns - if any of these appear on the line, allow the @panic
-    const allowlist_patterns = [_][]const u8{
-        "trace_modules", // traceDbg helper in interpreter
-    };
-
-    // File-specific line ranges to exclude (test-only code)
-    // Format: { file_suffix, start_line, end_line }
-    const ExcludedRange = struct { file: []const u8, start: usize, end: usize };
-    const excluded_ranges = [_]ExcludedRange{
-        // TestEnv struct in utils.zig is test-only (lines 60-214)
-        .{ .file = "utils.zig", .start = 60, .end = 214 },
-        // Cross-module name matching in Check.zig requires string comparison (lines 5530-5547)
-        // This is necessary because origin_module is an ident from the type's defining module,
-        // while module_name is from the importing module's ident store - no way to compare without strings
-        .{ .file = "Check.zig", .start = 5530, .end = 5547 },
-    };
-
-    fn create(b: *std.Build) *CheckPanicStep {
-        const self = b.allocator.create(CheckPanicStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-panic-usage",
-                .owner = b,
-                .makeFn = makePanic,
-            }),
-        };
-        return self;
-    }
-
-    fn isExcludedFile(file_name: []const u8) bool {
-        for (excluded_files) |excluded| {
-            if (std.mem.eql(u8, file_name, excluded)) return true;
-        }
-        return false;
-    }
-
-    fn isAllowlisted(line: []const u8) bool {
-        for (allowlist_patterns) |pattern| {
-            if (std.mem.find(u8, line, pattern) != null) return true;
-        }
-        return false;
-    }
-
-    fn isInExcludedRange(file_path: []const u8, line_number: usize) bool {
-        for (excluded_ranges) |range| {
-            if (std.mem.endsWith(u8, file_path, range.file)) {
-                if (line_number >= range.start and line_number <= range.end) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    fn scanFile(allocator: std.mem.Allocator, io: std.Io, file_path: []const u8, violations: *std.ArrayList(Violation)) !void {
-        const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(50 * 1024 * 1024)) catch |err| {
-            std.debug.print("Warning: Failed to read {s}: {}\n", .{ file_path, err });
-            return;
-        };
-        defer allocator.free(content);
-
-        var line_number: usize = 1;
-        var line_start: usize = 0;
-
-        for (content, 0..) |char, i| {
-            if (char == '\n') {
-                const line = content[line_start..i];
-                const trimmed = std.mem.trim(u8, line, " \t");
-
-                // Skip comments
-                if (!std.mem.startsWith(u8, trimmed, "//")) {
-                    // Check for @panic usage
-                    const has_panic = std.mem.find(u8, line, "@panic(") != null;
-                    // Check for std.debug.panic usage
-                    const has_debug_panic = std.mem.find(u8, line, "std.debug.panic") != null;
-
-                    if (has_panic or has_debug_panic) {
-                        if (!isAllowlisted(line) and !isInExcludedRange(file_path, line_number)) {
-                            try violations.append(allocator, .{
-                                .file_path = try allocator.dupe(u8, file_path),
-                                .line_number = line_number,
-                                .line_content = try allocator.dupe(u8, trimmed),
-                            });
-                        }
-                    }
-                }
-
-                line_number += 1;
-                line_start = i + 1;
-            }
-        }
-    }
-
-    fn makePanic(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const allocator = b.allocator;
-
-        var violations = std.ArrayList(Violation).empty;
-        defer violations.deinit(allocator);
-
-        const io = b.graph.io;
-
-        // Scan individual files
-        for (scan_files) |file_path| {
-            try scanFile(allocator, io, file_path, &violations);
-        }
-
-        // Scan directories
-        for (scan_dirs) |dir_path| {
-            var dir = std.Io.Dir.cwd().openDir(io, dir_path, .{ .iterate = true }) catch |err| {
-                std.debug.print("Warning: Failed to open directory {s}: {}\n", .{ dir_path, err });
-                continue;
-            };
-            defer dir.close(io);
-
-            var iter = dir.iterate();
-            while (try iter.next(io)) |entry| {
-                if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".zig")) {
-                    if (!isExcludedFile(entry.name)) {
-                        const full_path = try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, entry.name });
-                        defer allocator.free(full_path);
-                        try scanFile(allocator, io, full_path, &violations);
-                    }
-                }
-            }
-        }
-
-        if (violations.items.len > 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 80 ++ "\n", .{});
-            std.debug.print("FORBIDDEN PATTERN: @panic / std.debug.panic in runtime code\n", .{});
-            std.debug.print("=" ** 80 ++ "\n\n", .{});
-
-            std.debug.print(
-                \\Using @panic or std.debug.panic is forbidden in interpreter and builtins.
-                \\
-                \\WHY THIS RULE EXISTS:
-                \\  1. Roc's design philosophy is that compile-time errors become runtime errors with
-                \\     helpful messages. Users can run apps despite errors, and we provide actionable
-                \\     feedback. @panic unwinds the stack and prevents us from showing helpful errors.
-                \\
-                \\  2. In WASM builds, @panic compiles to the `unreachable` instruction with NO
-                \\     message output, making debugging impossible.
-                \\
-                \\WHAT TO DO INSTEAD:
-                \\  In interpreter.zig, use the triggerCrash() method:
-                \\
-                \\    self.triggerCrash("Description of the error", false, roc_ops);
-                \\
-                \\  In builtins, use roc_ops.crash():
-                \\
-                \\    roc_ops.crash("Description of the error");
-                \\
-                \\  For debug output, use roc_ops.dbg():
-                \\
-                \\    roc_ops.dbg("Debug message");
-                \\
-                \\VIOLATIONS FOUND:
-                \\
-            , .{});
-
-            for (violations.items) |violation| {
-                std.debug.print("  {s}:{d}: {s}\n", .{
-                    violation.file_path,
-                    violation.line_number,
-                    violation.line_content,
-                });
-            }
-
-            std.debug.print("\n" ++ "=" ** 80 ++ "\n", .{});
-
-            return step.fail(
-                "Found {d} uses of @panic or std.debug.panic in runtime code. " ++
-                    "Use roc_ops.crash() to report errors through the proper RocOps crash handler. " ++
-                    "See above for details.",
-                .{violations.items.len},
-            );
-        }
-    }
-
-    const Violation = struct {
-        file_path: []const u8,
-        line_number: usize,
-        line_content: []const u8,
-    };
-};
-
-/// Build step that checks for global stdio usage in CLI code.
-///
-/// The CLI code uses a context-based I/O pattern where stdout/stderr are accessed
-/// through `ctx.io.stdout()` and `ctx.io.stderr()`. This prepares for Zig's upcoming
-/// I/O interface changes where I/O is passed through functions (like Allocator).
-///
-/// This step enforces that pattern by failing the build if direct global stdio
-/// access is found in src/cli/main.zig.
-const CheckCliGlobalStdioStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckCliGlobalStdioStep {
-        const self = b.allocator.create(CheckCliGlobalStdioStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-cli-global-stdio",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const allocator = b.allocator;
-
-        var violations = std.ArrayList(Violation).empty;
-        defer violations.deinit(allocator);
-
-        // Only scan src/cli/main.zig
-        const file_path = "src/cli/main.zig";
-        const io = step.owner.graph.io;
-        const content = std.Io.Dir.cwd().readFileAlloc(io, file_path, allocator, .limited(10 * 1024 * 1024)) catch |err| {
-            return step.fail("Failed to read {s}: {}", .{ file_path, err });
-        };
-        defer allocator.free(content);
-
-        var line_number: usize = 1;
-        var line_start: usize = 0;
-
-        for (content, 0..) |char, i| {
-            if (char == '\n') {
-                const line = content[line_start..i];
-                const trimmed = std.mem.trim(u8, line, " \t");
-
-                // Check for forbidden patterns that indicate global stdio usage
-                // These patterns bypass ctx.io and use global state
-                const forbidden_patterns = [_][]const u8{
-                    "std.io.getStdOut()",
-                    "std.io.getStdErr()",
-                    "std.fs.File.stdout()",
-                    "std.fs.File.stderr()",
-                };
-
-                for (forbidden_patterns) |pattern| {
-                    if (std.mem.find(u8, trimmed, pattern) != null) {
-                        try violations.append(allocator, .{
-                            .file_path = file_path,
-                            .line_number = line_number,
-                            .line_content = try allocator.dupe(u8, trimmed),
-                            .pattern = pattern,
-                        });
-                    }
-                }
-
-                line_number += 1;
-                line_start = i + 1;
-            }
-        }
-
-        if (violations.items.len > 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 80 ++ "\n", .{});
-            std.debug.print("GLOBAL STDIO USAGE DETECTED IN CLI\n", .{});
-            std.debug.print("=" ** 80 ++ "\n\n", .{});
-
-            std.debug.print(
-                \\In the CLI code, we use context-based I/O, not global stdio functions.
-                \\
-                \\WHY THIS RULE EXISTS:
-                \\  1. TESTABILITY: Context-based I/O allows tests to inject mock writers
-                \\     to capture and verify output.
-                \\
-                \\  2. FUTURE COMPATIBILITY: Zig's upcoming I/O interface will pass I/O
-                \\     through functions (like Allocator). Using ctx.io prepares us for this.
-                \\
-                \\  3. CONSISTENCY: All CLI functions receive ctx which contains allocators
-                \\     and I/O. This provides a uniform interface for resources.
-                \\
-                \\WHAT TO DO INSTEAD:
-                \\  Access stdout/stderr through the CliCtx:
-                \\
-                \\  Example - WRONG:
-                \\    const stdout = std.io.getStdOut().writer();
-                \\    const stderr = std.fs.File.stderr().writer();
-                \\
-                \\  Example - RIGHT:
-                \\    const stdout = ctx.io.stdout();
-                \\    const stderr = ctx.io.stderr();
-                \\
-                \\VIOLATIONS FOUND:
-                \\
-            , .{});
-
-            for (violations.items) |violation| {
-                std.debug.print("  {s}:{d}: found `{s}` in: {s}\n", .{
-                    violation.file_path,
-                    violation.line_number,
-                    violation.pattern,
-                    violation.line_content,
-                });
-            }
-
-            std.debug.print("\n" ++ "=" ** 80 ++ "\n", .{});
-
-            return step.fail(
-                "Found {d} global stdio usage(s) in CLI code. " ++
-                    "Use ctx.io.stdout() and ctx.io.stderr() instead.",
-                .{violations.items.len},
-            );
-        }
-    }
-
-    const Violation = struct {
-        file_path: []const u8,
-        line_number: usize,
-        line_content: []const u8,
-        pattern: []const u8,
-    };
-};
-
-/// Build step that parses kcov JSON output and prints coverage summary.
-/// Used by the `coverage` build step to report parser code coverage statistics.
-const CoverageSummaryStep = struct {
-    step: Step,
-    coverage_dir: []const u8,
-    exe_name: []const u8,
-    label: []const u8,
-    min_coverage: f64,
-
-    /// Coverage is supported on:
-    /// - macOS (ARM64 and x86_64): Uses libdwarf for DWARF parsing
-    /// - Linux ARM64: Uses libdw (elfutils) for DWARF parsing
-    ///
-    /// TODO ZIG 16: re-check if this DWARF bug is fixed in 0.16—may be able to enable x86_64 coverage
-    /// Coverage does NOT work on Linux x86_64 due to a Zig 0.15.2 compiler bug that
-    /// generates invalid DWARF .debug_line sections. libdw fails with "invalid
-    /// .debug_line section" when parsing user code compilation units, while stdlib
-    /// CUs parse successfully. This causes kcov to find only stdlib files, not user
-    /// source files. ARM64 Zig generates valid DWARF, so coverage works there.
-    /// See: https://github.com/roc-lang/roc/pull/8864 for investigation details.
-    fn create(b: *std.Build, coverage_dir: []const u8, exe_name: []const u8) *CoverageSummaryStep {
-        return createWithOptions(b, coverage_dir, exe_name, "PARSER", 28.0);
-    }
-
-    fn createWithOptions(b: *std.Build, coverage_dir: []const u8, exe_name: []const u8, label: []const u8, min_coverage: f64) *CoverageSummaryStep {
-        const self = b.allocator.create(CoverageSummaryStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "coverage-summary",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .coverage_dir = coverage_dir,
-            .exe_name = exe_name,
-            .label = label,
-            .min_coverage = min_coverage,
-        };
-        return self;
-    }
-
-    fn make(step: *Step, _: Step.MakeOptions) !void {
-        const b = step.owner;
-        const allocator = b.allocator;
-        const self: *CoverageSummaryStep = @fieldParentPtr("step", step);
-
-        // Read kcov JSON output
-        // kcov creates a subdirectory named after the executable (e.g., parse_unit_coverage/)
-        // which contains the coverage.json file
-        const json_path = try std.fmt.allocPrint(allocator, "{s}/{s}/coverage.json", .{ self.coverage_dir, self.exe_name });
-        defer allocator.free(json_path);
-
-        const io = b.graph.io;
-        const json_content = std.Io.Dir.cwd().readFileAlloc(io, json_path, allocator, .limited(10 * 1024 * 1024)) catch |err| {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            std.debug.print("COVERAGE ERROR\n", .{});
-            std.debug.print("=" ** 60 ++ "\n\n", .{});
-            std.debug.print("Could not open coverage JSON at {s}: {}\n", .{ json_path, err });
-            std.debug.print("\nMake sure kcov is installed:\n", .{});
-            std.debug.print("  - Linux: apt install kcov\n", .{});
-            std.debug.print("  - macOS: brew install kcov\n\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            return;
-        };
-        defer allocator.free(json_content);
-
-        // Parse and summarize coverage
-        const result = try parseCoverageJson(allocator, json_content, self.label, self.coverage_dir);
-
-        // Fail if kcov didn't capture any data - this indicates a problem with kcov
-        if (result.total_lines == 0) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            std.debug.print("COVERAGE ERROR: NO DATA CAPTURED\n", .{});
-            std.debug.print("=" ** 60 ++ "\n\n", .{});
-            std.debug.print("kcov reported 0 total lines - coverage data was not captured.\n", .{});
-            std.debug.print("This indicates a problem with kcov or the binary format.\n\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            return step.fail("kcov failed to capture coverage data (0 total lines)", .{});
-        }
-
-        // Enforce minimum coverage threshold
-        if (result.percent < self.min_coverage) {
-            std.debug.print("\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            std.debug.print("COVERAGE CHECK FAILED\n", .{});
-            std.debug.print("=" ** 60 ++ "\n\n", .{});
-            std.debug.print("{s} coverage is {d:.2}%, minimum required is {d:.2}%\n", .{ self.label, result.percent, self.min_coverage });
-            std.debug.print("Add more tests to improve coverage before merging.\n\n", .{});
-            std.debug.print("=" ** 60 ++ "\n", .{});
-            return step.fail("{s} coverage {d:.2}% is below minimum {d:.2}%", .{ self.label, result.percent, self.min_coverage });
-        }
-    }
-
-    const CoverageResult = struct {
-        percent: f64,
-        total_lines: u64,
-    };
-
-    fn parseCoverageJson(allocator: std.mem.Allocator, json_content: []const u8, label: []const u8, coverage_dir: []const u8) !CoverageResult {
-        const parsed = try std.json.parseFromSlice(std.json.Value, allocator, json_content, .{});
-        defer parsed.deinit();
-
-        const root = parsed.value;
-
-        // Get totals from root level (these are integers)
-        const total_lines: u64 = blk: {
-            const val = root.object.get("total_lines") orelse break :blk 0;
-            if (val != .integer) break :blk 0;
-            break :blk @intCast(val.integer);
-        };
-        const covered_lines: u64 = blk: {
-            const val = root.object.get("covered_lines") orelse break :blk 0;
-            if (val != .integer) break :blk 0;
-            break :blk @intCast(val.integer);
-        };
-
-        // Collect uncovered files for the summary
-        var uncovered_files = std.ArrayList(UncoveredFile).empty;
-        defer {
-            for (uncovered_files.items) |uf| {
-                allocator.free(uf.file);
-            }
-            uncovered_files.deinit(allocator);
-        }
-
-        // kcov JSON format has "files" array with file coverage data
-        if (root.object.get("files")) |files_val| {
-            if (files_val == .array) {
-                for (files_val.array.items) |file_obj| {
-                    if (file_obj != .object) continue;
-
-                    const filename_val = file_obj.object.get("file") orelse continue;
-                    if (filename_val != .string) continue;
-                    const filename = filename_val.string;
-
-                    // Only include src/parse files
-                    if (std.mem.find(u8, filename, "src/parse") == null) continue;
-
-                    // Skip test files
-                    if (std.mem.find(u8, filename, "/test/") != null) continue;
-
-                    // Get coverage percentage (stored as string in kcov JSON)
-                    const percent_val = file_obj.object.get("percent_covered") orelse continue;
-                    if (percent_val != .string) continue;
-
-                    const covered_str = file_obj.object.get("covered_lines") orelse continue;
-                    const total_str = file_obj.object.get("total_lines") orelse continue;
-                    if (covered_str != .string or total_str != .string) continue;
-
-                    const file_covered = std.fmt.parseInt(u64, covered_str.string, 10) catch 0;
-                    const file_total = std.fmt.parseInt(u64, total_str.string, 10) catch 0;
-                    const file_uncovered = file_total - file_covered;
-
-                    if (file_uncovered > 0) {
-                        try uncovered_files.append(allocator, .{
-                            .file = try allocator.dupe(u8, filename),
-                            .uncovered_lines = file_uncovered,
-                            .total_lines = file_total,
-                            .percent = std.fmt.parseFloat(f64, percent_val.string) catch 0.0,
-                        });
-                    }
-                }
-            }
-        }
-
-        // Print summary
-        const uncovered_lines = total_lines - covered_lines;
-        const percent = if (total_lines > 0)
-            @as(f64, @floatFromInt(covered_lines)) / @as(f64, @floatFromInt(total_lines)) * 100.0
-        else
-            0.0;
-
-        std.debug.print("\n", .{});
-        std.debug.print("=" ** 60 ++ "\n", .{});
-        std.debug.print("{s} CODE COVERAGE SUMMARY\n", .{label});
-        std.debug.print("=" ** 60 ++ "\n\n", .{});
-
-        std.debug.print("Total lines:     {d}\n", .{total_lines});
-        std.debug.print("Covered lines:   {d}\n", .{covered_lines});
-        std.debug.print("Uncovered lines: {d}\n", .{uncovered_lines});
-        std.debug.print("Coverage:        {d:.2}%\n\n", .{percent});
-
-        if (uncovered_files.items.len > 0) {
-            std.debug.print("Files with uncovered lines:\n", .{});
-
-            // Sort by uncovered lines (descending) for prioritization
-            std.mem.sort(UncoveredFile, uncovered_files.items, {}, struct {
-                fn lessThan(_: void, a: UncoveredFile, b: UncoveredFile) bool {
-                    return a.uncovered_lines > b.uncovered_lines; // Descending
-                }
-            }.lessThan);
-
-            for (uncovered_files.items) |uf| {
-                // Extract just the filename from the full path
-                const basename = std.fs.path.basename(uf.file);
-                std.debug.print("  {s}: {d:.1}% covered ({d}/{d} lines uncovered)\n", .{
-                    basename,
-                    uf.percent,
-                    uf.uncovered_lines,
-                    uf.total_lines,
-                });
-            }
-        }
-
-        std.debug.print("\n" ++ "=" ** 60 ++ "\n", .{});
-        std.debug.print("Full HTML report: {s}/index.html\n", .{coverage_dir});
-        std.debug.print("=" ** 60 ++ "\n", .{});
-
-        return .{ .percent = percent, .total_lines = total_lines };
-    }
-
-    const UncoveredFile = struct {
-        file: []const u8,
-        uncovered_lines: u64,
-        total_lines: u64,
-        percent: f64,
-    };
-};
-
-const TestAssetCoverageDir = struct {
-    dir: []const u8,
-    spec_files: []const []const u8,
-};
-
-// Every app .roc file in these directories (including nested subdirectories) must
-// be named by at least one of its spec sources; otherwise it is dead test data no
-// runner executes.
-// Module and platform .roc files are dependencies of apps, so only files whose
-// first non-comment line is an `app` header are required to be covered.
-const test_asset_coverage_dirs = [_]TestAssetCoverageDir{
-    .{ .dir = "test/fx", .spec_files = &.{
-        "src/cli/test/fx_platform_test.zig",
-        "src/cli/test/fx_test_specs.zig",
-        "src/cli/test/parallel_cli_runner.zig",
-    } },
-    .{ .dir = "test/fx-open", .spec_files = &.{
-        "src/cli/test/platform_config.zig",
-        "src/cli/test/parallel_cli_runner.zig",
-    } },
-    .{ .dir = "test/cli", .spec_files = &.{
-        "src/cli/test/parallel_cli_runner.zig",
-        "src/compile/test/embedding_smoke.zig",
-    } },
-    .{ .dir = "test/package-effect-boundary", .spec_files = &.{
-        "src/cli/test/parallel_cli_runner.zig",
-    } },
-    .{ .dir = "test/str", .spec_files = &.{
-        "src/cli/test/platform_config.zig",
-        "src/cli/test/parallel_cli_runner.zig",
-        "src/compile/coordinator.zig",
-    } },
-    .{ .dir = "test/echo", .spec_files = &.{
-        "src/cli/test/parallel_cli_runner.zig",
-        "src/eval/test/builtin_doc_tests.zig",
-    } },
-};
-
-fn isRocAppFile(contents: []const u8) bool {
-    var line_iter = std.mem.splitScalar(u8, contents, '\n');
-    while (line_iter.next()) |raw_line| {
-        const line = std.mem.trim(u8, raw_line, " \t\r");
-        if (line.len == 0) continue;
-        if (line[0] == '#') continue;
-        return std.mem.startsWith(u8, line, "app");
-    }
-    return false;
-}
-
-fn checkTestAssetCoverage(step: *Step) !void {
-    const b = step.owner;
-    std.debug.print("---- checking test asset coverage ----\n", .{});
-
-    const allocator = b.allocator;
-    const io = b.graph.io;
-
-    var total_missing: usize = 0;
-    var total_checked: usize = 0;
-
-    for (test_asset_coverage_dirs) |cfg| {
-        var asset_dir = try std.Io.Dir.cwd().openDir(io, cfg.dir, .{ .iterate = true });
-        defer asset_dir.close(io);
-
-        var app_files = std.ArrayList([]const u8).empty;
-        defer {
-            for (app_files.items) |file| {
-                allocator.free(file);
-            }
-            app_files.deinit(allocator);
-        }
-
-        // Fixtures group each case in its own subdirectory, so walk the whole
-        // tree instead of only the top level. Paths stay relative to cfg.dir and
-        // are always '/'-separated so they compare directly against the paths
-        // written in the spec sources.
-        var walker = try asset_dir.walk(allocator);
-        defer walker.deinit();
-        while (try walker.next(io)) |entry| {
-            if (entry.kind != .file or !std.mem.endsWith(u8, entry.basename, ".roc")) continue;
-            const contents = try entry.dir.readFileAlloc(io, entry.basename, allocator, .limited(1024 * 1024));
-            defer allocator.free(contents);
-            if (!isRocAppFile(contents)) continue;
-            const rel_path = try allocator.dupe(u8, entry.path);
-            std.mem.replaceScalar(u8, rel_path, std.fs.path.sep, '/');
-            try app_files.append(allocator, rel_path);
-        }
-
-        std.mem.sort([]const u8, app_files.items, {}, struct {
-            fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
-                return std.mem.order(u8, lhs, rhs) == .lt;
-            }
-        }.lessThan);
-
-        var tested_files = std.StringHashMap(void).init(allocator);
-        defer {
-            var key_iter = tested_files.keyIterator();
-            while (key_iter.next()) |key| {
-                allocator.free(key.*);
-            }
-            tested_files.deinit();
-        }
-
-        const dir_prefix = try std.fmt.allocPrint(allocator, "{s}/", .{cfg.dir});
-        defer allocator.free(dir_prefix);
-
-        for (cfg.spec_files) |spec_file_path| {
-            const spec_contents = std.Io.Dir.cwd().readFileAlloc(io, spec_file_path, allocator, .limited(4 * 1024 * 1024)) catch |err| {
-                return step.fail("could not read spec source {s}: {}", .{ spec_file_path, err });
-            };
-            defer allocator.free(spec_contents);
-
-            var line_iter = std.mem.splitScalar(u8, spec_contents, '\n');
-            while (line_iter.next()) |full_line| {
-                // A mention inside a `//` comment is not a live spec entry.
-                const line = if (std.mem.find(u8, full_line, "//")) |comment_idx|
-                    full_line[0..comment_idx]
-                else
-                    full_line;
-
-                var search_start: usize = 0;
-                while (std.mem.findPos(u8, line, search_start, dir_prefix)) |idx| {
-                    const rest_of_line = line[idx..];
-                    if (std.mem.find(u8, rest_of_line, ".roc")) |roc_pos| {
-                        const full_path = rest_of_line[0 .. roc_pos + 4];
-                        // Path relative to cfg.dir; may name a file in a subdirectory.
-                        const filename = full_path[dir_prefix.len..];
-                        const duped_filename = try allocator.dupe(u8, filename);
-                        if (tested_files.contains(duped_filename)) {
-                            allocator.free(duped_filename);
-                        } else {
-                            try tested_files.put(duped_filename, {});
-                        }
-                    }
-                    search_start = idx + 1;
-                }
-            }
-        }
-
-        var missing_count: usize = 0;
-        for (app_files.items) |app_file| {
-            total_checked += 1;
-            if (!tested_files.contains(app_file)) {
-                if (missing_count == 0) {
-                    std.debug.print("\nERROR: app .roc files in {s}/ with no spec entry:\n", .{cfg.dir});
-                }
-                std.debug.print("  - {s}/{s}\n", .{ cfg.dir, app_file });
-                missing_count += 1;
-            }
-        }
-        if (missing_count > 0) {
-            std.debug.print("Add a spec entry in one of:\n", .{});
-            for (cfg.spec_files) |spec_file_path| {
-                std.debug.print("  {s}\n", .{spec_file_path});
-            }
-            std.debug.print("or delete the unused file(s).\n", .{});
-        }
-        total_missing += missing_count;
-    }
-
-    if (total_missing > 0) {
-        return step.fail("{d} app .roc file(s) have no spec entry", .{total_missing});
-    }
-
-    std.debug.print("All {d} app .roc files across {d} asset directories are covered.\n", .{ total_checked, test_asset_coverage_dirs.len });
-}
-
-const CheckTestAssetCoverageStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *CheckTestAssetCoverageStep {
-        const self = b.allocator.create(CheckTestAssetCoverageStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "check-test-asset-coverage-inner",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-        try checkTestAssetCoverage(step);
     }
 };
 
@@ -2139,7 +561,7 @@ fn createAndRunBuiltinCompiler(
             // it ReleaseFast would optimize the whole check/eval closure (incl. the
             // large checked_artifact.zig), adding far more `zig build` wall-clock than
             // the one-time bake run saves. Debug compile + Debug bake is the faster total.
-            .optimize = .Debug,
+            .optimize = .debug,
             // ctx.CoreCtx reads env vars via std.c.getenv; Zig 0.16 requires
             // link_libc=true on any compile unit that references std.c.*.
             // (add_tracy below also sets this when tracy is enabled, but tracy is
@@ -2169,7 +591,7 @@ fn createAndRunBuiltinCompiler(
     const comptime_finalizer_module = b.createModule(.{
         .root_source_file = b.path("src/eval/compile_time_finalization.zig"),
         .target = b.graph.host,
-        .optimize = .Debug,
+        .optimize = .debug,
         .link_libc = true,
         .imports = &.{
             .{ .name = "base", .module = roc_modules.base },
@@ -2285,7 +707,7 @@ fn createTestPlatformHostLib(
     lib.root_module.addImport("host_alloc", roc_modules.host_alloc);
     lib.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     lib.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    lib.root_module.addImport("shim_io", b.addModule("shim_io", .{
+    lib.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     // Bundle compiler_rt when generated host object code may call compiler_rt
@@ -2320,7 +742,7 @@ fn buildAndCopyTestPlatformHostLib(
     // canary data are removed by the final link. Zig Debug emits host objects
     // with one monolithic .text and default-visible exports, so those tests
     // need optimized host objects with hidden symbols and per-section output.
-    const host_optimize: OptimizeMode = if (testPlatformRequiresSectionDceHost(platform_dir)) .ReleaseSmall else optimize;
+    const host_optimize: OptimizeMode = if (testPlatformRequiresSectionDceHost(platform_dir)) .small else optimize;
 
     const lib = createTestPlatformHostLib(
         b,
@@ -2382,11 +804,11 @@ fn buildAndCopyTestPlatformHostLib(
     // members, causing lld to reject the archive with:
     //   "Archive::children failed: truncated or malformed archive"
     if (target.result.os.tag != .windows) {
-        const fix_step = FixArchivePaddingStep.create(b, archive_path);
+        const fix_step = addBuildAction(b, &.{ "fix-archive-padding", archive_path });
         fix_step.step.dependOn(&copy_step.step);
 
         if (baseline_archive_path) |path| {
-            const fix_baseline_step = FixArchivePaddingStep.create(b, path);
+            const fix_baseline_step = addBuildAction(b, &.{ "fix-archive-padding", path });
             fix_baseline_step.step.dependOn(&copy_step.step);
             fix_baseline_step.step.dependOn(&fix_step.step);
             return &fix_baseline_step.step;
@@ -2397,33 +819,6 @@ fn buildAndCopyTestPlatformHostLib(
 
     return &copy_step.step;
 }
-
-// Custom step to remove a directory tree (replaces removed addRemoveDirTree)
-const RemoveDirTreeStep = struct {
-    step: Step,
-    dir_path: []const u8,
-
-    fn create(b: *std.Build, dir_path: []const u8) *RemoveDirTreeStep {
-        const self = b.allocator.create(RemoveDirTreeStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "remove-dir-tree",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .dir_path = dir_path,
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-        const self: *RemoveDirTreeStep = @fieldParentPtr("step", step);
-        const io = step.owner.graph.io;
-        std.Io.Dir.cwd().deleteTree(io, self.dir_path) catch {};
-    }
-};
 
 /// Build the wasm test platform host as a relocatable .wasm object (not an archive).
 /// Surgical linking operates on a single relocatable object with linking/reloc sections.
@@ -2498,197 +893,18 @@ fn buildAndCopyStrongIntrinsicWasmHostObject(
     return &copy_step.step;
 }
 
-// Workaround for Zig bug https://codeberg.org/ziglang/zig/issues/30572
-const FixArchivePaddingStep = struct {
-    step: Step,
-    archive_path: []const u8,
-
-    fn create(b: *std.Build, archive_path: []const u8) *FixArchivePaddingStep {
-        const self = b.allocator.create(FixArchivePaddingStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "fix-archive-padding",
-                .owner = b,
-                .makeFn = make,
-            }),
-            .archive_path = archive_path,
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-        const self: *FixArchivePaddingStep = @fieldParentPtr("step", step);
-        const io = step.owner.graph.io;
-
-        const file = std.Io.Dir.cwd().openFile(io, self.archive_path, .{ .mode = .read_write }) catch {
-            // Archive doesn't exist yet (e.g. cross-compilation target not built)—skip silently.
-            return;
-        };
-        defer file.close(io);
-
-        const stat = try file.stat(io);
-        var file_size = stat.size;
-
-        // AR format requires archives to end on an even byte boundary.
-        // If file size is odd, append a newline padding byte.
-        // This fixes Zig bug https://codeberg.org/ziglang/zig/issues/30572
-        // where Zig's archiver doesn't add required padding after odd-sized members.
-        if (file_size % 2 == 1) {
-            try file.writePositionalAll(io, "\n", file_size);
-            file_size += 1;
-        }
-
-        // Parse the archive to verify member offsets are valid.
-        // This catches cases where lld would fail with "truncated or malformed archive".
-        var header_buf: [8]u8 = undefined;
-        _ = try file.readPositionalAll(io, &header_buf, 0);
-        if (!std.mem.eql(u8, &header_buf, "!<arch>\n")) {
-            std.debug.print("Warning: Invalid archive magic in {s}\n", .{self.archive_path});
-            return;
-        }
-
-        var offset: u64 = 8; // After magic
-        while (offset + 60 <= file_size) {
-            var size_buf: [10]u8 = undefined;
-            _ = try file.readPositionalAll(io, &size_buf, offset + 48); // Read size field (offset 48 within 60-byte header)
-
-            // Parse size (ASCII decimal, space-padded)
-            var size: u64 = 0;
-            for (size_buf) |c| {
-                if (c >= '0' and c <= '9') {
-                    size = size * 10 + (c - '0');
-                } else break;
-            }
-
-            // Move to next member (header + content + padding if odd)
-            offset += 60 + size;
-            if (size % 2 == 1) {
-                offset += 1; // Padding byte expected
-            }
-
-            // If we're exactly at EOF, archive is valid
-            if (offset == file_size) break;
-
-            // If next offset would be past EOF, we have a problem - add missing padding
-            if (offset > file_size) {
-                const missing = offset - file_size;
-                const padding = "\n\n"; // At most 1 byte needed, but be safe
-                try file.writePositionalAll(io, padding[0..@min(missing, 2)], file_size);
-                break;
-            }
-        }
-    }
-};
-
-/// Custom build step that clears the Roc cache directory.
-/// Uses Zig's native filesystem APIs for cross-platform support.
-const ClearRocCacheStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *ClearRocCacheStep {
-        const self = b.allocator.create(ClearRocCacheStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "clear-roc-cache",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = options;
-
-        const b = step.owner;
-        const allocator = b.allocator;
-        const io = b.graph.io;
-
-        // Get the cache directory path using the same logic as cache_config.zig
-        const cache_dir = getCacheDir(allocator, b.graph.environ_map) catch |err| {
-            std.debug.print("Warning: Could not determine cache directory: {s}\n", .{@errorName(err)});
-            return;
-        };
-        defer allocator.free(cache_dir);
-
-        // Check if cache directory exists before trying to delete
-        std.Io.Dir.cwd().access(io, cache_dir, .{}) catch {
-            // Cache doesn't exist, nothing to do
-            std.debug.print("Roc cache not found (nothing to clear)\n", .{});
-            return;
-        };
-
-        // Try to delete the cache directory
-        std.Io.Dir.cwd().deleteTree(io, cache_dir) catch |err| {
-            std.debug.print("Warning: Could not clear cache at {s}: {s}\n", .{ cache_dir, @errorName(err) });
-            return;
-        };
-
-        std.debug.print("Cleared roc cache at {s}\n", .{cache_dir});
-    }
-
-    /// Get the Roc cache directory path (matches cache_config.zig logic)
-    fn getCacheDir(allocator: std.mem.Allocator, environ_map: std.process.Environ.Map) ![]u8 {
-        const cache_dir_name = switch (roc_target.classifyOs(builtin.os.tag)) {
-            .windows => "Roc",
-            .macos, .linux, .freebsd, .openbsd, .netbsd, .other => "roc",
-        };
-
-        // Respect XDG_CACHE_HOME if set
-        if (environ_map.get("XDG_CACHE_HOME")) |xdg_cache| {
-            return std.fs.path.join(allocator, &[_][]const u8{ xdg_cache, cache_dir_name });
-        } else {
-            // Fall back to platform defaults
-            const home_env = switch (roc_target.classifyOs(builtin.os.tag)) {
-                .windows => "APPDATA",
-                .macos, .linux, .freebsd, .openbsd, .netbsd, .other => "HOME",
-            };
-
-            const home_dir = environ_map.get(home_env) orelse {
-                return error.NoHomeDirectory;
-            };
-
-            return switch (roc_target.classifyOs(builtin.os.tag)) {
-                .linux => std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".cache", cache_dir_name }),
-                .macos => std.fs.path.join(allocator, &[_][]const u8{ home_dir, "Library", "Caches", cache_dir_name }),
-                .windows => std.fs.path.join(allocator, &[_][]const u8{ home_dir, cache_dir_name }),
-                .freebsd, .openbsd, .netbsd, .other => std.fs.path.join(allocator, &[_][]const u8{ home_dir, ".cache", cache_dir_name }),
-            };
-        }
-    }
-};
-
-const PrintBuildSuccessStep = struct {
-    step: Step,
-
-    fn create(b: *std.Build) *PrintBuildSuccessStep {
-        const self = b.allocator.create(PrintBuildSuccessStep) catch @panic("OOM");
-        self.* = .{
-            .step = Step.init(.{
-                .id = Step.Id.custom,
-                .name = "print-build-success",
-                .owner = b,
-                .makeFn = make,
-            }),
-        };
-        return self;
-    }
-
-    fn make(step: *Step, options: Step.MakeOptions) !void {
-        _ = step;
-        _ = options;
-        std.debug.print("Build succeeded!\n", .{});
-    }
-};
-
 /// Create a step that clears the Roc cache directory.
 /// This is useful when rebuilding test platforms to ensure stale cached hosts aren't used.
 fn createClearCacheStep(b: *std.Build) *Step {
-    const clear_cache = ClearRocCacheStep.create(b);
-    return &clear_cache.step;
+    return &addBuildAction(b, &.{"clear-roc-cache"}).step;
+}
+
+fn addBuildAction(b: *std.Build, args: []const []const u8) *Step.Run {
+    const run = b.addSystemCommand(&.{ b.graph.zig_exe, "run" });
+    run.addFileArg(b.path("src/build/actions.zig"));
+    run.addArg("--");
+    run.addArgs(args);
+    return run;
 }
 
 fn setupTestPlatforms(
@@ -2840,8 +1056,10 @@ fn setupTestPlatforms(
 }
 
 fn configureZigCacheEnvironment(b: *std.Build) void {
-    const local_cache_dir = absoluteBuildPath(b, b.cache_root.path orelse ".");
-    const global_cache_dir = absoluteBuildPath(b, b.graph.global_cache_root.path orelse ".");
+    const local_cache_dir = absoluteBuildPath(
+        b,
+        b.graph.environ_map.get("ZIG_LOCAL_CACHE_DIR") orelse ".zig-cache",
+    );
     const temp_dir = b.pathJoin(&.{ local_cache_dir, "tmp" });
 
     std.Io.Dir.cwd().createDirPath(b.graph.io, temp_dir) catch |err| {
@@ -2849,7 +1067,6 @@ fn configureZigCacheEnvironment(b: *std.Build) void {
     };
 
     b.graph.environ_map.put("ZIG_LOCAL_CACHE_DIR", local_cache_dir) catch @panic("OOM");
-    b.graph.environ_map.put("ZIG_GLOBAL_CACHE_DIR", global_cache_dir) catch @panic("OOM");
     b.graph.environ_map.put("TEMP", temp_dir) catch @panic("OOM");
     b.graph.environ_map.put("TMP", temp_dir) catch @panic("OOM");
     b.graph.environ_map.put("TMPDIR", temp_dir) catch @panic("OOM");
@@ -2857,7 +1074,7 @@ fn configureZigCacheEnvironment(b: *std.Build) void {
 
 fn absoluteBuildPath(b: *std.Build, path: []const u8) []const u8 {
     if (std.fs.path.isAbsolute(path)) return path;
-    return b.pathFromRoot(path);
+    return b.root.joinString(b.allocator, path) catch @panic("OOM");
 }
 
 pub fn build(b: *std.Build) void {
@@ -3011,9 +1228,9 @@ pub fn build(b: *std.Build) void {
         }
     }
 
-    const parsed_args = parseBuildArgs(b);
-    const run_args = parsed_args.run_args;
-    const test_filters = parsed_args.test_filters;
+    const run_args: []const []const u8 = &.{};
+    const test_filter = b.option([]const u8, "test-filter", "Compile only Zig tests whose names contain this substring");
+    const test_filters: []const []const u8 = if (test_filter) |filter| &.{filter} else &.{};
 
     // llvm configuration
     // By default, use our bundled LLVM from roc-bootstrap. Users can opt-in to system LLVM
@@ -3083,10 +1300,10 @@ pub fn build(b: *std.Build) void {
             \\
             \\pub const compiler_version = @import("std").fmt.comptimePrint("{s}-{s}", .{
             \\    switch (@import("builtin").mode) {
-            \\        .Debug => "debug",
-            \\        .ReleaseSafe => "release-safe",
-            \\        .ReleaseFast => "release-fast",
-            \\        .ReleaseSmall => "release-small",
+            \\        .debug => "debug",
+            \\        .safe => "release-safe",
+            \\        .fast => "release-fast",
+            \\        .small => "release-small",
             \\    },
             \\    compiler_version_git,
             \\});
@@ -3143,7 +1360,7 @@ pub fn build(b: *std.Build) void {
                 break :blk false;
             } else {
                 // Default: strip in release modes
-                break :blk optimize != .Debug;
+                break :blk optimize != .debug;
             }
         }
     };
@@ -3167,7 +1384,7 @@ pub fn build(b: *std.Build) void {
     build_options.addOption(bool, "target_is_native", target_is_native);
 
     // Path to bundled Darwin sysroot with libSystem.tbd stub
-    const darwin_sysroot = b.path("src/cli/darwin").getPath(b);
+    const darwin_sysroot = b.root.joinString(b.allocator, "src/cli/darwin") catch @panic("OOM");
     build_options.addOption([]const u8, "darwin_sysroot", darwin_sysroot);
 
     // We use zstd for `roc bundle` and `roc unbundle` and downloading .tar.zst bundles.
@@ -3181,12 +1398,11 @@ pub fn build(b: *std.Build) void {
     });
 
     const roc_modules = modules.RocModules.create(b, build_options, zstd);
-    const zig_unit_test_lib_path = b.fmt("{f}", .{b.graph.zig_lib_directory});
     const unit_test_runner = UnitTestRunner{
         .path = b.path("src/build/unit_test_runner.zig"),
         .build_options = roc_modules.build_options,
         .zig_default_test_runner = b.createModule(.{
-            .root_source_file = .{ .cwd_relative = b.pathJoin(&.{ zig_unit_test_lib_path, "compiler/test_runner.zig" }) },
+            .root_source_file = std.Build.LazyPath.zig_lib.path(b, "compiler/test_runner.zig"),
         }),
     };
 
@@ -3263,7 +1479,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/zig_lints.zig"),
             .target = b.graph.host,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const tidy_exe = b.addExecutable(.{
@@ -3271,7 +1487,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/tidy.zig"),
             .target = b.graph.host,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const test_wiring_exe = b.addExecutable(.{
@@ -3279,7 +1495,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("ci/check_test_wiring.zig"),
             .target = b.graph.host,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     const minici_exe = b.addExecutable(.{
@@ -3287,7 +1503,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/build/minici.zig"),
             .target = b.graph.host,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     minici_exe.root_module.addImport("build_options", roc_modules.build_options);
@@ -3329,7 +1545,7 @@ pub fn build(b: *std.Build) void {
 
     const run_minici = b.addRunArtifact(minici_exe);
     run_minici.addArg(b.graph.zig_exe);
-    for (b.search_prefixes.items) |search_prefix| {
+    for (b.graph.search_prefixes.items) |search_prefix| {
         run_minici.addArg("--search-prefix");
         run_minici.addArg(search_prefix);
     }
@@ -3342,6 +1558,7 @@ pub fn build(b: *std.Build) void {
     if (run_args.len != 0) {
         run_minici.addArgs(run_args);
     }
+    run_minici.addPassthruArgs();
     run_minici.step.dependOn(&install_minici.step);
     run_minici_step.dependOn(&run_minici.step);
 
@@ -3351,6 +1568,39 @@ pub fn build(b: *std.Build) void {
     roc_modules.lsp.addImport("compiled_builtins", compiled_builtins_module);
     roc_modules.lsp_unit.addImport("compiled_builtins", compiled_builtins_module);
     roc_modules.lsp_integration.addImport("compiled_builtins", compiled_builtins_module);
+
+    // hpk embeds only the compiler front end and LIR interpreter. Keep this
+    // module separate from eval so consumers do not inherit the LLVM and
+    // WebAssembly runner dependencies exposed by the general evaluation API.
+    const hpk_eval = b.addModule("hpk_eval", .{
+        .root_source_file = b.path("src/eval/hpk.zig"),
+    });
+    inline for (.{
+        .{ "tracy", roc_modules.tracy },
+        .{ "ctx", roc_modules.ctx },
+        .{ "collections", roc_modules.collections },
+        .{ "base", roc_modules.base },
+        .{ "types", roc_modules.types },
+        .{ "builtins", roc_modules.builtins },
+        .{ "parse", roc_modules.parse },
+        .{ "can", roc_modules.can },
+        .{ "check", roc_modules.check },
+        .{ "layout", roc_modules.layout },
+        .{ "static_data", roc_modules.static_data },
+        .{ "values", roc_modules.values },
+        .{ "build_options", roc_modules.build_options },
+        .{ "reporting", roc_modules.reporting },
+        .{ "backend", roc_modules.backend },
+        .{ "lir", roc_modules.lir },
+        .{ "symbol", roc_modules.symbol },
+        .{ "roc_target", roc_modules.roc_target },
+        .{ "sljmp", roc_modules.sljmp },
+        .{ "ipc", roc_modules.ipc },
+        .{ "vendor_eval_loader", roc_modules.vendor_eval_loader },
+        .{ "compiled_builtins", compiled_builtins_module },
+        .{ "bytebox", bytebox.module("bytebox") },
+    }) |entry| hpk_eval.addImport(entry[0], entry[1]);
+    hpk_eval.addAssemblyFile(b.path("src/eval/host_trampoline.S"));
 
     const check_test_env_module = b.createModule(.{
         .root_source_file = b.path("src/check/test_env_pkg.zig"),
@@ -3401,22 +1651,21 @@ pub fn build(b: *std.Build) void {
             .pic = true,
         }),
     });
-    wasm32_builtins_obj.root_module.addImport("tracy", b.addModule("tracy_stub_wasm32_eval", .{
+    wasm32_builtins_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     wasm32_builtins_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     wasm32_builtins_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    wasm32_builtins_obj.root_module.addImport("shim_io", b.addModule("shim_io_wasm32_eval", .{
+    wasm32_builtins_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     wasm32_builtins_obj.bundle_compiler_rt = false;
     configureBackend(wasm32_builtins_obj, wasm32_resolved_target);
 
-    const zig_lib_path = b.fmt("{f}", .{b.graph.zig_lib_directory});
     const wasm32_compiler_rt_obj = b.addObject(.{
         .name = "compiler_rt_wasm32_eval",
         .root_module = b.createModule(.{
-            .root_source_file = .{ .cwd_relative = b.pathJoin(&.{ zig_lib_path, "compiler_rt.zig" }) },
+            .root_source_file = std.Build.LazyPath.zig_lib.path(b, "compiler_rt.zig"),
             .target = wasm32_resolved_target,
             .optimize = optimize,
             .strip = strip,
@@ -3632,13 +1881,13 @@ pub fn build(b: *std.Build) void {
         // Create a release-specific zstd dependency with release settings
         const release_zstd = b.dependency("zstd", .{
             .target = release_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
         });
         const release_exe_result = addMainExe(
             b,
             roc_modules,
             release_target,
-            .ReleaseFast, // Always ReleaseFast for release
+            .fast, // Always ReleaseFast for release
             true, // Always strip for release
             null, // Default frame pointer handling
             use_system_llvm,
@@ -3704,6 +1953,7 @@ pub fn build(b: *std.Build) void {
         if (run_args.len != 0) {
             run_cli.addArgs(run_args);
         }
+        run_cli.addPassthruArgs();
         run_cli.step.dependOn(&install.step);
         run_cli.step.dependOn(build_test_hosts_step);
         run_cli_test_step = &run_cli.step;
@@ -3719,7 +1969,7 @@ pub fn build(b: *std.Build) void {
 
     // Clean zig-out/ to ensure a fresh rebuild of builtins
     // Note: We don't delete .zig-cache because it contains build options needed during compilation.
-    const clean_out_step = RemoveDirTreeStep.create(b, "zig-out");
+    const clean_out_step = addBuildAction(b, &.{ "remove-dir", "zig-out" });
 
     // Also clear the roc cache to avoid stale cached modules with old struct layouts
     const clear_roc_cache_step = createClearCacheStep(b);
@@ -3760,18 +2010,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/static_lib.zig"),
             .target = builtins64_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins64_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub64_bc", .{
+    builtins64_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins64_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins64_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins64_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io64_bc", .{
+    builtins64_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins64_bc_obj.root_module.omit_frame_pointer = true;
@@ -3787,18 +2037,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/static_lib_core.zig"),
             .target = builtins64_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins64_core_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub64_core_bc", .{
+    builtins64_core_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins64_core_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins64_core_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins64_core_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io64_core_bc", .{
+    builtins64_core_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins64_core_bc_obj.root_module.omit_frame_pointer = true;
@@ -3815,18 +2065,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/static_lib.zig"),
             .target = builtins32_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins32_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub32_bc", .{
+    builtins32_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins32_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins32_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins32_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io32_bc", .{
+    builtins32_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins32_bc_obj.root_module.omit_frame_pointer = true;
@@ -3841,18 +2091,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/static_lib_core.zig"),
             .target = builtins32_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins32_core_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub32_core_bc", .{
+    builtins32_core_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins32_core_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins32_core_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins32_core_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io32_core_bc", .{
+    builtins32_core_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins32_core_bc_obj.root_module.omit_frame_pointer = true;
@@ -3867,18 +2117,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/extern_static_lib.zig"),
             .target = builtins64_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins64_extern_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub64_extern_bc", .{
+    builtins64_extern_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins64_extern_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins64_extern_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins64_extern_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io64_extern_bc", .{
+    builtins64_extern_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins64_extern_bc_obj.root_module.omit_frame_pointer = true;
@@ -3893,18 +2143,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/extern_static_lib_core.zig"),
             .target = builtins64_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins64_core_extern_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub64_core_extern_bc", .{
+    builtins64_core_extern_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins64_core_extern_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins64_core_extern_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins64_core_extern_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io64_core_extern_bc", .{
+    builtins64_core_extern_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins64_core_extern_bc_obj.root_module.omit_frame_pointer = true;
@@ -3919,18 +2169,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/extern_static_lib.zig"),
             .target = builtins32_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins32_extern_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub32_extern_bc", .{
+    builtins32_extern_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins32_extern_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins32_extern_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins32_extern_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io32_extern_bc", .{
+    builtins32_extern_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins32_extern_bc_obj.root_module.omit_frame_pointer = true;
@@ -3945,18 +2195,18 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/extern_static_lib_core.zig"),
             .target = builtins32_target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .pic = true,
             .single_threaded = true,
         }),
     });
-    builtins32_core_extern_bc_obj.root_module.addImport("tracy", b.addModule("tracy_stub32_core_extern_bc", .{
+    builtins32_core_extern_bc_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins32_core_extern_bc_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins32_core_extern_bc_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins32_core_extern_bc_obj.root_module.addImport("shim_io", b.addModule("shim_io32_core_extern_bc", .{
+    builtins32_core_extern_bc_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     builtins32_core_extern_bc_obj.root_module.omit_frame_pointer = true;
@@ -3977,7 +2227,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/builtins/eval_compiler_rt_libcalls.zig"),
             .target = target,
-            .optimize = .ReleaseFast,
+            .optimize = .fast,
             .strip = true,
             .single_threaded = true,
         }),
@@ -4084,7 +2334,7 @@ pub fn build(b: *std.Build) void {
         run_snapshot_tool_step,
         run_args,
     );
-    const check_snapshot_diff = CheckSnapshotDiffStep.create(b);
+    const check_snapshot_diff = addBuildAction(b, &.{"snapshot-diff"});
     check_snapshot_diff.step.dependOn(run_snapshot_tool_step);
     run_check_snapshots_step.dependOn(&check_snapshot_diff.step);
 
@@ -4303,7 +2553,11 @@ pub fn build(b: *std.Build) void {
         // Evaluator tests compile temporary Roc programs beneath `.zig-cache`.
         // Run the installed Lambda Mono runner so this final gate does not
         // depend on a cache artifact surviving the preceding evaluator.
-        const run_simd_lambda_mono = b.addSystemCommand(&.{b.getInstallPath(.bin, lambda_mono_differential_exe.out_filename)});
+        const run_simd_lambda_mono = Step.Run.create(b, "run installed lambda-mono differential runner");
+        run_simd_lambda_mono.addFileArg(.{ .relative = .{
+            .base = .install_bin,
+            .sub_path = lambda_mono_differential_exe.out_filename,
+        } });
         run_simd_lambda_mono.addArgs(&.{
             "--filter",
             "SIMD full differential corpus",
@@ -4313,6 +2567,7 @@ pub fn build(b: *std.Build) void {
             "900000",
             "corpus-only",
         });
+        run_simd_lambda_mono.addPassthruArgs();
         run_simd_lambda_mono.addArgs(run_args);
         run_simd_lambda_mono.step.dependOn(&install.step);
         run_simd_lambda_mono.step.dependOn(&run_simd_eval.step);
@@ -4346,13 +2601,13 @@ pub fn build(b: *std.Build) void {
     // `echo`, which are pinned to ReleaseSmall for the same reason.
     //
     // Every explicitly requested mode is honored, including `-Doptimize=Debug`:
-    // an omitted `-Doptimize` also resolves to `.Debug`, so the two are only
+    // an omitted `-Doptimize` also resolves to `.debug`, so the two are only
     // distinguishable through `user_input_options` (as with `target` and `cpu`
     // above). Asking for a Debug playground has to keep working -- it is just
     // not what an unqualified `zig build` should spend 12 GiB on.
     const playground_wasm_optimize: std.builtin.OptimizeMode =
-        if (optimize == .Debug and !b.user_input_options.contains("optimize"))
-            .ReleaseSmall
+        if (optimize == .debug and !b.user_input_options.contains("optimize"))
+            .small
         else
             optimize;
 
@@ -4402,7 +2657,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/repl_wasm/main.zig"),
             .target = repl_wasm_target,
-            .optimize = .ReleaseSmall,
+            .optimize = .small,
         }),
     });
     configureBackend(repl_wasm, repl_wasm_target);
@@ -4414,7 +2669,7 @@ pub fn build(b: *std.Build) void {
     repl_wasm.root_module.addImport("ReplSession.zig", b.createModule(.{
         .root_source_file = b.path("src/cli/ReplSession.zig"),
         .target = repl_wasm_target,
-        .optimize = .ReleaseSmall,
+        .optimize = .small,
         .imports = &.{
             .{ .name = "base", .module = roc_modules.base },
             .{ .name = "can", .module = roc_modules.can },
@@ -4475,7 +2730,7 @@ pub fn build(b: *std.Build) void {
             .root_module = b.createModule(.{
                 .root_source_file = b.path("src/echo_platform/echo.zig"),
                 .target = echo_wasm_target,
-                .optimize = .ReleaseSmall,
+                .optimize = .small,
             }),
         });
         configureBackend(echo_wasm, echo_wasm_target);
@@ -4548,6 +2803,7 @@ pub fn build(b: *std.Build) void {
 
         const run_echo_step = b.step("run-echo", "Run the native echo platform driver (debug helper for echo.wasm)");
         const run_echo_cmd = b.addRunArtifact(echo_native_exe);
+        run_echo_cmd.addPassthruArgs();
         if (run_args.len != 0) run_echo_cmd.addArgs(run_args);
         run_echo_cmd.step.dependOn(&echo_native_install.step);
         run_echo_step.dependOn(&run_echo_cmd.step);
@@ -4599,8 +2855,12 @@ pub fn build(b: *std.Build) void {
             .install_dir = .prefix,
             .install_subdir = "glue-release",
         });
-        const clean_glue_release_install = RemoveDirTreeStep.create(b, b.getInstallPath(.prefix, "glue-release"));
-        glue_release_install.step.dependOn(&clean_glue_release_install.step);
+        const clean_glue_release = addBuildAction(b, &.{"remove-dir"});
+        clean_glue_release.addFileArg(.{ .relative = .{
+            .base = .install_prefix,
+            .sub_path = "glue-release",
+        } });
+        glue_release_install.step.dependOn(&clean_glue_release.step);
         build_glue_release_step.dependOn(&glue_release_install.step);
     }
 
@@ -4647,6 +2907,7 @@ pub fn build(b: *std.Build) void {
         if (run_args.len != 0) {
             run_playground_test.addArgs(run_args);
         }
+        run_playground_test.addPassthruArgs();
         run_playground_test.step.dependOn(&install.step);
         run_test_playground_step.dependOn(&run_playground_test.step);
 
@@ -4663,7 +2924,7 @@ pub fn build(b: *std.Build) void {
             .root_module = b.createModule(.{
                 .root_source_file = b.path("test/serialization_size_check.zig"),
                 .target = target,
-                .optimize = .Debug,
+                .optimize = .debug,
             }),
         });
         configureBackend(size_check_native, target);
@@ -4678,7 +2939,7 @@ pub fn build(b: *std.Build) void {
                     .cpu_arch = .wasm32,
                     .os_tag = .freestanding,
                 }),
-                .optimize = .Debug,
+                .optimize = .debug,
             }),
         });
         configureBackend(size_check_wasm32, b.resolveTargetQuery(.{
@@ -4986,6 +3247,7 @@ pub fn build(b: *std.Build) void {
         run_test_wasm_static_lib_step.dependOn(&run_wasm_dce_check.step);
 
         const run_wasm_test = b.addRunArtifact(wasm_test_exe);
+        run_wasm_test.addPassthruArgs();
         if (run_args.len != 0) {
             run_wasm_test.addArgs(run_args);
         } else {
@@ -5357,7 +3619,7 @@ pub fn build(b: *std.Build) void {
     }
 
     // Check fx platform test coverage convenience step
-    const check_test_asset_coverage_inner = CheckTestAssetCoverageStep.create(b);
+    const check_test_asset_coverage_inner = addBuildAction(b, &.{"check-test-asset-coverage"});
     run_check_test_asset_coverage_step.dependOn(&check_test_asset_coverage_inner.step);
 
     const stack_overflow_test_helper_exe = b.addExecutable(.{
@@ -5373,9 +3635,8 @@ pub fn build(b: *std.Build) void {
     stack_overflow_test_helper_exe.root_module.addImport("base", roc_modules.base);
     roc_modules.addModuleDependencies(stack_overflow_test_helper_exe, .base);
     const install_stack_overflow_test_helper = b.addInstallArtifact(stack_overflow_test_helper_exe, .{});
-    const stack_overflow_test_helper_path = b.getInstallPath(.bin, stack_overflow_test_helper_exe.out_filename);
     const stack_overflow_test_options = b.addOptions();
-    stack_overflow_test_options.addOption([]const u8, "helper_path", stack_overflow_test_helper_path);
+    stack_overflow_test_options.addOptionPath("helper_path", stack_overflow_test_helper_exe.getEmittedBin());
     const stack_overflow_test_options_module = stack_overflow_test_options.createModule();
     build_test_zig_step.dependOn(&install_stack_overflow_test_helper.step);
 
@@ -5415,7 +3676,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/collections/guarded_list_violation_test.zig"),
             .target = target,
-            .optimize = .Debug,
+            .optimize = .debug,
             .link_libc = true,
         }),
     });
@@ -5434,7 +3695,7 @@ pub fn build(b: *std.Build) void {
         .root_module = b.createModule(.{
             .root_source_file = b.path("src/base/rc_effect_rejected_row_probe.zig"),
             .target = target,
-            .optimize = .Debug,
+            .optimize = .debug,
         }),
     });
     rc_effect_rejected_row_probe.root_module.addImport("base", roc_modules.base);
@@ -5623,6 +3884,7 @@ pub fn build(b: *std.Build) void {
     if (run_args.len != 0) {
         run_lsp_integration.addArgs(run_args);
     }
+    run_lsp_integration.addPassthruArgs();
 
     const run_lsp_integration_step = b.step(
         "run-test-zig-module-lsp_integration",
@@ -5984,8 +4246,8 @@ pub fn build(b: *std.Build) void {
     });
     cli_io_writer_test_helper.root_module.addImport("reporting", roc_modules.reporting);
     cli_io_writer_test_helper.root_module.addImport("ctx", roc_modules.ctx);
-    const install_cli_io_writer_test_helper = b.addInstallArtifact(cli_io_writer_test_helper, .{});
-    const cli_io_writer_test_helper_path = b.getInstallPath(.bin, cli_io_writer_test_helper.out_filename);
+    const cli_test_options = b.addOptions();
+    cli_test_options.addOptionPath("io_writer_helper_path", cli_io_writer_test_helper.getEmittedBin());
 
     // Add CLI test
     const enable_cli_tests = b.option(bool, "cli-tests", "Enable cli tests") orelse true;
@@ -6021,17 +4283,13 @@ pub fn build(b: *std.Build) void {
         }
         add_tracy(b, roc_modules.build_options, cli_test, target, true, flag_enable_tracy);
         cli_test.root_module.addImport("compiled_builtins", compiled_builtins_module);
+        cli_test.root_module.addOptions("cli_test_options", cli_test_options);
         cli_test.step.dependOn(&write_compiled_builtins.step);
 
         test_suites.register(.{
             .step_suffix = "cli-main",
             .description = "Run roc CLI main Zig tests",
             .compile = cli_test,
-            .deps = &.{&install_cli_io_writer_test_helper.step},
-            .env = &.{.{
-                .key = "ROC_CLI_IO_WRITER_TEST_HELPER",
-                .value = cli_io_writer_test_helper_path,
-            }},
         });
     }
 
@@ -6070,7 +4328,7 @@ pub fn build(b: *std.Build) void {
             .root_module = b.createModule(.{
                 .root_source_file = b.path("src/build/minici.zig"),
                 .target = b.graph.host,
-                .optimize = .Debug,
+                .optimize = .debug,
                 .imports = &.{
                     .{ .name = "build_options", .module = roc_modules.build_options },
                 },
@@ -6080,37 +4338,37 @@ pub fn build(b: *std.Build) void {
     });
 
     // Add check for forbidden patterns in type checker code
-    const check_patterns = CheckTypeCheckerPatternsStep.create(b);
+    const check_patterns = addBuildAction(b, &.{"check-type-checker-patterns"});
     run_check_type_checker_patterns_step.dependOn(&check_patterns.step);
 
     // Add check for @enumFromInt(0) usage
-    const check_enum_from_int = CheckEnumFromIntZeroStep.create(b);
+    const check_enum_from_int = addBuildAction(b, &.{"check-enum-from-int-zero"});
     run_check_enum_from_int_zero_step.dependOn(&check_enum_from_int.step);
 
     // Add check for unused variable suppression patterns
-    const check_unused = CheckUnusedSuppressionStep.create(b);
+    const check_unused = addBuildAction(b, &.{"check-unused-suppression"});
     run_check_unused_suppression_step.dependOn(&check_unused.step);
 
     // Add check that deleted post-check output/remapping APIs do not reappear
-    const check_postcheck_architecture = CheckPostcheckArchitectureStep.create(b);
+    const check_postcheck_architecture = b.addSystemCommand(&.{ "perl", "ci/check_postcheck_architecture.pl" });
     run_check_postcheck_architecture_step.dependOn(&check_postcheck_architecture.step);
 
-    const check_wasm_builtin_routing = CheckWasmBuiltinRoutingStep.create(b);
+    const check_wasm_builtin_routing = b.addSystemCommand(&.{ "perl", "ci/check_wasm_builtin_routing.pl" });
     run_check_wasm_builtin_routing_step.dependOn(&check_wasm_builtin_routing.step);
 
     // Add check that semantic compiler stages do not recover missing data.
-    const run_semantic_audit = ci_steps.SemanticAuditStep.create(b);
+    const run_semantic_audit = b.addSystemCommand(&.{ "perl", "ci/semantic_audit.pl" });
     run_check_semantic_audit_step.dependOn(&run_semantic_audit.step);
 
     // Check for @panic and std.debug.panic in interpreter and builtins
-    const check_panic = CheckPanicStep.create(b);
+    const check_panic = addBuildAction(b, &.{"check-panic-usage"});
     run_check_panic_step.dependOn(&check_panic.step);
 
     // Add check for global stdio usage in CLI code
-    const check_cli_stdio = CheckCliGlobalStdioStep.create(b);
+    const check_cli_stdio = addBuildAction(b, &.{"check-cli-global-stdio"});
     run_check_cli_global_stdio_step.dependOn(&check_cli_stdio.step);
 
-    run_test_zig_step.dependOn(&tests_summary.step);
+    run_test_zig_step.dependOn(tests_summary.step);
 
     b.default_step.dependOn(build_web_step);
     {
@@ -6119,11 +4377,11 @@ pub fn build(b: *std.Build) void {
     }
 
     // Fmt zig code.
-    const fmt_paths = .{ "src", "build.zig" };
-    const fmt = b.addFmt(.{ .paths = &fmt_paths });
+    const fmt_paths = b.pathList(&.{ "src", "build.zig" });
+    const fmt = b.addFmt(.{ .paths = fmt_paths });
     run_fmt_zig_step.dependOn(&fmt.step);
 
-    const check_fmt = b.addFmt(.{ .paths = &fmt_paths, .check = true });
+    const check_fmt = b.addFmt(.{ .paths = fmt_paths, .check = true });
     run_check_zig_format_step.dependOn(&check_fmt.step);
 
     // Parser code coverage with kcov
@@ -6149,7 +4407,7 @@ pub fn build(b: *std.Build) void {
                 .root_module = b.createModule(.{
                     .root_source_file = b.path("src/parse/mod.zig"),
                     .target = target,
-                    .optimize = .Debug, // Debug required for DWARF debug info
+                    .optimize = .debug, // Debug required for DWARF debug info
                 }),
             });
             roc_modules.addModuleDependencies(parse_unit_test, .parse);
@@ -6198,7 +4456,7 @@ pub fn build(b: *std.Build) void {
             run_parse_coverage.step.dependOn(&install_parse_test.step);
 
             // Add coverage summary step that parses kcov JSON output
-            const summary_step = CoverageSummaryStep.create(b, "kcov-output/parser", "parse_unit_coverage");
+            const summary_step = addBuildAction(b, &.{ "coverage-summary", "kcov-output/parser", "parse_unit_coverage", "PARSER", "28.0" });
             summary_step.step.dependOn(&run_parse_coverage.step);
 
             // Eval coverage: builds a separate binary with coverage=true (comptime),
@@ -6276,7 +4534,7 @@ pub fn build(b: *std.Build) void {
                 run_eval_coverage.step.dependOn(&install_coverage_runner.step);
                 run_eval_coverage.step.dependOn(&install_kcov.step);
 
-                const eval_summary_step = CoverageSummaryStep.createWithOptions(b, "kcov-output/eval", "eval-coverage-runner", "EVAL", 0.0);
+                const eval_summary_step = addBuildAction(b, &.{ "coverage-summary", "kcov-output/eval", "eval-coverage-runner", "EVAL", "0.0" });
                 eval_summary_step.step.dependOn(&run_eval_coverage.step);
 
                 coverage_eval_step.dependOn(&eval_summary_step.step);
@@ -6296,7 +4554,7 @@ pub fn build(b: *std.Build) void {
                 .root_module = b.createModule(.{
                     .root_source_file = b.path("src/parse/mod.zig"),
                     .target = windows_target,
-                    .optimize = .Debug,
+                    .optimize = .debug,
                 }),
             });
             roc_modules.addModuleDependencies(windows_parse_build, .parse);
@@ -6314,24 +4572,8 @@ pub fn build(b: *std.Build) void {
         }
     } else if (!is_coverage_supported) {
         // On unsupported platforms, print a message
-        const unsupported_step = b.allocator.create(Step) catch @panic("OOM");
-        unsupported_step.* = Step.init(.{
-            .id = Step.Id.custom,
-            .name = "coverage-unsupported",
-            .owner = b,
-            .makeFn = struct {
-                fn make(_: *Step, _: Step.MakeOptions) !void {
-                    std.debug.print("\n", .{});
-                    std.debug.print("=" ** 60 ++ "\n", .{});
-                    std.debug.print("COVERAGE NOT SUPPORTED\n", .{});
-                    std.debug.print("=" ** 60 ++ "\n\n", .{});
-                    std.debug.print("kcov parser coverage is currently enabled only on Linux ARM64.\n", .{});
-                    std.debug.print("Current platform: {s}\n\n", .{@tagName(builtin.target.os.tag)});
-                    std.debug.print("=" ** 60 ++ "\n", .{});
-                }
-            }.make,
-        });
-        run_coverage_parser_step.dependOn(unsupported_step);
+        const unsupported_step = addBuildAction(b, &.{"coverage-unsupported"});
+        run_coverage_parser_step.dependOn(&unsupported_step.step);
     }
     build_ci_step.dependOn(build_roc_step);
     build_ci_step.dependOn(build_check_tools_step);
@@ -6406,11 +4648,11 @@ pub fn build(b: *std.Build) void {
         // Apply archive padding fix for non-Windows targets (Zig bug workaround)
         // The final_fx_host_step is what tests should depend on to ensure the archive is ready
         const final_fx_host_step: *Step = if (target.result.os.tag != .windows) blk: {
-            const fix_main = FixArchivePaddingStep.create(b, fx_host_main_path);
+            const fix_main = addBuildAction(b, &.{ "fix-archive-padding", fx_host_main_path });
             fix_main.step.dependOn(&copy_test_fx_host.step);
 
             if (fx_host_target_path) |target_path| {
-                const fix_target = FixArchivePaddingStep.create(b, target_path);
+                const fix_target = addBuildAction(b, &.{ "fix-archive-padding", target_path });
                 fix_target.step.dependOn(&copy_test_fx_host.step);
                 // Make fix_target depend on fix_main so both complete
                 fix_target.step.dependOn(&fix_main.step);
@@ -6532,7 +4774,7 @@ pub fn build(b: *std.Build) void {
                 "http-headers",
                 http_host_target,
                 target_dir,
-                .ReleaseFast,
+                .fast,
                 roc_modules,
                 strip,
                 omit_frame_pointer,
@@ -6549,7 +4791,8 @@ pub fn build(b: *std.Build) void {
                 "http_header_decoder_server_prebuilt.exe"
             else
                 "http_header_decoder_server_prebuilt";
-            const prebuilt_roc_cache_root = b.pathJoin(&.{ b.cache_root.path orelse ".zig-cache", "roc-prebuilt-cache" });
+            const local_cache_root = b.graph.environ_map.get("ZIG_LOCAL_CACHE_DIR") orelse ".zig-cache";
+            const prebuilt_roc_cache_root = b.pathJoin(&.{ local_cache_root, "roc-prebuilt-cache" });
             const http_prebuilt_roc_cache_dir = b.pathJoin(&.{ prebuilt_roc_cache_root, "http" });
             const build_http_app = b.addRunArtifact(roc_exe);
             build_http_app.addArgs(&.{
@@ -6565,7 +4808,8 @@ pub fn build(b: *std.Build) void {
             build_http_app.step.dependOn(final_http_host_step);
             build_http_app.step.dependOn(build_roc_step);
             const install_http_app = b.addInstallBinFile(http_app_output, http_app_exe_name);
-            const http_app_installed_path = b.pathJoin(&.{ b.exe_dir, http_app_exe_name });
+            const http_test_options = b.addOptions();
+            http_test_options.addOption([]const u8, "prebuilt_exe_path", b.fmt(".{c}{s}", .{ std.fs.path.sep, http_app_exe_name }));
 
             const http_header_decoder_platform_test = b.addTest(.{
                 .name = "http_header_decoder_platform_test",
@@ -6578,6 +4822,7 @@ pub fn build(b: *std.Build) void {
                 }),
                 .filters = test_filters,
             });
+            http_header_decoder_platform_test.root_module.addOptions("http_header_decoder_test_options", http_test_options);
 
             test_suites.register(.{
                 .step_suffix = "http-header-decoder-platform",
@@ -6588,9 +4833,7 @@ pub fn build(b: *std.Build) void {
                     &install_http_app.step,
                     build_roc_step,
                 },
-                .env = &.{
-                    .{ .key = "ROC_HTTP_HEADER_DECODER_PREBUILT_EXE", .value = http_app_installed_path },
-                },
+                .cwd = .{ .relative = .{ .base = .install_bin } },
             });
 
             const final_json_host_step = buildAndCopyTestPlatformHostLib(
@@ -6598,7 +4841,7 @@ pub fn build(b: *std.Build) void {
                 "json-decoder",
                 http_host_target,
                 target_dir,
-                .ReleaseFast,
+                .fast,
                 roc_modules,
                 strip,
                 omit_frame_pointer,
@@ -6631,7 +4874,6 @@ pub fn build(b: *std.Build) void {
             build_json_app.step.dependOn(final_json_host_step);
             build_json_app.step.dependOn(build_roc_step);
             const install_json_app = b.addInstallBinFile(json_app_output, json_app_exe_name);
-            const json_app_installed_path = b.pathJoin(&.{ b.exe_dir, json_app_exe_name });
 
             const json_camel_prebuilt_roc_cache_dir = b.pathJoin(&.{ prebuilt_roc_cache_root, "json-camel" });
             const build_json_camel_app = b.addRunArtifact(roc_exe);
@@ -6648,7 +4890,6 @@ pub fn build(b: *std.Build) void {
             build_json_camel_app.step.dependOn(final_json_host_step);
             build_json_camel_app.step.dependOn(build_roc_step);
             const install_json_camel_app = b.addInstallBinFile(json_camel_app_output, json_camel_app_exe_name);
-            const json_camel_app_installed_path = b.pathJoin(&.{ b.exe_dir, json_camel_app_exe_name });
 
             const json_camel_direct_prebuilt_roc_cache_dir = b.pathJoin(&.{ prebuilt_roc_cache_root, "json-camel-direct" });
             const build_json_camel_direct_app = b.addRunArtifact(roc_exe);
@@ -6665,7 +4906,10 @@ pub fn build(b: *std.Build) void {
             build_json_camel_direct_app.step.dependOn(final_json_host_step);
             build_json_camel_direct_app.step.dependOn(build_roc_step);
             const install_json_camel_direct_app = b.addInstallBinFile(json_camel_direct_app_output, json_camel_direct_app_exe_name);
-            const json_camel_direct_app_installed_path = b.pathJoin(&.{ b.exe_dir, json_camel_direct_app_exe_name });
+            const json_test_options = b.addOptions();
+            json_test_options.addOption([]const u8, "prebuilt_exe_path", b.fmt(".{c}{s}", .{ std.fs.path.sep, json_app_exe_name }));
+            json_test_options.addOption([]const u8, "camel_prebuilt_exe_path", b.fmt(".{c}{s}", .{ std.fs.path.sep, json_camel_app_exe_name }));
+            json_test_options.addOption([]const u8, "camel_direct_prebuilt_exe_path", b.fmt(".{c}{s}", .{ std.fs.path.sep, json_camel_direct_app_exe_name }));
 
             const json_decoder_platform_test = b.addTest(.{
                 .name = "json_decoder_platform_test",
@@ -6678,6 +4922,7 @@ pub fn build(b: *std.Build) void {
                 }),
                 .filters = test_filters,
             });
+            json_decoder_platform_test.root_module.addOptions("json_decoder_test_options", json_test_options);
 
             test_suites.register(.{
                 .step_suffix = "json-decoder-platform",
@@ -6690,11 +4935,7 @@ pub fn build(b: *std.Build) void {
                     &install_json_camel_direct_app.step,
                     build_roc_step,
                 },
-                .env = &.{
-                    .{ .key = "ROC_JSON_DECODER_PREBUILT_EXE", .value = json_app_installed_path },
-                    .{ .key = "ROC_JSON_DECODER_CAMEL_PREBUILT_EXE", .value = json_camel_app_installed_path },
-                    .{ .key = "ROC_JSON_DECODER_CAMEL_DIRECT_PREBUILT_EXE", .value = json_camel_direct_app_installed_path },
-                },
+                .cwd = .{ .relative = .{ .base = .install_bin } },
             });
         }
     }
@@ -6711,9 +4952,9 @@ pub fn build(b: *std.Build) void {
         // AFL++ does not work with our prebuilt static llvm.
         // Check for llvm-config program in user_llvm_path or on the system.
         // If found, let AFL++ use that.
-        if (b.findProgram(&.{"llvm-config"}, &.{})) |_| {
+        if (b.findProgram(.{ .names = &.{"llvm-config"} })) |_| {
             build_afl = true;
-        } else |_| {
+        } else {
             std.log.warn("AFL++ requires a full version of llvm from the system or passed in via -Dllvm-path, but `llvm-config` was not found (Only building repro executables)", .{});
         }
     }
@@ -6828,7 +5069,7 @@ fn collectTestRuns(
     const gop = visited.getOrPut(b.allocator, step) catch @panic("OOM");
     if (gop.found_existing) return;
 
-    if (step.id == .run) {
+    if (step.tag == .run) {
         const run: *Step.Run = @fieldParentPtr("step", step);
         if (run.producer) |producer| {
             if (producer.kind.isTest() and found_len.* < found.len) {
@@ -6843,8 +5084,7 @@ fn collectTestRuns(
 
 fn discoverBuiltinRocFiles(b: *std.Build) ![]const []const u8 {
     const io = b.graph.io;
-    const builtin_roc_path = try b.build_root.join(b.allocator, &.{ "src", "build", "roc" });
-    var builtin_roc_dir = try std.Io.Dir.openDirAbsolute(io, builtin_roc_path, .{ .iterate = true });
+    var builtin_roc_dir = try b.root.openDir(io, "src/build/roc", .{ .iterate = true });
     defer builtin_roc_dir.close(io);
 
     var roc_files = std.ArrayList([]const u8).empty;
@@ -6885,7 +5125,7 @@ fn add_fuzz_target(
             .root_source_file = root_source_file,
             .target = target,
             // Work around instrumentation bugs on mac without giving up perf on linux.
-            .optimize = if (target.result.os.tag == .macos) .Debug else .ReleaseSafe,
+            .optimize = if (target.result.os.tag == .macos) .debug else .safe,
         }),
     });
     configureBackend(fuzz_obj, target);
@@ -6926,9 +5166,9 @@ fn add_fuzz_target(
         b.default_step.dependOn(fuzz_step);
 
         const fuzz_exe = if (target.result.os.tag == .macos)
-            addMacosAflFuzzExe(b, target, .ReleaseSafe, use_system_afl, fuzz_obj) orelse return
+            addMacosAflFuzzExe(b, target, .safe, use_system_afl, fuzz_obj) orelse return
         else
-            addAflFuzzExe(b, target, .ReleaseSafe, use_system_afl, fuzz_obj) orelse return;
+            addAflFuzzExe(b, target, .safe, use_system_afl, fuzz_obj) orelse return;
         const install_fuzz = b.addInstallBinFile(fuzz_exe, name_exe);
         fuzz_step.dependOn(&install_fuzz.step);
         b.getInstallStep().dependOn(&install_fuzz.step);
@@ -6947,7 +5187,7 @@ fn addAflFuzzExe(
     var run_afl_cc: *Step.Run = undefined;
     if (use_system_afl) {
         run_afl_cc = b.addSystemCommand(&.{
-            b.findProgram(&.{"afl-cc"}, &.{}) catch @panic("Could not find 'afl-cc', which is required to build"),
+            b.findProgram(.{ .names = &.{"afl-cc"} }) orelse @panic("Could not find 'afl-cc', which is required to build"),
             "-O3",
         });
     } else {
@@ -6958,18 +5198,19 @@ fn addAflFuzzExe(
         }) orelse return null;
 
         const install_tools = b.addInstallDirectory(.{
-            .source_dir = std.Build.LazyPath{
-                .cwd_relative = afl.builder.install_path,
-            },
+            .source_dir = .{ .relative = .{ .base = .install_prefix } },
             .install_dir = .prefix,
             .install_subdir = "AFLplusplus",
         });
 
         install_tools.step.dependOn(afl.builder.getInstallStep());
-        run_afl_cc = b.addSystemCommand(&.{
-            b.pathJoin(&.{ afl.builder.exe_dir, "afl-cc" }),
-            "-O3",
-        });
+        run_afl_cc = Step.Run.create(b, "run installed afl-cc");
+        run_afl_cc.addFileArg(.{ .relative = .{
+            .base = .install_bin,
+            .sub_path = "afl-cc",
+        } });
+        run_afl_cc.addArg("-O3");
+        run_afl_cc.step.dependOn(afl.builder.getInstallStep());
         run_afl_cc.step.dependOn(&afl.builder.top_level_steps.get("llvm_exes").?.step);
         run_afl_cc.step.dependOn(&install_tools.step);
     }
@@ -7001,7 +5242,7 @@ fn addMacosAflFuzzExe(
     }
 
     const afl_kit = b.lazyDependency("afl_kit", .{}) orelse return null;
-    const afl_cc = b.findProgram(&.{"afl-cc"}, &.{}) catch @panic("Could not find 'afl-cc', which is required to build");
+    const afl_cc = b.findProgram(.{ .names = &.{"afl-cc"} }) orelse @panic("Could not find 'afl-cc', which is required to build");
     const afl_bin_dir = std.fs.path.dirname(afl_cc) orelse @panic("Could not determine afl-cc directory");
     const afl_compiler_rt = std.Build.LazyPath{ .cwd_relative = b.pathJoin(&.{ afl_bin_dir, "..", "lib", "afl", "afl-compiler-rt.o" }) };
 
@@ -7047,7 +5288,7 @@ fn buildBoxyRuntimeObject(
     name: []const u8,
     root_source_file: std.Build.LazyPath,
 ) *Step.Compile {
-    const optimize: OptimizeMode = .ReleaseFast;
+    const optimize: OptimizeMode = .fast;
     const obj = b.addObject(.{
         .name = name,
         .root_module = b.createModule(.{
@@ -7078,8 +5319,7 @@ fn buildBoxyRuntimeObject(
     obj.root_module.addImport("eval", boxy_eval_module);
     obj.root_module.addImport("lir", roc_modules.lir);
     obj.root_module.addImport("raw_pages", roc_modules.raw_pages);
-    obj.root_module.addImport("shim_io", b.addModule(
-        b.fmt("shim_io_{s}", .{name}),
+    obj.root_module.addImport("shim_io", b.createModule(
         .{ .root_source_file = b.path("src/shim_io.zig") },
     ));
     // The builtins object linked into the same program is the compiler-rt
@@ -7206,12 +5446,12 @@ fn addMainExe(
     });
     // Provide a no-op tracy stub so host_abi.zig can do @import("tracy") without
     // pulling in the real tracy module (which requires build_options).
-    builtins_obj.root_module.addImport("tracy", b.addModule("tracy_stub", .{
+    builtins_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins_obj.root_module.addImport("shim_io", b.addModule("shim_io", .{
+    builtins_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     // This RocOps-ABI object is not linked into built executables (the dev
@@ -7233,12 +5473,12 @@ fn addMainExe(
             .pic = true,
         }),
     });
-    builtins_extern_obj.root_module.addImport("tracy", b.addModule("tracy_stub_extern", .{
+    builtins_extern_obj.root_module.addImport("tracy", b.createModule(.{
         .root_source_file = b.path("src/builtins/tracy_stub.zig"),
     }));
     builtins_extern_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     builtins_extern_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    builtins_extern_obj.root_module.addImport("shim_io", b.addModule("shim_io_extern", .{
+    builtins_extern_obj.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     // Bundle compiler-rt so the float math builtins are self-contained. Zig
@@ -7278,7 +5518,7 @@ fn addMainExe(
     roc_modules.addAll(interpreter_shim_lib);
     interpreter_shim_lib.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     interpreter_shim_lib.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    interpreter_shim_lib.root_module.addImport("shim_io", b.addModule("shim_io_interpreter", .{
+    interpreter_shim_lib.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     interpreter_shim_lib.root_module.addImport("shim_host_abi", shim_host_abi_module);
@@ -7325,7 +5565,7 @@ fn addMainExe(
     machine_code_shim_lib.root_module.addImport("lir", roc_modules.lir);
     machine_code_shim_lib.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
     machine_code_shim_lib.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-    machine_code_shim_lib.root_module.addImport("shim_io", b.addModule("shim_io_machine_code", .{
+    machine_code_shim_lib.root_module.addImport("shim_io", b.createModule(.{
         .root_source_file = b.path("src/shim_io.zig"),
     }));
     machine_code_shim_lib.root_module.addImport("shim_host_abi", shim_host_abi_module);
@@ -7362,7 +5602,7 @@ fn addMainExe(
         roc_modules.addAll(machine_code_shim_test);
         machine_code_shim_test.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
         machine_code_shim_test.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-        machine_code_shim_test.root_module.addImport("shim_io", b.addModule("shim_io_machine_code_test", .{
+        machine_code_shim_test.root_module.addImport("shim_io", b.createModule(.{
             .root_source_file = b.path("src/shim_io.zig"),
         }));
         machine_code_shim_test.root_module.addImport("shim_host_abi", shim_host_abi_module);
@@ -7458,14 +5698,12 @@ fn addMainExe(
             }),
         });
         // Provide a no-op tracy stub (same as for host builtins above)
-        cross_builtins_obj.root_module.addImport("tracy", b.addModule(
-            b.fmt("tracy_stub_{s}", .{cross_target.name}),
+        cross_builtins_obj.root_module.addImport("tracy", b.createModule(
             .{ .root_source_file = b.path("src/builtins/tracy_stub.zig") },
         ));
         cross_builtins_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
         cross_builtins_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-        cross_builtins_obj.root_module.addImport("shim_io", b.addModule(
-            b.fmt("shim_io_{s}", .{cross_target.name}),
+        cross_builtins_obj.root_module.addImport("shim_io", b.createModule(
             .{ .root_source_file = b.path("src/shim_io.zig") },
         ));
         // Non-extern (RocOps-ABI) object is not linked into executables; only
@@ -7474,11 +5712,10 @@ fn addMainExe(
         configureBackend(cross_builtins_obj, cross_resolved_target);
 
         const cross_wasm32_compiler_rt_obj: ?*Step.Compile = if (cross_is_wasm) blk: {
-            const zig_lib_path = b.fmt("{f}", .{b.graph.zig_lib_directory});
             const compiler_rt_obj = b.addObject(.{
                 .name = "compiler_rt_wasm32",
                 .root_module = b.createModule(.{
-                    .root_source_file = .{ .cwd_relative = b.pathJoin(&.{ zig_lib_path, "compiler_rt.zig" }) },
+                    .root_source_file = std.Build.LazyPath.zig_lib.path(b, "compiler_rt.zig"),
                     .target = cross_resolved_target,
                     .optimize = optimize,
                     .strip = strip,
@@ -7535,14 +5772,12 @@ fn addMainExe(
                 .pic = true,
             }),
         });
-        cross_builtins_extern_obj.root_module.addImport("tracy", b.addModule(
-            b.fmt("tracy_stub_extern_{s}", .{cross_target.name}),
+        cross_builtins_extern_obj.root_module.addImport("tracy", b.createModule(
             .{ .root_source_file = b.path("src/builtins/tracy_stub.zig") },
         ));
         cross_builtins_extern_obj.root_module.addImport("vendor_parse_float", roc_modules.vendor_parse_float);
         cross_builtins_extern_obj.root_module.addImport("vendor_ryu", roc_modules.vendor_ryu);
-        cross_builtins_extern_obj.root_module.addImport("shim_io", b.addModule(
-            b.fmt("shim_io_extern_{s}", .{cross_target.name}),
+        cross_builtins_extern_obj.root_module.addImport("shim_io", b.createModule(
             .{ .root_source_file = b.path("src/shim_io.zig") },
         ));
         cross_builtins_extern_obj.bundle_compiler_rt = cross_bundle_compiler_rt;
@@ -7595,7 +5830,7 @@ fn addMainExe(
                 .root_module = b.createModule(.{
                     .root_source_file = default_platform_root_source,
                     .target = cross_resolved_target,
-                    .optimize = .ReleaseFast,
+                    .optimize = .fast,
                     .strip = false,
                     .omit_frame_pointer = false,
                     .pic = true,
@@ -7627,13 +5862,12 @@ fn addMainExe(
             // carrier explicit and default-platform-owned instead of hiding it
             // in the machine-code shim, which is also linked with user hosts.
             if (default_platform_os == .linux) {
-                const zig_lib_path = b.fmt("{f}", .{b.graph.zig_lib_directory});
                 const default_platform_compiler_rt_obj = b.addObject(.{
                     .name = b.fmt("roc_default_compiler_rt_{s}", .{cross_target.name}),
                     .root_module = b.createModule(.{
-                        .root_source_file = .{ .cwd_relative = b.pathJoin(&.{ zig_lib_path, "compiler_rt.zig" }) },
+                        .root_source_file = std.Build.LazyPath.zig_lib.path(b, "compiler_rt.zig"),
                         .target = cross_resolved_target,
-                        .optimize = .ReleaseFast,
+                        .optimize = .fast,
                         .strip = false,
                         .omit_frame_pointer = false,
                         .pic = true,
@@ -7655,7 +5889,7 @@ fn addMainExe(
                 .root_module = b.createModule(.{
                     .root_source_file = default_platform_root_source,
                     .target = cross_resolved_target,
-                    .optimize = .ReleaseFast,
+                    .optimize = .fast,
                     .strip = false,
                     .omit_frame_pointer = false,
                     .pic = true,
@@ -7730,7 +5964,7 @@ fn install_and_run(
         const install = b.addInstallArtifact(exe, .{});
 
         // Add a step to print success message after build completes
-        const success_step = PrintBuildSuccessStep.create(b);
+        const success_step = addBuildAction(b, &.{"print-success"});
         success_step.step.dependOn(&install.step);
         build_step.dependOn(&success_step.step);
 
@@ -7738,6 +5972,7 @@ fn install_and_run(
 
         const run = b.addRunArtifact(exe);
         run.step.dependOn(&install.step);
+        run.addPassthruArgs();
         if (run_args.len != 0) {
             run.addArgs(run_args);
         }
@@ -7813,63 +6048,6 @@ fn addLlvmLinkSupportToStep(
     return true;
 }
 
-const ParsedBuildArgs = struct {
-    run_args: []const []const u8,
-    test_filters: []const []const u8,
-};
-
-fn appendFilter(
-    list: *std.ArrayList([]const u8),
-    b: *std.Build,
-    value: []const u8,
-) void {
-    const trimmed = std.mem.trim(u8, value, " \t\n\r");
-    if (trimmed.len == 0) return;
-    list.append(b.allocator, b.dupe(trimmed)) catch @panic("OOM while parsing --test-filter value");
-}
-
-fn parseBuildArgs(b: *std.Build) ParsedBuildArgs {
-    const raw_args = b.args orelse return .{
-        .run_args = &.{},
-        .test_filters = &.{},
-    };
-
-    var run_args_list = std.ArrayList([]const u8).empty;
-    var filter_list = std.ArrayList([]const u8).empty;
-
-    var i: usize = 0;
-    while (i < raw_args.len) {
-        const arg = raw_args[i];
-
-        if (std.mem.eql(u8, arg, "--test-filter")) {
-            i += 1;
-            if (i >= raw_args.len) {
-                std.log.warn("ignoring --test-filter with no value", .{});
-                break;
-            }
-            const value = raw_args[i];
-            appendFilter(&filter_list, b, value);
-            i += 1;
-            continue;
-        }
-
-        if (std.mem.startsWith(u8, arg, "--test-filter=")) {
-            const value = arg["--test-filter=".len..];
-            appendFilter(&filter_list, b, value);
-            i += 1;
-            continue;
-        }
-
-        run_args_list.append(b.allocator, arg) catch @panic("OOM while recording build arguments");
-        i += 1;
-    }
-
-    const run_args = run_args_list.toOwnedSlice(b.allocator) catch @panic("OOM while finalizing build arguments");
-    const test_filters = filter_list.toOwnedSlice(b.allocator) catch @panic("OOM while finalizing test filters");
-
-    return .{ .run_args = run_args, .test_filters = test_filters };
-}
-
 fn add_tracy(
     b: *std.Build,
     module_build_options: *std.Build.Module,
@@ -7936,12 +6114,12 @@ fn llvmPaths(
 
     if (use_system_llvm) {
         // Detect system LLVM via llvm-config (required for AFL++)
-        const llvm_config_path = b.findProgram(&.{"llvm-config"}, &.{""}) catch {
+        const llvm_config_path = b.findProgram(.{ .names = &.{"llvm-config"} }) orelse {
             std.log.err("Failed to find system llvm-config binary. Is LLVM installed?", .{});
             std.process.exit(1);
         };
-        const llvm_lib_dir = std.mem.trimEnd(u8, b.run(&.{ llvm_config_path, "--libdir" }), "\n");
-        const llvm_include_dir = std.mem.trimEnd(u8, b.run(&.{ llvm_config_path, "--includedir" }), "\n");
+        const llvm_lib_dir = runConfigCommand(b, &.{ llvm_config_path, "--libdir" });
+        const llvm_include_dir = runConfigCommand(b, &.{ llvm_config_path, "--includedir" });
 
         return .{
             .include = llvm_include_dir,
@@ -7959,15 +6137,24 @@ fn llvmPaths(
     const triple = supported_deps_triples.get(raw_triple).?;
     const deps_name = b.fmt("roc_deps_{s}", .{triple});
     const deps = b.lazyDependency(deps_name, .{}) orelse return null;
-    const lazy_llvm_path = deps.path(".");
-    // TODO: Is this ok to do in the zig build system?
-    // We aren't in the make phase, but our static dep doesn't have a make phase anyway.
-    // Not sure how else to get a static path to the downloaded dependency.
-    const llvm_path = lazy_llvm_path.getPath(deps.builder);
+    const llvm_path = deps.builder.root.joinString(b.allocator, "") catch @panic("OOM");
     return .{
         .include = b.pathJoin(&.{ llvm_path, "include" }),
         .lib = b.pathJoin(&.{ llvm_path, "lib" }),
     };
+}
+
+fn runConfigCommand(b: *std.Build, argv: []const []const u8) []const u8 {
+    b.graph.poisonCache();
+    const result = std.process.run(b.allocator, b.graph.io, .{
+        .argv = argv,
+        .environ_map = &b.graph.environ_map,
+    }) catch |err| std.debug.panic("unable to run {s}: {s}", .{ argv[0], @errorName(err) });
+    defer b.allocator.free(result.stderr);
+    if (result.term != .exited or result.term.exited != 0) {
+        std.debug.panic("{s} failed: {s}", .{ argv[0], result.stderr });
+    }
+    return std.mem.trimEnd(u8, result.stdout, "\r\n");
 }
 
 const supported_deps_triples = std.StaticStringMap([]const u8).initComptime(.{
@@ -8069,6 +6256,7 @@ const llvm_libs = [_][]const u8{
     "LLVMXRay",
     "LLVMLibDriver",
     "LLVMDlltoolDriver",
+    "LLVMTelemetry",
     "LLVMTextAPIBinaryReader",
     "LLVMCoverage",
     "LLVMLineEditor",
@@ -8098,6 +6286,10 @@ const llvm_libs = [_][]const u8{
     "LLVMSystemZCodeGen",
     "LLVMSystemZDesc",
     "LLVMSystemZInfo",
+    "LLVMSPIRVCodeGen",
+    "LLVMSPIRVDesc",
+    "LLVMSPIRVInfo",
+    "LLVMSPIRVAnalysis",
     "LLVMSparcDisassembler",
     "LLVMSparcAsmParser",
     "LLVMSparcCodeGen",
@@ -8117,10 +6309,6 @@ const llvm_libs = [_][]const u8{
     "LLVMNVPTXCodeGen",
     "LLVMNVPTXDesc",
     "LLVMNVPTXInfo",
-    "LLVMSPIRVAnalysis",
-    "LLVMSPIRVCodeGen",
-    "LLVMSPIRVDesc",
-    "LLVMSPIRVInfo",
     "LLVMMSP430Disassembler",
     "LLVMMSP430AsmParser",
     "LLVMMSP430CodeGen",
@@ -8186,31 +6374,32 @@ const llvm_libs = [_][]const u8{
     "LLVMOrcTargetProcess",
     "LLVMOrcShared",
     "LLVMDWP",
+    "LLVMDWARFCFIChecker",
     "LLVMDebugInfoLogicalView",
-    "LLVMDebugInfoGSYM",
     "LLVMOption",
-    "LLVMObjectYAML",
     "LLVMObjCopy",
     "LLVMMCA",
     "LLVMMCDisassembler",
+    "LLVMDTLTO",
     "LLVMLTO",
-    "LLVMPasses",
-    "LLVMCGData",
-    "LLVMHipStdPar",
-    "LLVMCFGuard",
-    "LLVMCoroutines",
-    "LLVMSandboxIR",
-    "LLVMipo",
-    "LLVMVectorize",
-    "LLVMLinker",
-    "LLVMInstrumentation",
-    "LLVMFrontendOpenMP",
-    "LLVMFrontendAtomic",
-    "LLVMFrontendOffloading",
     "LLVMFrontendOpenACC",
-    "LLVMFrontendHLSL",
     "LLVMFrontendDriver",
     "LLVMExtensions",
+    "LLVMPlugins",
+    "LLVMPasses",
+    "LLVMHipStdPar",
+    "LLVMCoroutines",
+    "LLVMCFGuard",
+    "LLVMipo",
+    "LLVMInstrumentation",
+    "LLVMVectorize",
+    "LLVMSandboxIR",
+    "LLVMLinker",
+    "LLVMFrontendOpenMP",
+    "LLVMFrontendDirective",
+    "LLVMFrontendAtomic",
+    "LLVMFrontendOffloading",
+    "LLVMObjectYAML",
     "LLVMDWARFLinkerParallel",
     "LLVMDWARFLinkerClassic",
     "LLVMDWARFLinker",
@@ -8222,6 +6411,8 @@ const llvm_libs = [_][]const u8{
     "LLVMTarget",
     "LLVMObjCARCOpts",
     "LLVMCodeGenTypes",
+    "LLVMCGData",
+    "LLVMCAS",
     "LLVMIRPrinter",
     "LLVMInterfaceStub",
     "LLVMFileCheck",
@@ -8237,17 +6428,20 @@ const llvm_libs = [_][]const u8{
     "LLVMDebugInfoBTF",
     "LLVMDebugInfoPDB",
     "LLVMDebugInfoMSF",
+    "LLVMDebugInfoCodeView",
+    "LLVMDebugInfoGSYM",
     "LLVMDebugInfoDWARF",
-    "LLVMDebugInfoDWARFLowLevel",
     "LLVMObject",
     "LLVMTextAPI",
     "LLVMMCParser",
     "LLVMIRReader",
     "LLVMAsmParser",
     "LLVMMC",
-    "LLVMDebugInfoCodeView",
+    "LLVMDebugInfoDWARFLowLevel",
     "LLVMBitReader",
+    "LLVMFrontendHLSL",
     "LLVMFuzzerCLI",
+    "LLVMABI",
     "LLVMCore",
     "LLVMRemarks",
     "LLVMBitstreamReader",
@@ -8293,10 +6487,10 @@ fn getCompilerVersionGit(b: *std.Build) []const u8 {
 fn compilerVersionForMode(b: *std.Build, mode: std.builtin.OptimizeMode, compiler_version_git: []const u8) []const u8 {
     return b.fmt("{s}-{s}", .{
         switch (mode) {
-            .Debug => "debug",
-            .ReleaseSafe => "release-safe",
-            .ReleaseFast => "release-fast",
-            .ReleaseSmall => "release-small",
+            .debug => "debug",
+            .safe => "release-safe",
+            .fast => "release-fast",
+            .small => "release-small",
         },
         compiler_version_git,
     });
@@ -8315,9 +6509,13 @@ fn getCompilerArtifactHash(b: *std.Build, compiler_version: []const u8) [32]u8 {
     // Resolve against the build root rather than cwd so the hash works both for
     // standalone builds and when roc is consumed as a dependency (cwd is then the
     // consumer's directory, not roc's).
-    const builtin_source = b.build_root.handle.readFileAlloc(
-        b.graph.io,
+    const builtin_source_path = b.root.joinString(
+        b.allocator,
         "src/build/roc/Builtin.roc",
+    ) catch @panic("OOM");
+    const builtin_source = std.Io.Dir.cwd().readFileAlloc(
+        b.graph.io,
+        builtin_source_path,
         b.allocator,
         std.Io.Limit.limited(32 * 1024 * 1024),
     ) catch @panic("unable to read Builtin.roc while constructing compiler artifact hash");
@@ -8379,7 +6577,7 @@ fn generateGlibcStub(b: *std.Build, target: ResolvedTarget, target_name: []const
     const asm_file = write_stub.add("libc_stub.s", assembly_buf.items);
 
     // Compile the assembly into a proper shared library using Zig's build system
-    const libc_stub = glibc_stub_build.compileAssemblyStub(b, asm_file, target, .ReleaseSmall);
+    const libc_stub = glibc_stub_build.compileAssemblyStub(b, asm_file, target, .small);
 
     // Copy the generated files to all platforms that use glibc targets
     const copy_stubs = b.addUpdateSourceFiles();

@@ -255,9 +255,11 @@ fn spawnAndWait(
 
 fn appendZigCacheArgs(b: *std.Build, child_argv: *std.ArrayList([]const u8)) !void {
     try child_argv.append(b.allocator, "--cache-dir");
-    try child_argv.append(b.allocator, b.cache_root.path orelse ".");
-    try child_argv.append(b.allocator, "--global-cache-dir");
-    try child_argv.append(b.allocator, b.graph.global_cache_root.path orelse ".");
+    try child_argv.append(b.allocator, b.graph.environ_map.get("ZIG_LOCAL_CACHE_DIR") orelse ".zig-cache");
+    if (b.graph.environ_map.get("ZIG_GLOBAL_CACHE_DIR")) |global_cache_dir| {
+        try child_argv.append(b.allocator, "--global-cache-dir");
+        try child_argv.append(b.allocator, global_cache_dir);
+    }
 }
 
 fn seconds(ns: u64) f64 {

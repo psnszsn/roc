@@ -129,7 +129,7 @@ pub const NestedFn = struct {
 /// specialization. Equal callable/type requests with different evidence must
 /// remain distinct specializations.
 pub const EvidenceDigest = extern struct {
-    bytes: [32]u8 = [_]u8{0} ** 32,
+    bytes: [32]u8 = @as([32]u8, @splat(0)),
 };
 
 /// Function template plus source and monomorphic type identities.
@@ -265,7 +265,7 @@ pub fn fnEvidenceDigest(
     writeBytes(&hasher, "roc.monotype.fn_evidence.v2");
     writeU32(&hasher, @intCast(evidence.len));
     for (evidence) |entry| {
-        writeU8(&hasher, @intFromEnum(entry));
+        writeU8(&hasher, @backingInt(entry));
         switch (entry) {
             .target => |target| {
                 writeBytes(&hasher, &target.view.bytes);
@@ -275,7 +275,7 @@ pub fn fnEvidenceDigest(
                     writeBytes(&hasher, &instantiation.view.bytes);
                     writeBytes(&hasher, &instantiation.callable_key.bytes);
                 } else writeU8(&hasher, 0);
-                writeU8(&hasher, @intFromEnum(target.nested));
+                writeU8(&hasher, @backingInt(target.nested));
                 switch (target.nested) {
                     .resolved => |nested| {
                         writeU32(&hasher, nested.count);
@@ -290,7 +290,7 @@ pub fn fnEvidenceDigest(
     }
     writeU32(&hasher, @intCast(frames.len));
     for (frames) |frame| {
-        writeU8(&hasher, @intFromEnum(frame.scope_id));
+        writeU8(&hasher, @backingInt(frame.scope_id));
         switch (frame.scope_id) {
             .root => {},
             .generalized => |scope| writeU32(&hasher, scope),
@@ -365,32 +365,32 @@ fn writeMethodTarget(
     callable_key: names.CanonicalTypeKey,
 ) void {
     writeU32(hasher, target.module_idx);
-    writeU32(hasher, @intFromEnum(target.def_idx));
-    writeU8(hasher, @intFromEnum(target.kind));
+    writeU32(hasher, @backingInt(target.def_idx));
+    writeU8(hasher, @backingInt(target.kind));
     switch (target.kind) {
         .procedure => |procedure| {
             const proc_module = names.procedureValueModuleDigest(procedure.proc);
             writeBytes(hasher, &proc_module.bytes);
-            writeU32(hasher, @intFromEnum(procedure.proc.proc_base));
+            writeU32(hasher, @backingInt(procedure.proc.proc_base));
             const template_module = names.procTemplateModuleDigest(procedure.template);
             writeBytes(hasher, &template_module.bytes);
-            writeU32(hasher, @intFromEnum(procedure.template.proc_base));
-            writeU32(hasher, @intFromEnum(procedure.template.template));
+            writeU32(hasher, @backingInt(procedure.template.proc_base));
+            writeU32(hasher, @backingInt(procedure.template.template));
         },
         .local_proc => |local| {
-            writeU32(hasher, @intFromEnum(local.binder));
-            writeU32(hasher, @intFromEnum(local.expr));
+            writeU32(hasher, @backingInt(local.binder));
+            writeU32(hasher, @backingInt(local.expr));
         },
-        .structural => |kind| writeU8(hasher, @intFromEnum(kind)),
+        .structural => |kind| writeU8(hasher, @backingInt(kind)),
     }
     writeBytes(hasher, &callable_key.bytes);
 }
 
 fn writeStructuralDerivation(hasher: *std.crypto.hash.sha2.Sha256, derivation: static_dispatch.StructuralDerivation) void {
-    writeU8(hasher, @intFromEnum(derivation));
+    writeU8(hasher, @backingInt(derivation));
     switch (derivation) {
         .map, .map_effectful => |plan| {
-            writeU32(hasher, @intFromEnum(plan.tag));
+            writeU32(hasher, @backingInt(plan.tag));
             writeU32(hasher, plan.payload_index);
         },
         .equality, .hash, .parser, .encoder => {},
@@ -416,21 +416,21 @@ test "function evidence identity uses checked callable type keys" {
         .view = .{},
         .method = .{
             .module_idx = 3,
-            .def_idx = @enumFromInt(4),
+            .def_idx = @fromBackingInt(@intCast(4)),
             .kind = .{ .structural = .parser },
-            .callable_ty = @enumFromInt(5),
+            .callable_ty = @fromBackingInt(@intCast(5)),
         },
         .method_callable_key = method_key,
         .instantiation = .{
             .view = .{},
             .callable_key = instantiation_key,
-            .callable_ty = @enumFromInt(6),
+            .callable_ty = @fromBackingInt(@intCast(6)),
         },
         .nested = .from_callable,
     } }};
     var right = left;
-    right[0].target.method.callable_ty = @enumFromInt(7);
-    right[0].target.instantiation.?.callable_ty = @enumFromInt(8);
+    right[0].target.method.callable_ty = @fromBackingInt(@intCast(7));
+    right[0].target.instantiation.?.callable_ty = @fromBackingInt(@intCast(8));
 
     try std.testing.expect(fnEvidenceEql(&left, &frames, 0, &right, &frames, 0));
     try std.testing.expectEqual(fnEvidenceDigest(&left, &frames, 0), fnEvidenceDigest(&right, &frames, 0));
@@ -458,7 +458,7 @@ fn writeFnDef(hasher: *std.crypto.hash.sha2.Sha256, fn_def: FnDef) void {
         .nested => |nested| {
             writeBytes(hasher, "nested");
             writeProcTemplate(hasher, nested.owner);
-            writeU32(hasher, @intFromEnum(nested.site));
+            writeU32(hasher, @backingInt(nested.site));
             writeBytes(hasher, &nested.context_fn_key.bytes);
             if (nested.local_proc_context_digest) |digest| {
                 writeBytes(hasher, "local_proc_contexts");
@@ -482,27 +482,27 @@ fn writeFnDef(hasher: *std.crypto.hash.sha2.Sha256, fn_def: FnDef) void {
         .parser_runtime => |runtime| {
             writeBytes(hasher, "parser_runtime");
             writeProcTemplate(hasher, runtime.owner);
-            writeU32(hasher, @intFromEnum(runtime.expr));
+            writeU32(hasher, @backingInt(runtime.expr));
         },
         .encoder_for_runtime => |runtime| {
             writeBytes(hasher, "encoder_for_runtime");
             writeProcTemplate(hasher, runtime.owner);
-            writeU32(hasher, @intFromEnum(runtime.expr));
+            writeU32(hasher, @backingInt(runtime.expr));
         },
     }
 }
 
 fn writeHostedFn(hasher: *std.crypto.hash.sha2.Sha256, hosted: HostedFn) void {
     writeProcTemplate(hasher, hosted.template);
-    writeU32(hasher, @intFromEnum(hosted.external_symbol_name));
+    writeU32(hasher, @backingInt(hosted.external_symbol_name));
     writeU32(hasher, hosted.dispatch_index);
 }
 
 fn writeProcTemplate(hasher: *std.crypto.hash.sha2.Sha256, template: names.ProcTemplate) void {
     const module_digest = names.procTemplateModuleDigest(template);
     hasher.update(&module_digest.bytes);
-    writeU32(hasher, @intFromEnum(template.proc_base));
-    writeU32(hasher, @intFromEnum(template.template));
+    writeU32(hasher, @backingInt(template.proc_base));
+    writeU32(hasher, @backingInt(template.template));
 }
 
 fn writeBytes(hasher: *std.crypto.hash.sha2.Sha256, bytes: []const u8) void {
@@ -1164,13 +1164,13 @@ pub const ProgramView = struct {
     next_symbol: u32,
 
     pub fn fnSource(self: ProgramView, id: FnId) FnTemplate {
-        const raw = @intFromEnum(id);
+        const raw = @backingInt(id);
         if (raw >= self.fns.len) Common.invariant("Monotype function id referenced a missing specialization");
         return self.fns[raw].source;
     }
 
     pub fn fnSignatureRelation(self: ProgramView, id: FnId) SignatureRelation {
-        const raw = @intFromEnum(id);
+        const raw = @backingInt(id);
         if (raw >= self.fns.len) Common.invariant("Monotype function id referenced a missing specialization");
         return self.fns[raw].signature_relation;
     }
@@ -1245,7 +1245,7 @@ pub const ProgramView = struct {
 
     pub fn verifyCallTargets(self: ProgramView) ?CallTargetVerifyError {
         for (self.imported_fns) |imported| {
-            if (imported.shard == .local and @intFromEnum(imported.fn_id) >= self.fns.len) {
+            if (imported.shard == .local and @backingInt(imported.fn_id) >= self.fns.len) {
                 return .imported_local_fn_out_of_bounds;
             }
         }
@@ -1265,16 +1265,16 @@ pub const ProgramView = struct {
             switch (call.callee) {
                 .func => |slot| switch (slot) {
                     .local => |fn_id| {
-                        const raw_fn = @intFromEnum(fn_id);
+                        const raw_fn = @backingInt(fn_id);
                         if (raw_fn >= self.fns.len) return .local_fn_out_of_bounds;
-                        const raw_ty = @intFromEnum(self.fns[raw_fn].source.mono_fn_ty);
+                        const raw_ty = @backingInt(self.fns[raw_fn].source.mono_fn_ty);
                         if (raw_ty >= self.types.types.len) return .local_fn_type_out_of_bounds;
                         const fn_ty = self.types.get(self.fns[raw_fn].source.mono_fn_ty);
                         if (std.meta.activeTag(fn_ty) != .func) return .local_fn_type_not_function;
                         if (fn_ty.func.args.len != call.args.len) return .local_call_arity_mismatch;
                     },
                     .imported => |imported| {
-                        if (@intFromEnum(imported) >= self.imported_fns.len) return .imported_fn_out_of_bounds;
+                        if (@backingInt(imported) >= self.imported_fns.len) return .imported_fn_out_of_bounds;
                     },
                 },
                 .lifted => return .lifted_fn_before_lifting,
@@ -1284,13 +1284,13 @@ pub const ProgramView = struct {
     }
 
     fn typeRefInBounds(self: ProgramView, ty: Type.TypeId) bool {
-        return @intFromEnum(ty) < self.types.types.len;
+        return @backingInt(ty) < self.types.types.len;
     }
 
     fn verifyFnDefinition(self: ProgramView, fn_id: FnId, args: Span(TypedLocal)) ?CallTargetVerifyError {
-        const raw_fn = @intFromEnum(fn_id);
+        const raw_fn = @backingInt(fn_id);
         if (raw_fn >= self.fns.len) return .local_fn_out_of_bounds;
-        const raw_ty = @intFromEnum(self.fns[raw_fn].source.mono_fn_ty);
+        const raw_ty = @backingInt(self.fns[raw_fn].source.mono_fn_ty);
         if (raw_ty >= self.types.types.len) return .local_fn_type_out_of_bounds;
         const fn_ty = self.types.get(self.fns[raw_fn].source.mono_fn_ty);
         if (std.meta.activeTag(fn_ty) != .func) return .local_fn_type_not_function;
@@ -1456,7 +1456,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addFn(self: *ProgramBuilder, source: FnTemplate) std.mem.Allocator.Error!FnId {
-        const id: FnId = @enumFromInt(@as(u32, @intCast(self.fns.len())));
+        const id: FnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.fns.len()))));
         try self.fns.append(self.allocator, .{ .source = source });
         return id;
     }
@@ -1486,15 +1486,15 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getFn(self: *const ProgramBuilder, id: FnId) Fn {
-        return self.fns.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.fns.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn setFn(self: *ProgramBuilder, id: FnId, fn_: Fn) void {
-        self.fns.set(@intFromEnum(id), fn_);
+        self.fns.set(@backingInt(id), fn_);
     }
 
     pub fn setFnSource(self: *ProgramBuilder, id: FnId, source: FnTemplate) void {
-        self.fns.getPtrImmediate(@intFromEnum(id)).source = source;
+        self.fns.getPtrImmediate(@backingInt(id)).source = source;
     }
 
     pub fn fnsView(self: *const ProgramBuilder) []const Fn {
@@ -1502,7 +1502,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addImportedFn(self: *ProgramBuilder, imported: ImportedFn) std.mem.Allocator.Error!ImportedFnId {
-        const id: ImportedFnId = @enumFromInt(@as(u32, @intCast(self.imported_fns.len())));
+        const id: ImportedFnId = @fromBackingInt(@intCast(@as(u32, @intCast(self.imported_fns.len()))));
         try self.imported_fns.append(self.allocator, imported);
         return id;
     }
@@ -1512,7 +1512,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addDef(self: *ProgramBuilder, def: Def) std.mem.Allocator.Error!DefId {
-        const id: DefId = @enumFromInt(@as(u32, @intCast(self.defs.len())));
+        const id: DefId = @fromBackingInt(@intCast(@as(u32, @intCast(self.defs.len()))));
         try self.defs.append(self.allocator, def);
         return id;
     }
@@ -1522,15 +1522,15 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getDef(self: *const ProgramBuilder, id: DefId) Def {
-        return self.defs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.defs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn setDef(self: *ProgramBuilder, id: DefId, def: Def) void {
-        self.defs.set(@intFromEnum(id), def);
+        self.defs.set(@backingInt(id), def);
     }
 
     pub fn setDefFn(self: *ProgramBuilder, id: DefId, fn_id: FnId) void {
-        self.defs.getPtrImmediate(@intFromEnum(id)).fn_id = fn_id;
+        self.defs.getPtrImmediate(@backingInt(id)).fn_id = fn_id;
     }
 
     pub fn defsView(self: *const ProgramBuilder) []const Def {
@@ -1538,7 +1538,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addNestedDef(self: *ProgramBuilder, nested_def: NestedDef) std.mem.Allocator.Error!NestedDefId {
-        const id: NestedDefId = @enumFromInt(@as(u32, @intCast(self.nested_defs.len())));
+        const id: NestedDefId = @fromBackingInt(@intCast(@as(u32, @intCast(self.nested_defs.len()))));
         try self.nested_defs.append(self.allocator, nested_def);
         return id;
     }
@@ -1548,7 +1548,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getNestedDef(self: *const ProgramBuilder, id: NestedDefId) NestedDef {
-        return self.nested_defs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.nested_defs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn nestedDefsView(self: *const ProgramBuilder) []const NestedDef {
@@ -1556,17 +1556,17 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addSpec(self: *ProgramBuilder, record: SpecRecord) std.mem.Allocator.Error!SpecId {
-        const id: SpecId = @enumFromInt(@as(u32, @intCast(self.specs.len())));
+        const id: SpecId = @fromBackingInt(@intCast(@as(u32, @intCast(self.specs.len()))));
         try self.specs.append(self.allocator, record);
         return id;
     }
 
     pub fn getSpec(self: *const ProgramBuilder, id: SpecId) SpecRecord {
-        return self.specs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.specs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn setSpecStatus(self: *ProgramBuilder, id: SpecId, status: SpecStatus) void {
-        self.specs.getPtrImmediate(@intFromEnum(id)).status = status;
+        self.specs.getPtrImmediate(@backingInt(id)).status = status;
     }
 
     pub fn specsView(self: *const ProgramBuilder) []const SpecRecord {
@@ -1630,7 +1630,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn addExpr(self: *ProgramBuilder, expr: Expr) std.mem.Allocator.Error!ExprId {
-        const id: ExprId = @enumFromInt(@as(u32, @intCast(self.exprs.len())));
+        const id: ExprId = @fromBackingInt(@intCast(@as(u32, @intCast(self.exprs.len()))));
         try self.exprs.append(self.allocator, expr);
         try self.expr_locs.append(self.allocator, self.current_loc);
         try self.expr_regions.append(self.allocator, self.current_region);
@@ -1646,7 +1646,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getExpr(self: *const ProgramBuilder, id: ExprId) Expr {
-        return self.exprs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.exprs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getExprAt(self: *const ProgramBuilder, index: usize) Expr {
@@ -1654,7 +1654,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn setExpr(self: *ProgramBuilder, id: ExprId, expr: Expr) void {
-        self.exprs.set(@intFromEnum(id), expr);
+        self.exprs.set(@backingInt(id), expr);
     }
 
     pub fn patCount(self: *const ProgramBuilder) usize {
@@ -1666,7 +1666,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getPat(self: *const ProgramBuilder, id: PatId) Pat {
-        return self.pats.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.pats.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getPatAt(self: *const ProgramBuilder, index: usize) Pat {
@@ -1682,7 +1682,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getStmt(self: *const ProgramBuilder, id: StmtId) Stmt {
-        return self.stmts.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmts.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn getStmtAt(self: *const ProgramBuilder, index: usize) Stmt {
@@ -1709,32 +1709,32 @@ pub const ProgramBuilder = struct {
 
     /// Source location of an expression.
     pub fn exprLoc(self: *const ProgramBuilder, id: ExprId) base.SourceLoc {
-        return self.expr_locs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.expr_locs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Checked source region of an expression.
     pub fn exprRegion(self: *const ProgramBuilder, id: ExprId) base.Region {
-        return self.expr_regions.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.expr_regions.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Source location of a statement.
     pub fn stmtLoc(self: *const ProgramBuilder, id: StmtId) base.SourceLoc {
-        return self.stmt_locs.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmt_locs.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     /// Checked source region of a statement.
     pub fn stmtRegion(self: *const ProgramBuilder, id: StmtId) base.Region {
-        return self.stmt_regions.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.stmt_regions.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn addPat(self: *ProgramBuilder, pat: Pat) std.mem.Allocator.Error!PatId {
-        const id: PatId = @enumFromInt(@as(u32, @intCast(self.pats.len())));
+        const id: PatId = @fromBackingInt(@intCast(@as(u32, @intCast(self.pats.len()))));
         try self.pats.append(self.allocator, pat);
         return id;
     }
 
     pub fn addStmt(self: *ProgramBuilder, stmt: Stmt) std.mem.Allocator.Error!StmtId {
-        const id: StmtId = @enumFromInt(@as(u32, @intCast(self.stmts.len())));
+        const id: StmtId = @fromBackingInt(@intCast(@as(u32, @intCast(self.stmts.len()))));
         try self.stmts.append(self.allocator, stmt);
         try self.stmt_locs.append(self.allocator, self.current_loc);
         try self.stmt_regions.append(self.allocator, self.current_region);
@@ -1750,7 +1750,7 @@ pub const ProgramBuilder = struct {
     ) std.mem.Allocator.Error!ComptimeSiteId {
         const owned_branch_regions = try self.allocator.dupe(base.Region, branch_regions);
         errdefer self.allocator.free(owned_branch_regions);
-        const id: ComptimeSiteId = @enumFromInt(@as(u32, @intCast(self.comptime_sites.len())));
+        const id: ComptimeSiteId = @fromBackingInt(@intCast(@as(u32, @intCast(self.comptime_sites.len()))));
         try self.comptime_sites.append(self.allocator, .{
             .kind = kind,
             .region = region,
@@ -1761,7 +1761,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn comptimeSite(self: *const ProgramBuilder, id: ComptimeSiteId) ComptimeSite {
-        return self.comptime_sites.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.comptime_sites.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn addStringLiteral(self: *ProgramBuilder, text: []const u8) std.mem.Allocator.Error!StringLiteralId {
@@ -1775,7 +1775,7 @@ pub const ProgramBuilder = struct {
             Common.invariant("string literal view exceeded backing bytes");
         }
 
-        const id: StringLiteralId = @enumFromInt(@as(u32, @intCast(self.string_literals.len())));
+        const id: StringLiteralId = @fromBackingInt(@intCast(@as(u32, @intCast(self.string_literals.len()))));
         const owned = try self.allocator.dupe(u8, backing);
         errdefer self.allocator.free(owned);
         try self.string_literals.append(self.allocator, .{
@@ -1787,7 +1787,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn stringLiteral(self: *const ProgramBuilder, id: StringLiteralId) StringLiteral {
-        return self.string_literals.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.string_literals.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn stringLiteralText(self: *const ProgramBuilder, id: StringLiteralId) []const u8 {
@@ -1804,7 +1804,7 @@ pub const ProgramBuilder = struct {
         ty: Type.TypeId,
         binder: ?checked.PatternBinderId,
     ) std.mem.Allocator.Error!LocalId {
-        const id: LocalId = @enumFromInt(@as(u32, @intCast(self.locals.len())));
+        const id: LocalId = @fromBackingInt(@intCast(@as(u32, @intCast(self.locals.len()))));
         const checked_capture_id = if (binder) |b| checked.CaptureId.fromBinder(b) else null;
         try self.locals.append(self.allocator, .{
             .id = id,
@@ -1825,7 +1825,7 @@ pub const ProgramBuilder = struct {
     /// generated range of `CaptureId`.
     pub fn setLocalCaptureId(self: *ProgramBuilder, id: LocalId, capture_id: u32) void {
         const checked_id = checked.CaptureId.generatedCheck(capture_id);
-        const local = self.locals.getPtrImmediate(@intFromEnum(id));
+        const local = self.locals.getPtrImmediate(@backingInt(id));
         local.capture_id = checked_id;
         local.checked_capture_id = checked_id;
     }
@@ -1833,18 +1833,18 @@ pub const ProgramBuilder = struct {
     /// Record the source-level name of a local (dupes; empty means none).
     pub fn setLocalName(self: *ProgramBuilder, id: LocalId, name: []const u8) std.mem.Allocator.Error!void {
         if (name.len == 0) return;
-        const slot = self.local_names.getPtrImmediate(@intFromEnum(id));
+        const slot = self.local_names.getPtrImmediate(@backingInt(id));
         if (slot.len > 0) self.allocator.free(slot.*);
         slot.* = try self.allocator.dupe(u8, name);
     }
 
     /// Source-level name of a local; empty for compiler-generated temporaries.
     pub fn localName(self: *const ProgramBuilder, id: LocalId) []const u8 {
-        return self.local_names.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.local_names.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn setLocalType(self: *ProgramBuilder, id: LocalId, ty: Type.TypeId) void {
-        self.locals.getPtrImmediate(@intFromEnum(id)).ty = ty;
+        self.locals.getPtrImmediate(@backingInt(id)).ty = ty;
         for (self.typed_locals.unsafeRawItemsMutForStore()) |*typed_local| {
             if (typed_local.local == id) {
                 typed_local.ty = ty;
@@ -1861,7 +1861,7 @@ pub const ProgramBuilder = struct {
     }
 
     pub fn getLocal(self: *const ProgramBuilder, id: LocalId) Local {
-        return self.locals.unsafeRawItemsForView()[@intFromEnum(id)];
+        return self.locals.unsafeRawItemsForView()[@backingInt(id)];
     }
 
     pub fn typedLocalCount(self: *const ProgramBuilder) usize {
@@ -1918,7 +1918,7 @@ pub const ProgramBuilder = struct {
         self: *ProgramBuilder,
         value: StaticDataValue,
     ) Common.StaticDataId {
-        const id: Common.StaticDataId = @enumFromInt(@as(u32, @intCast(self.static_data_values.len())));
+        const id: Common.StaticDataId = @fromBackingInt(@intCast(@as(u32, @intCast(self.static_data_values.len()))));
         self.static_data_values.appendAssumeCapacity(value);
         return id;
     }
@@ -2011,7 +2011,7 @@ pub const ProgramBuilder = struct {
         const start: u32 = @intCast(self.typed_locals.len());
         try self.typed_locals.ensureUnusedCapacity(self.allocator, values.len);
         for (values) |value| {
-            const local_ty = self.locals.unsafeRawItemsForView()[@intFromEnum(value.local)].ty;
+            const local_ty = self.locals.unsafeRawItemsForView()[@backingInt(value.local)].ty;
             self.typed_locals.appendAssumeCapacity(.{ .local = value.local, .ty = local_ty });
         }
         return .{ .start = start, .len = @intCast(values.len) };
@@ -2093,7 +2093,7 @@ pub const ProgramBuilder = struct {
     /// The CaptureId of a local. Every local that participates in a capture set
     /// carries one; asserts it is present.
     pub fn captureIdOfLocal(self: *const ProgramBuilder, id: LocalId) checked.CaptureId {
-        return self.locals.unsafeRawItemsForView()[@intFromEnum(id)].capture_id orelse
+        return self.locals.unsafeRawItemsForView()[@backingInt(id)].capture_id orelse
             Common.invariant("Monotype capture local had no CaptureId");
     }
 
@@ -2151,21 +2151,21 @@ test "final Monotype capture identities preserve direct aliases" {
     defer program.deinit();
 
     const unit_ty = try program.types.add(.zst);
-    const binder: checked.PatternBinderId = @enumFromInt(7);
-    const first = try program.addLocalWithBinder(@enumFromInt(1), unit_ty, binder);
-    const second = try program.addLocalWithBinder(@enumFromInt(2), unit_ty, binder);
-    const uncaptured = try program.addLocal(@enumFromInt(3), unit_ty);
-    const generated = try program.addLocal(@enumFromInt(4), unit_ty);
+    const binder: checked.PatternBinderId = @fromBackingInt(@intCast(7));
+    const first = try program.addLocalWithBinder(@fromBackingInt(@intCast(1)), unit_ty, binder);
+    const second = try program.addLocalWithBinder(@fromBackingInt(@intCast(2)), unit_ty, binder);
+    const uncaptured = try program.addLocal(@fromBackingInt(@intCast(3)), unit_ty);
+    const generated = try program.addLocal(@fromBackingInt(@intCast(4)), unit_ty);
     program.setLocalCaptureId(generated, 0);
 
     try program.sealRemainingCaptureIdentities();
 
-    try std.testing.expectEqual(checked.CaptureId.generatedLift(@intFromEnum(first)), program.getLocal(first).capture_id.?);
+    try std.testing.expectEqual(checked.CaptureId.generatedLift(@backingInt(first)), program.getLocal(first).capture_id.?);
     try std.testing.expectEqual(program.getLocal(first).capture_id, program.getLocal(second).capture_id);
     try std.testing.expectEqual(checked.CaptureId.fromBinder(binder), program.getLocal(first).checked_capture_id.?);
     try std.testing.expectEqual(checked.CaptureId.fromBinder(binder), program.getLocal(second).checked_capture_id.?);
     try std.testing.expectEqual(@as(?checked.CaptureId, null), program.getLocal(uncaptured).capture_id);
-    try std.testing.expectEqual(checked.CaptureId.generatedLift(@intFromEnum(generated)), program.getLocal(generated).capture_id.?);
+    try std.testing.expectEqual(checked.CaptureId.generatedLift(@backingInt(generated)), program.getLocal(generated).capture_id.?);
     try std.testing.expectEqual(checked.CaptureId.generatedCheck(0), program.getLocal(generated).checked_capture_id.?);
 }
 
@@ -2191,7 +2191,7 @@ test "monotype program view exposes read-only side arrays" {
         .fn_id = fn_id,
         .status = .reserved,
     });
-    const local = try program.addLocal(@enumFromInt(7), unit_ty);
+    const local = try program.addLocal(@fromBackingInt(@intCast(7)), unit_ty);
     _ = try program.addExpr(.{ .ty = unit_ty, .data = .unit });
     _ = try program.addTypedLocalSpan(&.{.{ .local = local, .ty = unit_ty }});
     program.next_symbol = 42;
@@ -2228,7 +2228,7 @@ test "completed monotype type id verifier requires frozen in-bounds type ids" {
     try std.testing.expectEqual(@as(?CompletedTypeIdVerifyError, null), program.view().verifyCompletedTypeIds());
 
     var out_of_bounds_expr = program.getExpr(expr_id);
-    out_of_bounds_expr.ty = @enumFromInt(99);
+    out_of_bounds_expr.ty = @fromBackingInt(@intCast(99));
     program.setExpr(expr_id, out_of_bounds_expr);
     try std.testing.expectEqual(
         CompletedTypeIdVerifyError.expr_type_out_of_bounds,
@@ -2260,7 +2260,7 @@ test "monotype call target verifier checks local and imported slots" {
 
         const unit_ty = try program.types.add(.zst);
         const imported = try program.addImportedFn(.{
-            .shard = @enumFromInt(1),
+            .shard = @fromBackingInt(@intCast(1)),
             .fn_id = undefined, // external-shard function id is not inspected by this verifier test
         });
         _ = try program.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
@@ -2276,7 +2276,7 @@ test "monotype call target verifier checks local and imported slots" {
 
         const unit_ty = try program.types.add(.zst);
         _ = try program.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
-            .callee = localProcCallee(@enumFromInt(99)),
+            .callee = localProcCallee(@fromBackingInt(@intCast(99))),
             .args = Span(ExprId).empty(),
         } } });
         try std.testing.expectEqual(CallTargetVerifyError.local_fn_out_of_bounds, program.verifyCallTargets().?);
@@ -2338,7 +2338,7 @@ test "monotype call target verifier checks local and imported slots" {
 
         const unit_ty = try program.types.add(.zst);
         _ = try program.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
-            .callee = importedProcCallee(@enumFromInt(99)),
+            .callee = importedProcCallee(@fromBackingInt(@intCast(99))),
             .args = Span(ExprId).empty(),
         } } });
         try std.testing.expectEqual(CallTargetVerifyError.imported_fn_out_of_bounds, program.verifyCallTargets().?);

@@ -59,6 +59,11 @@ const host_os: HostOs = switch (builtin.os.tag) {
     .ps4,
     .ps5,
     .psp,
+    .wiiu,
+    .@"switch",
+    .psx,
+    .tios,
+    .ashetos,
     .vita,
     .emscripten,
     .wasi,
@@ -471,7 +476,7 @@ fn emitMergedBitcodeModulesToObjectFile(
 
     for (bitcodes[1..], 1..) |bitcode, index| {
         var name_buf: [64]u8 = undefined;
-        const name = std.fmt.bufPrintZ(&name_buf, "roc_bitcode_{d}", .{index}) catch return Error.OutOfMemory;
+        const name = std.mem.printSentinel(&name_buf, "roc_bitcode_{d}", .{index}, 0) catch return Error.OutOfMemory;
         const next_module = try parseBitcodeModule(context, bitcode, name.ptr);
         if (module.link(next_module).toBool()) {
             return Error.ModuleLinkFailed;
@@ -725,7 +730,7 @@ pub fn compileBitcodeModulesToSharedLibrary(allocator: Allocator, io: std.Io, bi
 }
 
 fn recordSharedLibraryLinkForTest(allocator: Allocator, io: std.Io) void {
-    const path_key = allocator.dupeZ(u8, "ROC_TEST_LLVM_SHARED_LINK_COUNT_FILE") catch return;
+    const path_key = allocator.dupeSentinel(u8, "ROC_TEST_LLVM_SHARED_LINK_COUNT_FILE", 0) catch return;
     defer allocator.free(path_key);
 
     const path_z = std.c.getenv(path_key) orelse return;

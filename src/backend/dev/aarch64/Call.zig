@@ -128,22 +128,22 @@ pub const DEFAULT_FREE_FLOAT_REGS = [_]FloatReg{
 /// Bitmask of caller-saved general registers (for fast allocation)
 /// X0-X15, IP0 (X16), IP1 (X17) - excludes X18 (platform register)
 pub const CALLER_SAVED_GENERAL_MASK: u32 =
-    (1 << @intFromEnum(GeneralReg.X0)) |
-    (1 << @intFromEnum(GeneralReg.X1)) |
-    (1 << @intFromEnum(GeneralReg.X2)) |
-    (1 << @intFromEnum(GeneralReg.X3)) |
-    (1 << @intFromEnum(GeneralReg.X4)) |
-    (1 << @intFromEnum(GeneralReg.X5)) |
-    (1 << @intFromEnum(GeneralReg.X6)) |
-    (1 << @intFromEnum(GeneralReg.X7)) |
-    (1 << @intFromEnum(GeneralReg.XR)) |
-    (1 << @intFromEnum(GeneralReg.X9)) |
-    (1 << @intFromEnum(GeneralReg.X10)) |
-    (1 << @intFromEnum(GeneralReg.X11)) |
-    (1 << @intFromEnum(GeneralReg.X12)) |
-    (1 << @intFromEnum(GeneralReg.X13)) |
-    (1 << @intFromEnum(GeneralReg.X14)) |
-    (1 << @intFromEnum(GeneralReg.X15));
+    (1 << @backingInt(GeneralReg.X0)) |
+    (1 << @backingInt(GeneralReg.X1)) |
+    (1 << @backingInt(GeneralReg.X2)) |
+    (1 << @backingInt(GeneralReg.X3)) |
+    (1 << @backingInt(GeneralReg.X4)) |
+    (1 << @backingInt(GeneralReg.X5)) |
+    (1 << @backingInt(GeneralReg.X6)) |
+    (1 << @backingInt(GeneralReg.X7)) |
+    (1 << @backingInt(GeneralReg.XR)) |
+    (1 << @backingInt(GeneralReg.X9)) |
+    (1 << @backingInt(GeneralReg.X10)) |
+    (1 << @backingInt(GeneralReg.X11)) |
+    (1 << @backingInt(GeneralReg.X12)) |
+    (1 << @backingInt(GeneralReg.X13)) |
+    (1 << @backingInt(GeneralReg.X14)) |
+    (1 << @backingInt(GeneralReg.X15));
 // NOTE: IP0 (X16) and IP1 (X17) are NOT included here because they are used
 // as scratch registers by ldrRegMemSoff/strRegMemSoff for large offsets.
 

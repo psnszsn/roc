@@ -129,7 +129,7 @@ pub const CFStmtId = enum(u32) {
 pub const InlineScopeId = enum(u32) {
     _,
 
-    pub const none: InlineScopeId = @enumFromInt(std.math.maxInt(u32));
+    pub const none: InlineScopeId = @fromBackingInt(@intCast(std.math.maxInt(u32)));
 };
 
 /// A virtual source frame retained independently of physical procedures.
@@ -1156,7 +1156,7 @@ pub const LirProcSpec = struct {
 pub const LirPatternId = enum(u32) {
     _,
 
-    pub const none: LirPatternId = @enumFromInt(std.math.maxInt(u32));
+    pub const none: LirPatternId = @fromBackingInt(@intCast(std.math.maxInt(u32)));
 
     pub fn isNone(self: LirPatternId) bool {
         return self == none;
@@ -1231,11 +1231,11 @@ test "RcHelper distinguishes concrete layout helpers from boxy descriptor helper
     try std.testing.expectEqual(layout.RcOp.incref, concrete_key.op);
     try std.testing.expectEqual(layout.Idx.str, concrete_key.layout_idx);
 
-    const boxy = RcHelper{ .boxy = .{ .static = @enumFromInt(7) } };
+    const boxy = RcHelper{ .boxy = .{ .static = @fromBackingInt(@intCast(7)) } };
     try std.testing.expect(boxy.concreteOrNull() == null);
     switch (boxy) {
         .boxy => |desc| switch (desc) {
-            .static => |id| try std.testing.expectEqual(@as(u32, 7), @intFromEnum(id)),
+            .static => |id| try std.testing.expectEqual(@as(u32, 7), @backingInt(id)),
             .local, .runtime, .dict_method_arg, .dict_method_hidden => return error.TestExpectedEqual,
         },
         .concrete => return error.TestExpectedEqual,

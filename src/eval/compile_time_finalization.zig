@@ -382,7 +382,7 @@ const RootCompletionState = struct {
         errdefer allocator.free(request_root_ids);
         for (module.root_requests.compile_time_requests, 0..) |request, i| {
             const root_id = compileTimeRootForRequest(module, request);
-            const raw = @intFromEnum(root_id);
+            const raw = @backingInt(root_id);
             if (requested_roots[raw]) {
                 finalizationInvariant("compile-time root was requested more than once");
             }
@@ -423,11 +423,11 @@ const RootCompletionState = struct {
     }
 
     fn isDone(self: *const RootCompletionState, root_id: checked.ComptimeRootId) bool {
-        return self.statuses[@intFromEnum(root_id)] == .done;
+        return self.statuses[@backingInt(root_id)] == .done;
     }
 
     fn markDone(self: *RootCompletionState, root_id: checked.ComptimeRootId) void {
-        const raw = @intFromEnum(root_id);
+        const raw = @backingInt(root_id);
         if (self.statuses[raw] != .done and
             self.module.compile_time_roots.roots[raw].kind == .field_default)
         {
@@ -451,7 +451,7 @@ const RootCompletionState = struct {
         // Every non-default root depends on ALL field defaults (see
         // `pending_field_defaults`).
         if (self.pending_field_defaults != 0 and
-            self.module.compile_time_roots.roots[@intFromEnum(request_root_id)].kind != .field_default)
+            self.module.compile_time_roots.roots[@backingInt(request_root_id)].kind != .field_default)
         {
             return false;
         }
@@ -475,7 +475,7 @@ const RootCompletionState = struct {
         template_ref: canonical.ProcedureTemplateRef,
     ) bool {
         if (!artifactMatches(template_ref.artifact, self.module.key)) return true;
-        const index = @intFromEnum(template_ref.template);
+        const index = @backingInt(template_ref.template);
         if (index >= self.visited_templates.len) {
             finalizationInvariant("compile-time dependency referenced an unknown local procedure template");
         }
@@ -496,7 +496,7 @@ const RootCompletionState = struct {
             finalizationInvariant("compile-time dependency template-ref span was outside the checked table");
         }
         for (self.module.resolved_value_refs.template_refs[start..end]) |ref_id| {
-            const raw = @intFromEnum(ref_id);
+            const raw = @backingInt(ref_id);
             if (raw >= self.module.resolved_value_refs.records.len) {
                 finalizationInvariant("compile-time dependency ref id was outside the checked table");
             }
@@ -571,7 +571,7 @@ const RootCompletionState = struct {
         };
         if (!is_strict) return true;
 
-        return !self.requested_roots[@intFromEnum(dependency_root_id)] or self.isDone(dependency_root_id);
+        return !self.requested_roots[@backingInt(dependency_root_id)] or self.isDone(dependency_root_id);
     }
 
     fn rootForConstRef(
@@ -643,7 +643,7 @@ const RootCompletionState = struct {
         required: checked.RequiredAppProcedureRef,
     ) bool {
         if (!artifactMatches(required.artifact, self.module.key)) return true;
-        const binding = self.module.platform_required_bindings.lookupByBindingId(@intFromEnum(required.procedure_binding)) orelse
+        const binding = self.module.platform_required_bindings.lookupByBindingId(@backingInt(required.procedure_binding)) orelse
             finalizationInvariant("platform-required procedure dependency referenced a missing binding");
         return switch (binding.value_use) {
             .procedure_value => |procedure_use| self.procedureUseDependenciesComplete(procedure_use.procedure),
@@ -980,10 +980,10 @@ const ThreadSafeAllocator = struct {
 
 fn boxyNativeFnTable() BoxyNativeFnTable {
     var table: BoxyNativeFnTable = undefined;
-    inline for (@typeInfo(BoxyBuiltinFn).@"enum".fields) |field| {
-        const boxy_fn: BoxyBuiltinFn = @enumFromInt(field.value);
+    inline for (@typeInfo(BoxyBuiltinFn).@"enum".field_values) |field_value| {
+        const boxy_fn: BoxyBuiltinFn = @fromBackingInt(@intCast(field_value));
         const name = comptime boxy_fn.symbolName();
-        table[field.value] = @intFromPtr(&@field(boxy_abi, name));
+        table[field_value] = @intFromPtr(&@field(boxy_abi, name));
     }
     return table;
 }
@@ -1007,7 +1007,7 @@ const DevRootJob = struct {
     ret_buf: []align(collections.max_roc_alignment.toByteUnits()) u8,
     host: CompileTimeHost,
     result: DevRootResult = .pending,
-    progress: std.atomic.Value(u8) = std.atomic.Value(u8).init(@intFromEnum(DevRootProgressState.pending)),
+    progress: std.atomic.Value(u8) = std.atomic.Value(u8).init(@backingInt(DevRootProgressState.pending)),
     start_ms: std.atomic.Value(ProgressMillis) = std.atomic.Value(ProgressMillis).init(0),
     last_progress_ms: std.atomic.Value(ProgressMillis) = std.atomic.Value(ProgressMillis).init(0),
     label: DevRootLabel,
@@ -1111,7 +1111,7 @@ const DevProgressReporter = struct {
         const spinner = spinnerByte(now / 250);
 
         for (self.jobs) |*job| {
-            const progress: DevRootProgressState = @enumFromInt(job.progress.load(.acquire));
+            const progress: DevRootProgressState = @fromBackingInt(@intCast(job.progress.load(.acquire)));
             if (progress != .running) continue;
             const started_at = job.start_ms.load(.acquire);
             const elapsed_since_start = elapsedMs(now, started_at) orelse continue;
@@ -1135,7 +1135,7 @@ const DevProgressReporter = struct {
         var next: ?ProgressMillis = null;
 
         for (self.jobs) |*job| {
-            const progress: DevRootProgressState = @enumFromInt(job.progress.load(.acquire));
+            const progress: DevRootProgressState = @fromBackingInt(@intCast(job.progress.load(.acquire)));
             if (progress != .running) continue;
             const started_at = job.start_ms.load(.acquire);
             if (started_at == 0) continue;
@@ -1430,7 +1430,7 @@ fn lowerDevEvalAndFinishRoots(
             const payload = builtins.erased_callable.payloadPtr(data_ptr);
             const runtime_addr = @intFromPtr(payload.callable_fn_ptr);
             for (self.store.getProcSpecs(), 0..) |_, proc_index| {
-                const proc_id: lir.LIR.LirProcSpecId = @enumFromInt(proc_index);
+                const proc_id: lir.LIR.LirProcSpecId = @fromBackingInt(@intCast(proc_index));
                 const symbol = self.codegen.compiledProcSymbol(proc_id) orelse continue;
                 const compiled_addr = @intFromPtr(self.executable.codePtr() + symbol.code_start);
                 if (compiled_addr == runtime_addr) {
@@ -1529,7 +1529,7 @@ fn devRootWorker(_: Allocator, context: *DevRunContext, item_id: usize) void {
     }
     job.start_ms.store(if (context.std_io) |io| nowMs(io) else 0, .release);
     job.last_progress_ms.store(0, .release);
-    job.progress.store(@intFromEnum(DevRootProgressState.running), .release);
+    job.progress.store(@backingInt(DevRootProgressState.running), .release);
     if (context.progress_reporter) |progress| progress.rootStarted();
 
     var crash_boundary = job.host.enterCrashBoundary();
@@ -1553,7 +1553,7 @@ fn devRootWorker(_: Allocator, context: *DevRunContext, item_id: usize) void {
             break :blk .host_oom;
         },
     };
-    job.progress.store(@intFromEnum(DevRootProgressState.done), .release);
+    job.progress.store(@backingInt(DevRootProgressState.done), .release);
 }
 
 fn nowNs(io: std.Io) i64 {
@@ -1925,7 +1925,7 @@ fn recordComptimeSiteHits(
 ) Allocator.Error!void {
     const problem_store = maybe_problem_store orelse return;
     for (hits) |hit| {
-        const site = lir_result.comptime_sites.items[@intFromEnum(hit.site)];
+        const site = lir_result.comptime_sites.items[@backingInt(hit.site)];
         if (comptimeSiteEmpiricalKind(site.kind) != null) {
             if (site.checked_site) |checked_site| {
                 if (comptimeSiteMayResolvePending(module, compile_time_root.id, checked_site)) {
@@ -1982,7 +1982,7 @@ fn appendCompileTimeExhaustivenessProblem(
     root_proc: lir.LIR.LirProcSpecId,
     site_id: lir.LIR.ComptimeSiteId,
 ) Allocator.Error!void {
-    const site = lir_result.comptime_sites.items[@intFromEnum(site_id)];
+    const site = lir_result.comptime_sites.items[@backingInt(site_id)];
     _ = comptimeSiteEmpiricalKind(site.kind) orelse switch (site.kind) {
         .if_ => finalizationInvariant("if expression reached empirical exhaustiveness failure"),
         .match, .destructure => finalizationInvariant("compile-time root had no empirical exhaustiveness kind"),
@@ -2017,7 +2017,7 @@ fn discardUnreachedRootComptimeSites(
 ) void {
     for (lir_result.comptime_sites.items, 0..) |root_site, raw_site_id| {
         if (root_site.proc != root_proc) continue;
-        if (raw_site_id == @intFromEnum(failed_site_id)) continue;
+        if (raw_site_id == @backingInt(failed_site_id)) continue;
         if (comptimeSiteEmpiricalKind(root_site.kind) == null) continue;
         const checked_site = root_site.checked_site orelse continue;
         if (checked_site == failed_checked_site) continue;
@@ -2152,7 +2152,7 @@ fn compileTimeRootForRequest(
     const root_id = request.compile_time_root orelse {
         finalizationInvariant("compile-time request had no exact checked root identity");
     };
-    const raw = @intFromEnum(root_id);
+    const raw = @backingInt(root_id);
     if (raw >= module.compile_time_roots.roots.len) {
         finalizationInvariant("compile-time request root identity was outside the checked root table");
     }
@@ -2263,7 +2263,7 @@ fn lowerFinalizationModulesToLir(
 }
 
 fn finalizationInvariant(comptime message: []const u8) noreturn {
-    if (@import("builtin").mode == .Debug) {
+    if (@import("builtin").mode == .debug) {
         std.debug.panic("compile-time finalization invariant violated: {s}", .{message});
     }
     unreachable;

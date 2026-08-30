@@ -87,7 +87,7 @@ pub fn run(store: *LirStore, layouts: *layout_mod.Store) ResourceError!void {
     const proc_count = store.procSpecCount();
     var proc_index: usize = 0;
     while (proc_index < proc_count) : (proc_index += 1) {
-        const proc_id: LIR.LirProcSpecId = @enumFromInt(proc_index);
+        const proc_id: LIR.LirProcSpecId = @fromBackingInt(@intCast(proc_index));
         try transformProc(store, layouts, proc_id, &scratch, print_transforms, print_ir);
     }
 }
@@ -119,7 +119,7 @@ fn transformProc(
     }
 
     if (construct_count == 0 and tail_count == 0) return;
-    if (builtin.mode == .Debug) detection.assertRewrittenStmtsUnshared();
+    if (builtin.mode == .debug) detection.assertRewrittenStmtsUnshared();
 
     if (construct_count > 0) {
         var transform = Transform.init(store.allocator, store, layouts, proc_id, &detection);
@@ -137,7 +137,7 @@ fn transformProc(
         const transformed = store.getProcSpec(proc_id);
         debugPrint("{s}: proc p{d} ({d} construct sites, {d} tail calls)\n", .{
             @tagName(transformed.tail_transform),
-            @intFromEnum(proc_id),
+            @backingInt(proc_id),
             construct_count,
             tail_count,
         });
@@ -381,7 +381,7 @@ const Detection = struct {
 
         try work.append(gpa, .{ .stmt = body, .edge = .proc_body });
         while (work.pop()) |item| {
-            const stamp = &stamps[@intFromEnum(item.stmt)];
+            const stamp = &stamps[@backingInt(item.stmt)];
             if (stamp.* >= gen) {
                 // Second arrival: this statement is the head of a shared tail.
                 // Record it so the sharing mark can be propagated to every
@@ -398,7 +398,7 @@ const Detection = struct {
             if (stmt == .join) {
                 const s = stmt.join;
                 try self.joins.put(s.id, .{ .params = s.params, .body = s.body });
-                self.max_join_id = @max(self.max_join_id, @intFromEnum(s.id));
+                self.max_join_id = @max(self.max_join_id, @backingInt(s.id));
             } else if (stmt == .ret) {
                 try self.scratch.rets.append(gpa, item.stmt);
             }
@@ -469,7 +469,7 @@ const Detection = struct {
         }
 
         while (work.pop()) |item| {
-            const stamp = &stamps[@intFromEnum(item.stmt)];
+            const stamp = &stamps[@backingInt(item.stmt)];
             if (stamp.* == gen + 2) continue;
             stamp.* = gen + 2;
 
@@ -479,7 +479,7 @@ const Detection = struct {
     }
 
     fn appendSharedSuccessor(self: *Detection, work: *std.ArrayList(WorkItem), stmt_id: CFStmtId) ResourceError!void {
-        if (self.scratch.stamps[@intFromEnum(stmt_id)] == self.scratch.generation + 2) return;
+        if (self.scratch.stamps[@backingInt(stmt_id)] == self.scratch.generation + 2) return;
         try work.append(self.scratch.gpa, .{ .stmt = stmt_id, .edge = .proc_body });
     }
 
@@ -864,7 +864,7 @@ const Detection = struct {
     }
 
     fn isSharedPath(self: *const Detection, stmt_id: CFStmtId) bool {
-        return self.scratch.stamps[@intFromEnum(stmt_id)] >= self.scratch.generation + 1;
+        return self.scratch.stamps[@backingInt(stmt_id)] >= self.scratch.generation + 1;
     }
 
     /// Debug check, run just before transforming: candidate eligibility must
@@ -915,7 +915,7 @@ const Transform = struct {
             .detection = detection,
             .new_locals = .empty,
             .old_args = &.{},
-            .join_id = @enumFromInt(detection.max_join_id + 1),
+            .join_id = @fromBackingInt(@intCast(detection.max_join_id + 1)),
         };
     }
 
@@ -1247,7 +1247,7 @@ const Transform = struct {
     }
 
     fn localIdLessThan(_: void, a: LocalId, b: LocalId) bool {
-        return @intFromEnum(a) < @intFromEnum(b);
+        return @backingInt(a) < @backingInt(b);
     }
 
     fn nextOf(self: *const Transform, stmt_id: CFStmtId) CFStmtId {

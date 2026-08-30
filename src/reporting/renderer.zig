@@ -64,7 +64,7 @@ pub const RenderTarget = enum {
 /// release builds. Reports that have not yet been migrated to a headline
 /// (none of the elements carry text) are exempt.
 fn assertValidHeadline(report: *const Report) void {
-    if (builtin.mode != .Debug) return;
+    if (builtin.mode != .debug) return;
 
     var last: u8 = 0;
     for (report.headline.elements.items) |el| {
@@ -922,8 +922,7 @@ pub fn renderDocumentToLsp(document: *const Document, writer: *std.Io.Writer, co
 
 /// Render every element of a document through the single walker.
 fn renderDocumentAs(comptime target: RenderTarget, document: *const Document, writer: *std.Io.Writer, palette: ColorPalette, config: ReportingConfig) (Allocator.Error || error{WriteFailed})!void {
-    var ann_sfa = std.heap.stackFallback(16 * @sizeOf(Annotation), document.allocator);
-    var annotation_stack = std.array_list.Managed(Annotation).init(ann_sfa.get());
+    var annotation_stack = std.array_list.Managed(Annotation).init(document.allocator);
     defer annotation_stack.deinit();
     var ctx = RenderCtx{ .config = config, .palette = palette, .annotation_stack = &annotation_stack };
 

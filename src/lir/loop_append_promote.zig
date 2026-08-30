@@ -68,7 +68,7 @@ pub fn run(store: *LirStore, layouts: *const layout_mod.Store) ResourceError!voi
     const proc_count = store.procSpecCount();
     var proc_index: usize = 0;
     while (proc_index < proc_count) : (proc_index += 1) {
-        try pass.transformProc(@enumFromInt(proc_index));
+        try pass.transformProc(@fromBackingInt(@intCast(proc_index)));
     }
 }
 
@@ -468,7 +468,7 @@ const Pass = struct {
                 },
                 .join => |join| {
                     try scan.joins.append(allocator, .{ .stmt = current, .has_back_edge = false });
-                    scan.max_join_id = @max(scan.max_join_id, @intFromEnum(join.id) + 1);
+                    scan.max_join_id = @max(scan.max_join_id, @backingInt(join.id) + 1);
                     const params = self.store.getLocalSpan(join.params);
                     for (0..GuardedList.borrowLen(params)) |i| {
                         try scan.param_join.put(GuardedList.at(params, i), current);
@@ -1204,7 +1204,7 @@ const Pass = struct {
     ) ResourceError!void {
         const call = self.store.getCFStmt(edge.stmt).assign_low_level;
 
-        const join_id: LIR.JoinPointId = @enumFromInt(max_join_id.*);
+        const join_id: LIR.JoinPointId = @fromBackingInt(@intCast(max_join_id.*));
         max_join_id.* += 1;
 
         // Merged continuation: both sides leave a uniquely owned list with
@@ -1280,7 +1280,7 @@ const Pass = struct {
         const grown_slack = try self.freshLocal(.u64, new_locals);
         const grow_spare = try self.freshLocal(.u64, new_locals);
 
-        const join_id: LIR.JoinPointId = @enumFromInt(max_join_id.*);
+        const join_id: LIR.JoinPointId = @fromBackingInt(@intCast(max_join_id.*));
         max_join_id.* += 1;
 
         // Join body: the unchecked append bumps the length, which is the
@@ -1419,7 +1419,7 @@ const Pass = struct {
         const enough_for_count = try self.freshLocal(.u8, new_locals);
         const fits = try self.freshLocal(.u8, new_locals);
 
-        const join_id: LIR.JoinPointId = @enumFromInt(max_join_id.*);
+        const join_id: LIR.JoinPointId = @fromBackingInt(@intCast(max_join_id.*));
         max_join_id.* += 1;
 
         // Hot path: the unchecked append bumps the length by the count, so
@@ -1554,7 +1554,7 @@ const PromoteTest = struct {
     }
 
     fn freshJoinPointId(self: *PromoteTest) LIR.JoinPointId {
-        const id: LIR.JoinPointId = @enumFromInt(self.next_join_point);
+        const id: LIR.JoinPointId = @fromBackingInt(@intCast(self.next_join_point));
         self.next_join_point += 1;
         return id;
     }

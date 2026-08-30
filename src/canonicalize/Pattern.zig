@@ -386,7 +386,7 @@ pub const Pattern = union(enum) {
                 try tree.pushStaticAtom("p-nominal-external");
                 try ir.appendRegionInfoToSExprTree(tree, pattern_idx);
 
-                const module_idx_int = @intFromEnum(n.module_idx);
+                const module_idx_int = @backingInt(n.module_idx);
                 std.debug.assert(module_idx_int < ir.imports.imports.items.items.len);
                 const string_lit_idx = ir.imports.imports.items.items[module_idx_int];
                 const module_name = ir.common.strings.get(string_lit_idx);

@@ -80,5 +80,5 @@ pub fn reset(self: *Self) void {
 }
 
 fn localKey(local_id: LocalId) u64 {
-    return @as(u64, @intFromEnum(local_id));
+    return @as(u64, @backingInt(local_id));
 }

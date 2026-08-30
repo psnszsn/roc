@@ -298,7 +298,7 @@ const Solver = struct {
         }
 
         for (self.lifted.fns, 0..) |fn_, index| {
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             try self.solveFn(fn_id, fn_);
         }
 
@@ -368,7 +368,7 @@ const Solver = struct {
         const captures = try self.allocator.alloc(Type.Capture, capture_locals.len);
         defer self.allocator.free(captures);
         for (capture_locals, 0..) |capture, i| {
-            const local = self.lifted.locals[@intFromEnum(capture.local)];
+            const local = self.lifted.locals[@backingInt(capture.local)];
             captures[i] = .{
                 .local = capture.local,
                 .symbol = local.symbol,
@@ -395,8 +395,8 @@ const Solver = struct {
                 Common.invariant("producer-authored lifted function signature arity changed before Lambda Solved");
             }
             for (arg_locals, 0..) |arg, i| {
-                const local = self.lifted.locals[@intFromEnum(arg.local)];
-                if (@import("builtin").mode == .Debug and
+                const local = self.lifted.locals[@backingInt(arg.local)];
+                if (@import("builtin").mode == .debug and
                     !try self.sameMonoType(local.ty, arg.ty))
                 {
                     Common.invariant("Lambda Solved function argument type differed from its local type");
@@ -410,8 +410,8 @@ const Solver = struct {
         const args = try self.allocator.alloc(Type.TypeVarId, arg_locals.len);
         defer self.allocator.free(args);
         for (arg_locals, 0..) |arg, i| {
-            const local = self.lifted.locals[@intFromEnum(arg.local)];
-            if (@import("builtin").mode == .Debug and
+            const local = self.lifted.locals[@backingInt(arg.local)];
+            if (@import("builtin").mode == .debug and
                 !try self.sameMonoType(local.ty, arg.ty))
             {
                 Common.invariant("Lambda Solved function argument type differed from its local type");
@@ -427,7 +427,7 @@ const Solver = struct {
     }
 
     fn fnRetType(self: *Solver, fn_id: Lifted.FnId) Type.TypeVarId {
-        const raw = @intFromEnum(fn_id);
+        const raw = @backingInt(fn_id);
         if (raw >= self.program.fn_tys.items.len) Common.invariant("Lambda Solved layout request referenced a missing function");
         const fn_ty = self.program.types.rootContentCompressed(self.program.fn_tys.items[raw]);
         if (std.meta.activeTag(fn_ty) != .func) Common.invariant("Lambda Solved layout request referenced a non-function");
@@ -435,7 +435,7 @@ const Solver = struct {
     }
 
     fn solveFn(self: *Solver, fn_id: Lifted.FnId, fn_: Lifted.Fn) Allocator.Error!void {
-        const fn_ty = self.program.fn_tys.items[@intFromEnum(fn_id)];
+        const fn_ty = self.program.fn_tys.items[@backingInt(fn_id)];
         const fn_content = self.program.types.rootContentCompressed(fn_ty);
         if (std.meta.activeTag(fn_content) != .func) Common.invariant("Lambda Solved function table contains a non-function type");
         const func = fn_content.func;
@@ -467,14 +467,14 @@ const Solver = struct {
     fn markAbiBoundaryCallables(self: *Solver) Allocator.Error!void {
         for (self.lifted.fns, 0..) |fn_, index| {
             if (fn_.body != .hosted) continue;
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
-            try self.markErasedCallablesAtFunctionBoundary(self.program.fn_tys.items[@intFromEnum(fn_id)]);
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
+            try self.markErasedCallablesAtFunctionBoundary(self.program.fn_tys.items[@backingInt(fn_id)]);
         }
 
         for (self.lifted.roots) |root| {
             switch (root.request.abi) {
                 .platform, .hosted => {
-                    const index = @intFromEnum(root.fn_id);
+                    const index = @backingInt(root.fn_id);
                     if (index >= self.program.fn_tys.items.len) {
                         Common.invariant("Lambda Solved ABI root referenced a missing function");
                     }
@@ -509,7 +509,7 @@ const Solver = struct {
         @memset(active, false);
 
         for (0..count) |index| {
-            const ty: Type.TypeVarId = @enumFromInt(@as(u32, @intCast(index)));
+            const ty: Type.TypeVarId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             if (std.meta.activeTag(self.program.types.get(ty)) != .link) try self.closeCallableSlotsInType(ty, done, active);
         }
     }
@@ -521,7 +521,7 @@ const Solver = struct {
         active: []bool,
     ) Allocator.Error!void {
         const root = self.program.types.rootCompressed(ty);
-        const root_index = @intFromEnum(root);
+        const root_index = @backingInt(root);
         if (done[root_index] or active[root_index]) return;
 
         active[root_index] = true;
@@ -631,7 +631,7 @@ const Solver = struct {
     }
 
     fn inferExpr(self: *Solver, expr_id: Lifted.ExprId) Allocator.Error!Type.TypeVarId {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         const expected = try self.exprSlot(expr_id);
         if (self.expr_done[index]) return expected;
         self.expr_done[index] = true;
@@ -708,7 +708,7 @@ const Solver = struct {
             .fn_def,
             => Common.invariant("pre-lift function expression reached Lambda Solved"),
             .fn_ref => |fn_ref| {
-                try self.unify(expected, self.program.fn_tys.items[@intFromEnum(fn_ref.fn_id)]);
+                try self.unify(expected, self.program.fn_tys.items[@backingInt(fn_ref.fn_id)]);
                 const captures = self.liftedCapturesForFn(fn_ref.fn_id);
                 const capture_operands = self.lifted.captureOperandSpan(fn_ref.captures);
                 if (captures.len != capture_operands.len) {
@@ -734,7 +734,7 @@ const Solver = struct {
                 const args = self.lifted.exprSpan(call.args);
                 switch (Lifted.directCallee(call)) {
                     .local => |callee| {
-                        const func = try self.functionShape(self.program.fn_tys.items[@intFromEnum(callee)]);
+                        const func = try self.functionShape(self.program.fn_tys.items[@backingInt(callee)]);
                         if (func.args.count() != args.len) Common.invariant("procedure call arity differs from its checked type");
                         try self.unify(expected, func.ret);
                         for (args, 0..) |arg, i| {
@@ -919,9 +919,9 @@ const Solver = struct {
     }
 
     fn inferStmt(self: *Solver, stmt_id: Lifted.StmtId) Allocator.Error!void {
-        switch (self.lifted.stmts[@intFromEnum(stmt_id)]) {
+        switch (self.lifted.stmts[@backingInt(stmt_id)]) {
             .uninitialized => |pat| {
-                const pat_ty = try self.lowerTypeFresh(self.lifted.pats[@intFromEnum(pat)].ty);
+                const pat_ty = try self.lowerTypeFresh(self.lifted.pats[@backingInt(pat)].ty);
                 try self.bindPattern(pat, pat_ty);
             },
             .let_ => |let_| {
@@ -938,7 +938,7 @@ const Solver = struct {
     }
 
     fn inferGeneratedOpaqueBacking(self: *Solver, expr_id: Lifted.ExprId) Allocator.Error!void {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (self.expr_done[index]) return;
 
         const expr = self.lifted.exprs[index];
@@ -1002,7 +1002,7 @@ const Solver = struct {
     }
 
     fn bindPattern(self: *Solver, pat_id: Lifted.PatId, value_ty: Type.TypeVarId) Allocator.Error!void {
-        const index = @intFromEnum(pat_id);
+        const index = @backingInt(pat_id);
         if (self.generated_backing_pats[index]) {
             const pat_ty = self.pat_tys[index] orelse Common.invariant("generated backing pattern was marked before its type was assigned");
             try self.unifyGeneratedOpaqueBacking(pat_ty, value_ty);
@@ -1013,7 +1013,7 @@ const Solver = struct {
     }
 
     fn bindPatternAtType(self: *Solver, pat_id: Lifted.PatId, pat_ty: Type.TypeVarId) Allocator.Error!void {
-        const pat = self.lifted.pats[@intFromEnum(pat_id)];
+        const pat = self.lifted.pats[@backingInt(pat_id)];
         switch (pat.data) {
             .bind => |local| try self.unify(self.localTy(local), pat_ty),
             .wildcard,
@@ -1080,17 +1080,17 @@ const Solver = struct {
     }
 
     fn hasGeneratedOpaquePatOwner(self: *Solver, pat_id: Lifted.PatId) bool {
-        const content = self.lifted.types.get(self.lifted.pats[@intFromEnum(pat_id)].ty);
+        const content = self.lifted.types.get(self.lifted.pats[@backingInt(pat_id)].ty);
         if (std.meta.activeTag(content) != .named) return false;
         const backing = content.named.backing orelse return false;
         return backing.authority == .generated_private;
     }
 
     fn bindGeneratedOpaqueBackingPattern(self: *Solver, pat_id: Lifted.PatId) Allocator.Error!void {
-        const index = @intFromEnum(pat_id);
+        const index = @backingInt(pat_id);
         if (self.generated_backing_pats[index]) return;
         self.generated_backing_pats[index] = true;
-        const pat_ty = try self.lowerTypeFresh(self.lifted.pats[@intFromEnum(pat_id)].ty);
+        const pat_ty = try self.lowerTypeFresh(self.lifted.pats[@backingInt(pat_id)].ty);
         self.pat_tys[index] = pat_ty;
         try self.bindPatternAtType(pat_id, pat_ty);
     }
@@ -1114,7 +1114,7 @@ const Solver = struct {
     }
 
     fn exprSlot(self: *Solver, expr_id: Lifted.ExprId) Allocator.Error!Type.TypeVarId {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (self.expr_tys[index]) |ty| return ty;
 
         const expr = self.lifted.exprs[index];
@@ -1122,10 +1122,10 @@ const Solver = struct {
         const ty = if (tag == .local)
             self.localTy(expr.data.local)
         else if (tag == .fn_ref)
-            self.program.fn_tys.items[@intFromEnum(expr.data.fn_ref.fn_id)]
+            self.program.fn_tys.items[@backingInt(expr.data.fn_ref.fn_id)]
         else if (tag == .call_proc)
             switch (Lifted.directCallee(expr.data.call_proc)) {
-                .local => |callee| (try self.functionShape(self.program.fn_tys.items[@intFromEnum(callee)])).ret,
+                .local => |callee| (try self.functionShape(self.program.fn_tys.items[@backingInt(callee)])).ret,
                 .imported => try self.lowerTypeFresh(expr.ty),
             }
         else
@@ -1135,7 +1135,7 @@ const Solver = struct {
     }
 
     fn expectExprSlot(self: *Solver, expr_id: Lifted.ExprId, expected: Type.TypeVarId) Allocator.Error!Type.TypeVarId {
-        const index = @intFromEnum(expr_id);
+        const index = @backingInt(expr_id);
         if (self.expr_tys[index]) |ty| {
             try self.unify(ty, expected);
             return self.program.types.rootCompressed(ty);
@@ -1146,7 +1146,7 @@ const Solver = struct {
         const ty = if (tag == .local)
             self.localTy(expr.data.local)
         else if (tag == .fn_ref)
-            self.program.fn_tys.items[@intFromEnum(expr.data.fn_ref.fn_id)]
+            self.program.fn_tys.items[@backingInt(expr.data.fn_ref.fn_id)]
         else
             expected;
         try self.unify(ty, expected);
@@ -1155,7 +1155,7 @@ const Solver = struct {
     }
 
     fn expectPat(self: *Solver, pat_id: Lifted.PatId, expected: Type.TypeVarId) Allocator.Error!Type.TypeVarId {
-        const index = @intFromEnum(pat_id);
+        const index = @backingInt(pat_id);
         if (self.pat_tys[index]) |ty| {
             try self.unify(ty, expected);
             return self.program.types.rootCompressed(ty);
@@ -1181,11 +1181,11 @@ const Solver = struct {
     }
 
     fn liftedCapturesForFn(self: *Solver, fn_id: Lifted.FnId) []const Lifted.TypedLocal {
-        return self.lifted.typedLocalSpan(self.lifted.fns[@intFromEnum(fn_id)].captures);
+        return self.lifted.typedLocalSpan(self.lifted.fns[@backingInt(fn_id)].captures);
     }
 
     fn localTy(self: *Solver, local: Lifted.LocalId) Type.TypeVarId {
-        return self.local_tys[@intFromEnum(local)] orelse Common.invariant("Lambda Solved local reached solver without a type slot");
+        return self.local_tys[@backingInt(local)] orelse Common.invariant("Lambda Solved local reached solver without a type slot");
     }
 
     fn returnTargetTy(self: *Solver, target: MonoType.TypeId) Allocator.Error!Type.TypeVarId {
@@ -1203,7 +1203,7 @@ const Solver = struct {
         // every iteration and an expanded var is revisited in place.
         var index: usize = 0;
         while (index < self.program.types.vars.items.len) : (index += 1) {
-            const ty: Type.TypeVarId = @enumFromInt(@as(u32, @intCast(index)));
+            const ty: Type.TypeVarId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             if (self.program.types.rootCompressed(ty) != ty) continue;
             const content = self.program.types.get(ty);
             const tag = std.meta.activeTag(content);
@@ -1212,7 +1212,7 @@ const Solver = struct {
                     try self.markErasedCallablesReachedByType(ty);
                 }
             } else if (tag == .mono) {
-                if (self.contains_forced_dynamic[@intFromEnum(content.mono.id)]) {
+                if (self.contains_forced_dynamic[@backingInt(content.mono.id)]) {
                     _ = try self.expandMonoRoot(ty, content.mono);
                     index -= 1;
                 }
@@ -1264,7 +1264,7 @@ const Solver = struct {
         const content = self.program.types.get(root);
         const resolved = if (std.meta.activeTag(content) == .mono)
             // Callable-free leaves contain nothing this walk could mark.
-            if (self.contains_callable[@intFromEnum(content.mono.id)])
+            if (self.contains_callable[@backingInt(content.mono.id)])
                 try self.expandMonoRoot(root, content.mono)
             else
                 return
@@ -1646,7 +1646,7 @@ const Solver = struct {
     ) void {
         if (args.len == expected) return;
 
-        if (@import("builtin").mode == .Debug) {
+        if (@import("builtin").mode == .debug) {
             std.debug.panic(
                 "postcheck invariant violated: low-level op {s} had {d} args, expected {d}",
                 .{ @tagName(op), args.len, expected },
@@ -2797,11 +2797,11 @@ const Solver = struct {
                 writeU32(hasher, @intCast(members.count()));
                 for (0..members.count()) |member_index| {
                     const member = self.program.types.memberItem(members, member_index);
-                    writeU32(hasher, @intFromEnum(member.lambda));
+                    writeU32(hasher, @backingInt(member.lambda));
                     writeU32(hasher, @intCast(member.captures.count()));
                     for (0..member.captures.count()) |capture_index| {
                         const capture = self.program.types.captureItem(member.captures, capture_index);
-                        writeU32(hasher, @intFromEnum(capture.symbol));
+                        writeU32(hasher, @backingInt(capture.symbol));
                         try self.writeSolvedTypeDigest(hasher, capture.ty, active);
                     }
                 }
@@ -2897,7 +2897,7 @@ fn computeReachabilityMasks(allocator: Allocator, types: anytype) Allocator.Erro
         const Counter = struct {
             counts: []u32,
             fn child(self: @This(), ty: MonoType.TypeId) void {
-                self.counts[@intFromEnum(ty)] += 1;
+                self.counts[@backingInt(ty)] += 1;
             }
         };
         Walk.children(types, content, Counter{ .counts = edge_counts });
@@ -2919,7 +2919,7 @@ fn computeReachabilityMasks(allocator: Allocator, types: anytype) Allocator.Erro
             writes: []u32,
             parent: u32,
             fn child(self: @This(), ty: MonoType.TypeId) void {
-                const child_index = @intFromEnum(ty);
+                const child_index = @backingInt(ty);
                 self.parents[self.writes[child_index]] = self.parent;
                 self.writes[child_index] += 1;
             }
@@ -2995,7 +2995,7 @@ const TypeCloner = struct {
             return created;
         }
         if (self.map.get(ty)) |cached| return cached;
-        const shareable = self.share and !self.solver.contains_callable[@intFromEnum(ty)];
+        const shareable = self.share and !self.solver.contains_callable[@backingInt(ty)];
         if (shareable) {
             if (self.solver.shared_clones.get(ty)) |shared| {
                 try self.map.put(ty, shared);
@@ -3212,7 +3212,7 @@ test "solved type digest treats a transparent alias as its backing" {
     var solver = solvedTypeDigestTestSolver(allocator, &program, &name_store);
     defer solver.solved_position_pool.deinit();
     const backing = try program.types.add(.{ .primitive = .u64 });
-    const module = try name_store.internModuleIdentity(&([_]u8{0xA5} ** 32));
+    const module = try name_store.internModuleIdentity(&@as([32]u8, @splat(0xA5)));
     const type_name = try name_store.internTypeName("Count");
     const alias = try program.types.add(.{ .named = .{
         .named_type = .{ .module = .{}, .ty = undefined },
@@ -3271,7 +3271,7 @@ test "lambda solved erased callable digest includes record field default identit
     var name_store = names.NameStore.init(gpa);
     defer name_store.deinit();
     const field_name = try name_store.internRecordFieldLabel("retries");
-    const module = try name_store.internModuleIdentity(&([_]u8{0xD5} ** 32));
+    const module = try name_store.internModuleIdentity(&@as([32]u8, @splat(0xD5)));
 
     var program: Ast.Program = undefined;
     program.types = Type.Store.init(gpa);

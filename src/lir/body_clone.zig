@@ -176,7 +176,7 @@ pub const ReadCounts = struct {
 
     /// How many reachable statements read `local` as an operand.
     pub fn get(self: *const ReadCounts, local: LocalId) u32 {
-        return self.counts[@intFromEnum(local)];
+        return self.counts[@backingInt(local)];
     }
 };
 
@@ -345,7 +345,7 @@ pub fn countStmtReads(store: *const LirStore, counts: []u32, stmt: LIR.CFStmt) v
 }
 
 fn noteRead(counts: []u32, local: LocalId) void {
-    counts[@intFromEnum(local)] += 1;
+    counts[@backingInt(local)] += 1;
 }
 
 fn noteSpanReads(store: *const LirStore, counts: []u32, span: LIR.LocalSpan) void {
@@ -375,7 +375,7 @@ pub fn uniqueSortedLocals(items: []LocalId) usize {
 
 /// Order two local ids by their integer index, for `std.mem.sort`.
 pub fn localIdLessThan(_: void, a: LocalId, b: LocalId) bool {
-    return @intFromEnum(a) < @intFromEnum(b);
+    return @backingInt(a) < @backingInt(b);
 }
 
 /// The body of a proc these passes may rewrite, or null when the proc has no
@@ -486,7 +486,7 @@ pub fn cloneCallVariant(
 
     for (0..source_args.len) |index| {
         const source_arg = GuardedList.at(source_args, index);
-        cloner.local_map[@intFromEnum(source_arg)] = variant_args.items[index + spec.leading_args.len];
+        cloner.local_map[@backingInt(source_arg)] = variant_args.items[index + spec.leading_args.len];
     }
 
     try cloner.new_locals.appendSlice(store.allocator, variant_args.items);
@@ -1012,7 +1012,7 @@ pub fn BodyCloner(comptime Rewriter: type) type {
         /// Map an old local to its clone, allocating a fresh same-layout local
         /// on first encounter.
         pub fn mapLocal(self: *Self, old: LocalId) Allocator.Error!LocalId {
-            const index = @intFromEnum(old);
+            const index = @backingInt(old);
             if (index >= self.local_map.len) unreachable;
             if (self.local_map[index]) |existing| return existing;
 

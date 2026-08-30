@@ -45,9 +45,9 @@ const SECTION_COUNT = 43;
 fn testMethodTarget() static_dispatch.MethodTarget {
     return .{
         .module_idx = 0,
-        .def_idx = @enumFromInt(1),
+        .def_idx = @fromBackingInt(@intCast(1)),
         .kind = .{ .structural = .parser },
-        .callable_ty = @enumFromInt(1),
+        .callable_ty = @fromBackingInt(@intCast(1)),
     };
 }
 /// Required byte alignment for every section payload. This covers all typed
@@ -194,10 +194,10 @@ pub const SpecializationCacheHeader = extern struct {
     /// Hash of section order and every fixed record layout read by the mapper.
     /// This rejects cache files written by a compiler with incompatible Zig
     /// layout decisions even when `FORMAT_VERSION` is unchanged.
-    compiler_layout_hash: [32]u8 = [_]u8{0} ** 32,
+    compiler_layout_hash: [32]u8 = @as([32]u8, @splat(0)),
     /// Hash of the checked modules, root requests, Monotype configuration, and
     /// stored specialization identities consumed by this cache file.
-    validity_id: [32]u8 = [_]u8{0} ** 32,
+    validity_id: [32]u8 = @as([32]u8, @splat(0)),
 
     /// Relocatable checked-name store bytes.
     names: FileSlice = .{},
@@ -388,7 +388,7 @@ pub const MappedSections = struct {
             if (!fnTemplateEvidenceValid(def.fn_def, self.const_fn_evidence, self.const_fn_evidence_frames)) return false;
         }
         for (self.specs) |spec| {
-            const raw_fn = @intFromEnum(spec.fn_id);
+            const raw_fn = @backingInt(spec.fn_id);
             if (raw_fn >= self.fns.len) return false;
             if (!std.meta.eql(spec.identity.evidence_digest, self.fns[raw_fn].source.evidence_digest)) return false;
         }
@@ -480,7 +480,7 @@ test "specialization cache evidence topology accepts callable-derived targets" {
     };
     const template = Ast.FnTemplate{
         .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-        .source_fn_ty = @enumFromInt(1),
+        .source_fn_ty = @fromBackingInt(@intCast(1)),
         .source_fn_key = .{},
         .mono_fn_ty = undefined,
         .evidence_digest = Ast.fnEvidenceDigest(&evidence, &frames, 0),
@@ -564,7 +564,7 @@ pub const MappedProgramView = struct {
         for (self.imported_fns, 0..) |imported, import_index| {
             const loaded_index = try findLoadedShard(loaded_shards, imported.shard);
             const loaded = loaded_shards[loaded_index];
-            if (@intFromEnum(imported.fn_id) >= loaded.fn_count) return error.CorruptSpecializationCacheFile;
+            if (@backingInt(imported.fn_id) >= loaded.fn_count) return error.CorruptSpecializationCacheFile;
             resolved_imports[import_index] = .{
                 .loaded_shard_index = @intCast(loaded_index),
                 .fn_id = imported.fn_id,
@@ -793,35 +793,35 @@ pub const MappedProgramView = struct {
     }
 
     fn typeRefInBounds(self: MappedProgramView, ty: Type.TypeId) bool {
-        return @intFromEnum(ty) < self.types.types.len;
+        return @backingInt(ty) < self.types.types.len;
     }
 
     fn fnRefInBounds(self: MappedProgramView, fn_id: Ast.FnId) bool {
-        return @intFromEnum(fn_id) < self.fns.len;
+        return @backingInt(fn_id) < self.fns.len;
     }
 
     fn defRefInBounds(self: MappedProgramView, def: Ast.DefId) bool {
-        return @intFromEnum(def) < self.defs.len;
+        return @backingInt(def) < self.defs.len;
     }
 
     fn exprRefInBounds(self: MappedProgramView, expr: Ast.ExprId) bool {
-        return @intFromEnum(expr) < self.exprs.len;
+        return @backingInt(expr) < self.exprs.len;
     }
 
     fn staticDataRefInBounds(self: MappedProgramView, id: Common.StaticDataId) bool {
-        return @intFromEnum(id) < self.static_data_values.len;
+        return @backingInt(id) < self.static_data_values.len;
     }
 
     fn patRefInBounds(self: MappedProgramView, pat: Ast.PatId) bool {
-        return @intFromEnum(pat) < self.pats.len;
+        return @backingInt(pat) < self.pats.len;
     }
 
     fn stmtRefInBounds(self: MappedProgramView, stmt: Ast.StmtId) bool {
-        return @intFromEnum(stmt) < self.stmts.len;
+        return @backingInt(stmt) < self.stmts.len;
     }
 
     fn localRefInBounds(self: MappedProgramView, local: Ast.LocalId) bool {
-        return @intFromEnum(local) < self.locals.len;
+        return @backingInt(local) < self.locals.len;
     }
 
     fn exprIdSpanInBounds(self: MappedProgramView, span: Ast.Span(Ast.ExprId)) bool {
@@ -876,7 +876,7 @@ pub const MappedProgramView = struct {
 
     pub fn verifyCallTargets(self: MappedProgramView) ?Ast.CallTargetVerifyError {
         for (self.imported_fns) |imported| {
-            if (imported.shard == .local and @intFromEnum(imported.fn_id) >= self.fns.len) {
+            if (imported.shard == .local and @backingInt(imported.fn_id) >= self.fns.len) {
                 return .imported_local_fn_out_of_bounds;
             }
         }
@@ -896,16 +896,16 @@ pub const MappedProgramView = struct {
                 switch (call.callee) {
                     .func => |slot| switch (slot) {
                         .local => |fn_id| {
-                            const raw_fn = @intFromEnum(fn_id);
+                            const raw_fn = @backingInt(fn_id);
                             if (raw_fn >= self.fns.len) return .local_fn_out_of_bounds;
-                            const raw_ty = @intFromEnum(self.fns[raw_fn].source.mono_fn_ty);
+                            const raw_ty = @backingInt(self.fns[raw_fn].source.mono_fn_ty);
                             if (raw_ty >= self.types.types.len) return .local_fn_type_out_of_bounds;
                             const fn_ty = self.types.get(self.fns[raw_fn].source.mono_fn_ty);
                             if (fn_ty != .func) return .local_fn_type_not_function;
                             if (fn_ty.func.args.len != call.args.len) return .local_call_arity_mismatch;
                         },
                         .imported => |imported| {
-                            if (@intFromEnum(imported) >= self.imported_fns.len) return .imported_fn_out_of_bounds;
+                            if (@backingInt(imported) >= self.imported_fns.len) return .imported_fn_out_of_bounds;
                         },
                     },
                     .lifted => return .lifted_fn_before_lifting,
@@ -920,9 +920,9 @@ pub const MappedProgramView = struct {
         fn_id: Ast.FnId,
         args: Ast.Span(Ast.TypedLocal),
     ) ?Ast.CallTargetVerifyError {
-        const raw_fn = @intFromEnum(fn_id);
+        const raw_fn = @backingInt(fn_id);
         if (raw_fn >= self.fns.len) return .local_fn_out_of_bounds;
-        const raw_ty = @intFromEnum(self.fns[raw_fn].source.mono_fn_ty);
+        const raw_ty = @backingInt(self.fns[raw_fn].source.mono_fn_ty);
         if (raw_ty >= self.types.types.len) return .local_fn_type_out_of_bounds;
         const fn_ty = self.types.get(self.fns[raw_fn].source.mono_fn_ty);
         if (fn_ty != .func) return .local_fn_type_not_function;
@@ -981,7 +981,7 @@ pub fn viewMappedFile(
 pub fn mappedProgramView(view: MappedView) CacheError!MappedProgramView {
     const sections_ = try view.sectionsView();
     return .{
-        .shard_id = @enumFromInt(view.shard_id),
+        .shard_id = @fromBackingInt(@intCast(view.shard_id)),
         .types = sections_.typeView(),
         .specs = sections_.specs,
         .imported_fns = sections_.imports,
@@ -1048,8 +1048,8 @@ pub fn buildImage(
     compiler_layout_hash: [32]u8,
     validity_id: [32]u8,
     payloads: []const SectionPayload,
-) (std.mem.Allocator.Error || CacheError)![]u8 {
-    var seen = [_]bool{false} ** SECTION_COUNT;
+) (std.mem.Allocator.Error || CacheError)![]align(SECTION_ALIGNMENT) u8 {
+    var seen = @as([SECTION_COUNT]bool, @splat(false));
     for (payloads) |payload| {
         const index = sectionIndex(payload.id);
         if (seen[index]) return error.InvalidSpecializationCacheFile;
@@ -1077,7 +1077,11 @@ pub fn buildImage(
 
     const header_bytes = std.mem.asBytes(&header);
     @memcpy(image.items[0..@sizeOf(SpecializationCacheHeader)], header_bytes);
-    return try image.toOwnedSlice(allocator);
+
+    const aligned_image = try allocator.alignedAlloc(u8, .@"16", image.items.len);
+    @memcpy(aligned_image, image.items);
+    image.deinit(allocator);
+    return aligned_image;
 }
 
 /// Filesystem errors possible while atomically writing a completed cache image.
@@ -1191,7 +1195,7 @@ pub fn computeCompilerLayoutHash() [32]u8 {
     writeHashBytes(&hasher, "section-order");
     inline for (section_order) |id| {
         writeHashBytes(&hasher, @tagName(id));
-        writeHashU32(&hasher, @intFromEnum(id));
+        writeHashU32(&hasher, @backingInt(id));
         writeHashU32(&hasher, @intCast(sectionIndex(id)));
     }
 
@@ -1244,11 +1248,12 @@ pub fn computeCompilerLayoutHash() [32]u8 {
 }
 
 fn writeMappedSectionLayouts(hasher: *std.crypto.hash.sha2.Sha256) void {
-    inline for (@typeInfo(MappedSections).@"struct".fields) |field| {
-        const Pointer = @typeInfo(field.type).pointer;
+    const info = @typeInfo(MappedSections).@"struct";
+    inline for (info.field_names, info.field_types) |field_name, FieldType| {
+        const Pointer = @typeInfo(FieldType).pointer;
         if (Pointer.size != .slice) @compileError("mapped cache section field is not a slice");
 
-        writeHashBytes(hasher, field.name);
+        writeHashBytes(hasher, field_name);
         if (Pointer.child == u8) {
             writeHashBytes(hasher, "raw-bytes");
         } else {
@@ -1499,15 +1504,15 @@ fn writeRootSource(hasher: *std.crypto.hash.sha2.Sha256, source: checked.RootSou
     switch (source) {
         .def => |def| {
             writeHashBytes(hasher, "def");
-            writeHashU32(hasher, @intFromEnum(def));
+            writeHashU32(hasher, @backingInt(def));
         },
         .expr => |expr| {
             writeHashBytes(hasher, "expr");
-            writeHashU32(hasher, @intFromEnum(expr));
+            writeHashU32(hasher, @backingInt(expr));
         },
         .statement => |stmt| {
             writeHashBytes(hasher, "statement");
-            writeHashU32(hasher, @intFromEnum(stmt));
+            writeHashU32(hasher, @backingInt(stmt));
         },
         .required_binding => |binding| {
             writeHashBytes(hasher, "required_binding");
@@ -1516,7 +1521,7 @@ fn writeRootSource(hasher: *std.crypto.hash.sha2.Sha256, source: checked.RootSou
         .hoisted => |hoisted| {
             writeHashBytes(hasher, "hoisted");
             writeHashU32(hasher, hoisted.index);
-            writeHashU32(hasher, @intFromEnum(hoisted.expr));
+            writeHashU32(hasher, @backingInt(hoisted.expr));
         },
     }
 }
@@ -1530,7 +1535,7 @@ fn writeStaticDataRequest(hasher: *std.crypto.hash.sha2.Sha256, request: Common.
 fn writeOptionalConstNodeId(hasher: *std.crypto.hash.sha2.Sha256, maybe_node: ?checked.ConstNodeId) void {
     if (maybe_node) |node| {
         writeHashBool(hasher, true);
-        writeHashU32(hasher, @intFromEnum(node));
+        writeHashU32(hasher, @backingInt(node));
     } else {
         writeHashBool(hasher, false);
     }
@@ -1539,7 +1544,7 @@ fn writeOptionalConstNodeId(hasher: *std.crypto.hash.sha2.Sha256, maybe_node: ?c
 fn writeConstData(hasher: *std.crypto.hash.sha2.Sha256, data: anytype) void {
     writeModuleId(hasher, @field(data, "arti" ++ "f" ++ "act"));
     writeConstOwner(hasher, data.owner);
-    writeHashU32(hasher, @intFromEnum(data.template));
+    writeHashU32(hasher, @backingInt(data.template));
     writeHashBytes32(hasher, data.source_scheme.bytes);
 }
 
@@ -1548,12 +1553,12 @@ fn writeConstOwner(hasher: *std.crypto.hash.sha2.Sha256, owner: checked.ConstOwn
         .top_level_binding => |top_level| {
             writeHashBytes(hasher, "top_level_binding");
             writeHashU32(hasher, top_level.module_idx);
-            writeHashU32(hasher, @intFromEnum(top_level.pattern));
+            writeHashU32(hasher, @backingInt(top_level.pattern));
         },
         .hoisted_expr => |hoisted| {
             writeHashBytes(hasher, "hoisted_expr");
             writeHashU32(hasher, hoisted.module_idx);
-            writeHashU32(hasher, @intFromEnum(hoisted.expr));
+            writeHashU32(hasher, @backingInt(hoisted.expr));
         },
     }
 }
@@ -1569,19 +1574,19 @@ fn writeOptionalProcedureTemplate(hasher: *std.crypto.hash.sha2.Sha256, maybe_te
 
 fn writeProcedureTemplate(hasher: *std.crypto.hash.sha2.Sha256, template: anytype) void {
     writeHashBytes32(hasher, @field(template, "arti" ++ "f" ++ "act").bytes);
-    writeHashU32(hasher, @intFromEnum(template.proc_base));
-    writeHashU32(hasher, @intFromEnum(template.template));
+    writeHashU32(hasher, @backingInt(template.proc_base));
+    writeHashU32(hasher, @backingInt(template.template));
 }
 
 fn writeProcedureValue(hasher: *std.crypto.hash.sha2.Sha256, procedure: anytype) void {
     writeHashBytes32(hasher, @field(procedure, "arti" ++ "f" ++ "act").bytes);
-    writeHashU32(hasher, @intFromEnum(procedure.proc_base));
+    writeHashU32(hasher, @backingInt(procedure.proc_base));
 }
 
 fn writeOptionalTopLevelProcedureBinding(hasher: *std.crypto.hash.sha2.Sha256, maybe_binding: anytype) void {
     if (maybe_binding) |actual| {
         writeHashBool(hasher, true);
-        writeHashU32(hasher, @intFromEnum(actual));
+        writeHashU32(hasher, @backingInt(actual));
     } else {
         writeHashBool(hasher, false);
     }
@@ -1630,11 +1635,11 @@ fn writeCallableIdentity(hasher: *std.crypto.hash.sha2.Sha256, callable: Ast.Cal
         },
         .hosted => |hosted| {
             writeHashBytes(hasher, "hosted");
-            writeHashU32(hasher, @intFromEnum(hosted));
+            writeHashU32(hasher, @backingInt(hosted));
         },
         .generated => |generated| {
             writeHashBytes(hasher, "generated");
-            writeHashU32(hasher, @intFromEnum(generated));
+            writeHashU32(hasher, @backingInt(generated));
         },
     }
 }
@@ -1644,18 +1649,18 @@ fn writeProcedureBinding(hasher: *std.crypto.hash.sha2.Sha256, binding: anytype)
         .top_level => |top_level| {
             writeHashBytes(hasher, "top_level");
             writeModuleId(hasher, @field(top_level, "arti" ++ "f" ++ "act"));
-            writeHashU32(hasher, @intFromEnum(top_level.binding));
+            writeHashU32(hasher, @backingInt(top_level.binding));
         },
         .imported => |imported| {
             writeHashBytes(hasher, "imported");
             writeModuleId(hasher, @field(imported, "arti" ++ "f" ++ "act"));
-            writeHashU32(hasher, @intFromEnum(imported.def));
-            writeHashU32(hasher, @intFromEnum(imported.pattern));
+            writeHashU32(hasher, @backingInt(imported.def));
+            writeHashU32(hasher, @backingInt(imported.pattern));
         },
         .hosted => |hosted| {
             writeHashBytes(hasher, "hosted");
             writeHashU32(hasher, hosted.module_idx);
-            writeHashU32(hasher, @intFromEnum(hosted.def));
+            writeHashU32(hasher, @backingInt(hosted.def));
             writeProcedureValue(hasher, hosted.proc);
             writeProcedureTemplate(hasher, hosted.template);
         },
@@ -1663,14 +1668,14 @@ fn writeProcedureBinding(hasher: *std.crypto.hash.sha2.Sha256, binding: anytype)
             writeHashBytes(hasher, "platform_required");
             writeModuleId(hasher, @field(required, "arti" ++ "f" ++ "act"));
             writeTopLevelValue(hasher, required.app_value);
-            writeHashU32(hasher, @intFromEnum(required.procedure_binding));
+            writeHashU32(hasher, @backingInt(required.procedure_binding));
         },
     }
 }
 
 fn writeTopLevelValue(hasher: *std.crypto.hash.sha2.Sha256, value: anytype) void {
     writeModuleId(hasher, @field(value, "arti" ++ "f" ++ "act"));
-    writeHashU32(hasher, @intFromEnum(value.pattern));
+    writeHashU32(hasher, @backingInt(value.pattern));
 }
 
 fn writeOptionalCheckedTypeId(hasher: *std.crypto.hash.sha2.Sha256, ty: ?checked.CheckedTypeId) void {
@@ -1683,7 +1688,7 @@ fn writeOptionalCheckedTypeId(hasher: *std.crypto.hash.sha2.Sha256, ty: ?checked
 }
 
 fn writeCheckedTypeId(hasher: *std.crypto.hash.sha2.Sha256, ty: checked.CheckedTypeId) void {
-    writeHashU32(hasher, @intFromEnum(ty));
+    writeHashU32(hasher, @backingInt(ty));
 }
 
 fn writeModuleId(hasher: *std.crypto.hash.sha2.Sha256, module: checked.ModuleId) void {
@@ -1770,7 +1775,7 @@ test "monotype specialization cache rejects wrong version and hashes" {
     try std.testing.expectError(error.UnsupportedSpecializationCacheVersion, validateHeader(header, bytes.len, zeroHash(), zeroHash()));
 
     header.format_version = FORMAT_VERSION;
-    var hash = [_]u8{0} ** 32;
+    var hash = @as([32]u8, @splat(0));
     hash[0] = 1;
     try std.testing.expectError(error.InvalidSpecializationCacheFile, validateHeader(header, bytes.len, hash, zeroHash()));
     try std.testing.expectError(error.InvalidSpecializationCacheFile, validateHeader(header, bytes.len, zeroHash(), hash));
@@ -1818,9 +1823,9 @@ test "monotype specialization cache writes deterministic aligned section image" 
     const fn_bytes = std.mem.sliceAsBytes(fn_values[0..]);
     const expr_payload = "exprs";
 
-    var layout_hash = [_]u8{0} ** 32;
+    var layout_hash = @as([32]u8, @splat(0));
     layout_hash[0] = 7;
-    var validity_id = [_]u8{0} ** 32;
+    var validity_id = @as([32]u8, @splat(0));
     validity_id[0] = 9;
 
     const image = try buildImage(allocator, layout_hash, validity_id, &.{
@@ -1896,7 +1901,7 @@ test "monotype specialization cache verifies image before atomic write" {
     }
 
     const first_type_index: u32 = std.math.minInt(u32);
-    const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
+    const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
     const bad_exprs = [_]Ast.Expr{.{
         .ty = unit_ty,
         .data = .{ .list = .{ .start = 0, .len = 1 } },
@@ -1933,9 +1938,9 @@ test "monotype specialization cache verifies image before atomic write" {
 test "monotype specialization cache maps typed top-level sections" {
     const allocator = std.testing.allocator;
 
-    const type_args = [_]Type.TypeId{ @enumFromInt(1), @enumFromInt(2) };
+    const type_args = [_]Type.TypeId{ @fromBackingInt(@intCast(1)), @fromBackingInt(@intCast(2)) };
     const imports = [_]Ast.ImportedFn{
-        .{ .shard = @enumFromInt(4), .fn_id = @enumFromInt(7) },
+        .{ .shard = @fromBackingInt(@intCast(4)), .fn_id = @fromBackingInt(@intCast(7)) },
     };
     const locs = [_]Base.SourceLoc{
         .{ .file = 0, .line = 2, .column = 3 },
@@ -1966,8 +1971,8 @@ test "monotype specialization cache creates mapped program view without body fix
 
     const first_type_index: u32 = std.math.minInt(u32);
     const first_fn_index: u32 = std.math.minInt(u32);
-    const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
-    const fn_ty: Type.TypeId = @enumFromInt(1);
+    const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
+    const fn_ty: Type.TypeId = @fromBackingInt(@intCast(1));
     const type_nodes = [_]Type.Content{
         .zst,
         .{ .func = .{
@@ -1979,11 +1984,11 @@ test "monotype specialization cache creates mapped program view without body fix
     const evidence_frames = [_]check.ConstStore.ConstFnEvidenceFrame{
         check.ConstStore.ConstFnEvidenceFrame.init(.root, null, 0, 0),
     };
-    const fn_id: Ast.FnId = @enumFromInt(first_fn_index);
+    const fn_id: Ast.FnId = @fromBackingInt(@intCast(first_fn_index));
     const fns = [_]Ast.Fn{.{
         .source = .{
             .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-            .source_fn_ty = @enumFromInt(1),
+            .source_fn_ty = @fromBackingInt(@intCast(1)),
             .source_fn_key = .{},
             .mono_fn_ty = fn_ty,
             .evidence_digest = Ast.fnEvidenceDigest(&.{}, &evidence_frames, 0),
@@ -1992,7 +1997,7 @@ test "monotype specialization cache creates mapped program view without body fix
         },
     }};
     const defs = [_]Ast.Def{.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .fn_def = fns[0].source,
         .fn_id = fn_id,
         .args = Ast.Span(Ast.TypedLocal).empty(),
@@ -2024,7 +2029,7 @@ test "monotype specialization cache creates mapped program view without body fix
     var name_store = checked_names.NameStore.init(std.testing.allocator);
     defer name_store.deinit();
 
-    try std.testing.expectEqual(@as(Ast.ShardId, @enumFromInt(9)), program.shard_id);
+    try std.testing.expectEqual(@as(Ast.ShardId, @fromBackingInt(@intCast(9))), program.shard_id);
     try std.testing.expectEqual(@as(?Ast.CallTargetVerifyError, null), program.verifyCallTargets());
     try std.testing.expectEqual(@as(?Type.Store.VerifyError, null), program.types.verify(&name_store));
 
@@ -2042,17 +2047,17 @@ test "monotype specialization cache resolves imported function table once" {
 
     const first_type_index: u32 = std.math.minInt(u32);
     const first_import_index: u32 = std.math.minInt(u32);
-    const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
+    const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
     const type_nodes = [_]Type.Content{.zst};
     const type_digests = [_]checked_names.TypeDigest{.{}};
     const imports = [_]Ast.ImportedFn{.{
-        .shard = @enumFromInt(4),
-        .fn_id = @enumFromInt(7),
+        .shard = @fromBackingInt(@intCast(4)),
+        .fn_id = @fromBackingInt(@intCast(7)),
     }};
     const exprs = [_]Ast.Expr{.{
         .ty = unit_ty,
         .data = .{ .call_proc = .{
-            .callee = Ast.importedProcCallee(@enumFromInt(first_import_index)),
+            .callee = Ast.importedProcCallee(@fromBackingInt(@intCast(first_import_index))),
             .args = Ast.Span(Ast.ExprId).empty(),
         } },
     }};
@@ -2073,14 +2078,14 @@ test "monotype specialization cache resolves imported function table once" {
     defer name_store.deinit();
 
     const loaded_shards = [_]LoadedShard{.{
-        .shard_id = @enumFromInt(4),
+        .shard_id = @fromBackingInt(@intCast(4)),
         .fn_count = 8,
     }};
     var resolved: [1]ResolvedImportedFn = undefined;
     const resolved_view = try program.verifyAndResolveImports(&name_store, loaded_shards[0..], resolved[0..]);
     try std.testing.expectEqual(@as(usize, 1), resolved_view.len);
     try std.testing.expectEqual(@as(u32, 0), resolved_view[0].loaded_shard_index);
-    try std.testing.expectEqual(@as(Ast.FnId, @enumFromInt(7)), resolved_view[0].fn_id);
+    try std.testing.expectEqual(@as(Ast.FnId, @fromBackingInt(@intCast(7))), resolved_view[0].fn_id);
 
     try std.testing.expectError(
         error.CorruptSpecializationCacheFile,
@@ -2088,7 +2093,7 @@ test "monotype specialization cache resolves imported function table once" {
     );
 
     const too_short = [_]LoadedShard{.{
-        .shard_id = @enumFromInt(4),
+        .shard_id = @fromBackingInt(@intCast(4)),
         .fn_count = 7,
     }};
     try std.testing.expectError(
@@ -2114,19 +2119,19 @@ test "monotype specialization cache round trips empty program functions imports 
     defer name_store.deinit();
     const field_a = try name_store.internRecordFieldLabel("a");
     const tag_ok = try name_store.internTagLabel("Ok");
-    const module_identity = try name_store.internModuleIdentity(&([_]u8{0x77} ** 32));
+    const module_identity = try name_store.internModuleIdentity(&@as([32]u8, @splat(0x77)));
     const type_name = try name_store.internTypeName("Boxed");
 
     const first_type_index: u32 = std.math.minInt(u32);
     const first_fn_index: u32 = std.math.minInt(u32);
     const first_import_index: u32 = std.math.minInt(u32);
     const first_expr_index: u32 = std.math.minInt(u32);
-    const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
-    const fn_ty: Type.TypeId = @enumFromInt(1);
-    const record_ty: Type.TypeId = @enumFromInt(2);
-    const tag_ty: Type.TypeId = @enumFromInt(3);
-    const recursive_ty: Type.TypeId = @enumFromInt(4);
-    const named_ty: Type.TypeId = @enumFromInt(5);
+    const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
+    const fn_ty: Type.TypeId = @fromBackingInt(@intCast(1));
+    const record_ty: Type.TypeId = @fromBackingInt(@intCast(2));
+    const tag_ty: Type.TypeId = @fromBackingInt(@intCast(3));
+    const recursive_ty: Type.TypeId = @fromBackingInt(@intCast(4));
+    const named_ty: Type.TypeId = @fromBackingInt(@intCast(5));
     const type_args = [_]Type.TypeId{unit_ty};
     const fields = [_]Type.Field{.{
         .name = field_a,
@@ -2149,7 +2154,7 @@ test "monotype specialization cache round trips empty program functions imports 
         .{ .tag_union = .{ .start = 0, .len = 1 } },
         .{ .list = recursive_ty },
         .{ .named = .{
-            .named_type = .{ .module = testModuleDigest(9), .ty = @enumFromInt(11) },
+            .named_type = .{ .module = testModuleDigest(9), .ty = @fromBackingInt(@intCast(11)) },
             .def = .{
                 .module = module_identity,
                 .type_name = type_name,
@@ -2167,10 +2172,10 @@ test "monotype specialization cache round trips empty program functions imports 
     const evidence_frames = [_]check.ConstStore.ConstFnEvidenceFrame{
         check.ConstStore.ConstFnEvidenceFrame.init(.root, null, 0, 0),
     };
-    const fn_id: Ast.FnId = @enumFromInt(first_fn_index);
+    const fn_id: Ast.FnId = @fromBackingInt(@intCast(first_fn_index));
     const fn_template = Ast.FnTemplate{
         .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-        .source_fn_ty = @enumFromInt(1),
+        .source_fn_ty = @fromBackingInt(@intCast(1)),
         .source_fn_key = .{},
         .mono_fn_ty = fn_ty,
         .evidence_digest = Ast.fnEvidenceDigest(&.{}, &evidence_frames, 0),
@@ -2179,7 +2184,7 @@ test "monotype specialization cache round trips empty program functions imports 
     };
     const fns = [_]Ast.Fn{.{ .source = fn_template }};
     const defs = [_]Ast.Def{.{
-        .symbol = @enumFromInt(1),
+        .symbol = @fromBackingInt(@intCast(1)),
         .fn_def = fn_template,
         .fn_id = fn_id,
         .args = Ast.Span(Ast.TypedLocal).empty(),
@@ -2187,22 +2192,22 @@ test "monotype specialization cache round trips empty program functions imports 
         .ret = named_ty,
     }};
     const imports = [_]Ast.ImportedFn{.{
-        .shard = @enumFromInt(2),
-        .fn_id = @enumFromInt(3),
+        .shard = @fromBackingInt(@intCast(2)),
+        .fn_id = @fromBackingInt(@intCast(3)),
     }};
     const exprs = [_]Ast.Expr{.{
         .ty = tag_ty,
         .data = .{ .call_proc = .{
-            .callee = Ast.importedProcCallee(@enumFromInt(first_import_index)),
+            .callee = Ast.importedProcCallee(@fromBackingInt(@intCast(first_import_index))),
             .args = Ast.Span(Ast.ExprId).empty(),
         } },
     }};
     const nested_defs = [_]Ast.NestedDef{.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .fn_def = fn_template,
         .fn_id = fn_id,
         .args = Ast.Span(Ast.TypedLocal).empty(),
-        .body = @enumFromInt(first_expr_index),
+        .body = @fromBackingInt(@intCast(first_expr_index)),
         .ret = recursive_ty,
     }};
 
@@ -2227,7 +2232,7 @@ test "monotype specialization cache round trips empty program functions imports 
     const mapped = try viewMappedFile(&header, image.ptr, image.len, zeroHash(), zeroHash(), 0);
     const program = try mappedProgramView(mapped);
     const loaded_shards = [_]LoadedShard{.{
-        .shard_id = @enumFromInt(2),
+        .shard_id = @fromBackingInt(@intCast(2)),
         .fn_count = 4,
     }};
     var resolved: [1]ResolvedImportedFn = undefined;
@@ -2238,7 +2243,7 @@ test "monotype specialization cache round trips empty program functions imports 
     try std.testing.expectEqual(@as(usize, 1), program.nested_defs.len);
     try std.testing.expectEqual(@as(usize, 1), program.imported_fns.len);
     try std.testing.expectEqual(@as(usize, 1), resolved_view.len);
-    try std.testing.expectEqual(@as(Ast.FnId, @enumFromInt(3)), resolved_view[0].fn_id);
+    try std.testing.expectEqual(@as(Ast.FnId, @fromBackingInt(@intCast(3))), resolved_view[0].fn_id);
     try std.testing.expectEqual(@as(?Type.Store.VerifyError, null), program.types.verify(&name_store));
     try std.testing.expectEqual(@as(Type.Content, .{ .list = recursive_ty }), program.types.get(recursive_ty));
     try std.testing.expectEqual(@as(Type.Content, .{ .record = .{ .start = 0, .len = 1 } }), program.types.get(record_ty));
@@ -2253,7 +2258,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
     const field_name = try program.names.internRecordFieldLabel("field");
     const outer_field_name = try program.names.internRecordFieldLabel("outer");
     const tag_name = try program.names.internTagLabel("Ok");
-    const module_identity = try program.names.internModuleIdentity(&([_]u8{0x77} ** 32));
+    const module_identity = try program.names.internModuleIdentity(&@as([32]u8, @splat(0x77)));
     const type_name = try program.names.internTypeName("Boxed");
 
     const unit_ty = try program.types.add(.zst);
@@ -2271,7 +2276,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
     _ = try program.types.add(.{ .tag_union = tags });
     const declared_order = try program.types.addDeclaredFields(&.{.{ .named = field_name }});
     const named_ty = try program.types.add(.{ .named = .{
-        .named_type = .{ .module = testModuleDigest(4), .ty = @enumFromInt(8) },
+        .named_type = .{ .module = testModuleDigest(4), .ty = @fromBackingInt(@intCast(8)) },
         .def = .{ .module = module_identity, .type_name = type_name },
         .kind = .nominal,
         .args = Type.Span.empty(),
@@ -2279,10 +2284,10 @@ test "monotype specialization cache maps fresh single-shard program view equival
         .declared_order = declared_order,
     } });
 
-    const local = try program.addLocal(@enumFromInt(1), unit_ty);
+    const local = try program.addLocal(@fromBackingInt(@intCast(1)), unit_ty);
     try program.setLocalName(local, "value");
     const local_expr = try program.addExpr(.{ .ty = unit_ty, .data = .{ .local = local } });
-    const record_local = try program.addLocal(@enumFromInt(4), outer_record_ty);
+    const record_local = try program.addLocal(@fromBackingInt(@intCast(4)), outer_record_ty);
     try program.setLocalName(record_local, "record");
     const record_local_expr = try program.addExpr(.{ .ty = outer_record_ty, .data = .{ .local = record_local } });
     const field_access_segments = try program.addFieldAccessSegmentSpan(&.{
@@ -2305,7 +2310,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
 
     const fn_template = Ast.FnTemplate{
         .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-        .source_fn_ty = @enumFromInt(1),
+        .source_fn_ty = @fromBackingInt(@intCast(1)),
         .source_fn_key = .{},
         .mono_fn_ty = fn_ty,
         .evidence_digest = Ast.fnEvidenceDigest(&fn_evidence_nodes, &fn_evidence_frame_nodes, 0),
@@ -2314,7 +2319,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
         .const_evidence_frame_head = 0,
     };
     const fn_id = try program.addFn(fn_template);
-    _ = try program.addImportedFn(.{ .shard = @enumFromInt(2), .fn_id = @enumFromInt(3) });
+    _ = try program.addImportedFn(.{ .shard = @fromBackingInt(@intCast(2)), .fn_id = @fromBackingInt(@intCast(3)) });
     const call_expr = try program.addExpr(.{ .ty = unit_ty, .data = .{ .call_proc = .{
         .callee = Ast.localProcCallee(fn_id),
         .args = call_args,
@@ -2323,7 +2328,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
     const stmt = try program.addStmt(.{ .expr = call_expr });
 
     const def_id = try program.addDef(.{
-        .symbol = @enumFromInt(2),
+        .symbol = @fromBackingInt(@intCast(2)),
         .fn_def = fn_template,
         .fn_id = fn_id,
         .args = typed_args,
@@ -2331,7 +2336,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
         .ret = unit_ty,
     });
     _ = try program.addNestedDef(.{
-        .symbol = @enumFromInt(3),
+        .symbol = @fromBackingInt(@intCast(3)),
         .fn_def = fn_template,
         .fn_id = fn_id,
         .args = typed_args,
@@ -2374,14 +2379,14 @@ test "monotype specialization cache maps fresh single-shard program view equival
             .order = 0,
             .module_idx = 0,
             .kind = .runtime_entrypoint,
-            .source = .{ .def = @enumFromInt(1) },
-            .checked_type = @enumFromInt(2),
+            .source = .{ .def = @fromBackingInt(@intCast(1)) },
+            .checked_type = @fromBackingInt(@intCast(2)),
             .abi = .roc,
             .exposure = .exported,
         },
     });
     try program.layout_requests.append(allocator, .{
-        .checked_type = @enumFromInt(3),
+        .checked_type = @fromBackingInt(@intCast(3)),
         .ty = record_ty,
         .def = def_id,
     });
@@ -2394,7 +2399,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
     const concrete_type_digests = try allocator.alloc(checked_names.TypeDigest, fresh.types.types.len);
     defer allocator.free(concrete_type_digests);
     for (concrete_type_digests, 0..) |*digest, index| {
-        digest.* = program.types.typeDigest(&program.names, @enumFromInt(@as(u32, @intCast(index))));
+        digest.* = program.types.typeDigest(&program.names, @fromBackingInt(@intCast(@as(u32, @intCast(index)))));
     }
 
     const image = try buildImage(allocator, zeroHash(), zeroHash(), &.{
@@ -2458,7 +2463,7 @@ test "monotype specialization cache maps fresh single-shard program view equival
 test "monotype specialization cache mapped view survives source builder deallocation" {
     const allocator = std.testing.allocator;
 
-    var image: []u8 = undefined;
+    var image: []align(SECTION_ALIGNMENT) u8 = undefined;
     {
         var type_nodes = std.ArrayList(Type.Content).empty;
         defer type_nodes.deinit(allocator);
@@ -2473,8 +2478,8 @@ test "monotype specialization cache mapped view survives source builder dealloca
 
         const first_type_index: u32 = std.math.minInt(u32);
         const first_fn_index: u32 = std.math.minInt(u32);
-        const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
-        const fn_ty: Type.TypeId = @enumFromInt(1);
+        const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
+        const fn_ty: Type.TypeId = @fromBackingInt(@intCast(1));
         try type_nodes.append(allocator, .zst);
         try type_nodes.append(allocator, .{ .func = .{
             .args = Type.Span.empty(),
@@ -2485,10 +2490,10 @@ test "monotype specialization cache mapped view survives source builder dealloca
         const evidence_frames = [_]check.ConstStore.ConstFnEvidenceFrame{
             check.ConstStore.ConstFnEvidenceFrame.init(.root, null, 0, 0),
         };
-        const fn_id: Ast.FnId = @enumFromInt(first_fn_index);
+        const fn_id: Ast.FnId = @fromBackingInt(@intCast(first_fn_index));
         const fn_template = Ast.FnTemplate{
             .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-            .source_fn_ty = @enumFromInt(1),
+            .source_fn_ty = @fromBackingInt(@intCast(1)),
             .source_fn_key = .{},
             .mono_fn_ty = fn_ty,
             .evidence_digest = Ast.fnEvidenceDigest(&.{}, &evidence_frames, 0),
@@ -2500,7 +2505,7 @@ test "monotype specialization cache mapped view survives source builder dealloca
             .signature_relation = .exact_graph,
         });
         try defs.append(allocator, .{
-            .symbol = @enumFromInt(1),
+            .symbol = @fromBackingInt(@intCast(1)),
             .fn_def = fn_template,
             .fn_id = fn_id,
             .args = Ast.Span(Ast.TypedLocal).empty(),
@@ -2548,7 +2553,7 @@ test "monotype specialization cache reports malformed internal data as corruptio
     defer name_store.deinit();
 
     {
-        const bad_type_nodes = [_]Type.Content{.{ .list = @enumFromInt(99) }};
+        const bad_type_nodes = [_]Type.Content{.{ .list = @fromBackingInt(@intCast(99)) }};
         const type_digests = [_]checked_names.TypeDigest{.{}};
         const image = try buildImage(allocator, zeroHash(), zeroHash(), &.{
             .{ .id = .type_nodes, .bytes = std.mem.sliceAsBytes(bad_type_nodes[0..]) },
@@ -2570,17 +2575,17 @@ test "monotype specialization cache reports malformed internal data as corruptio
     {
         const first_type_index: u32 = std.math.minInt(u32);
         const first_fn_index: u32 = std.math.minInt(u32);
-        const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
+        const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
         const type_nodes = [_]Type.Content{.zst};
         const type_digests = [_]checked_names.TypeDigest{.{}};
         const evidence_frames = [_]check.ConstStore.ConstFnEvidenceFrame{
             check.ConstStore.ConstFnEvidenceFrame.init(.root, null, 0, 0),
         };
-        const fn_id: Ast.FnId = @enumFromInt(first_fn_index);
+        const fn_id: Ast.FnId = @fromBackingInt(@intCast(first_fn_index));
         const fns = [_]Ast.Fn{.{
             .source = .{
                 .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-                .source_fn_ty = @enumFromInt(1),
+                .source_fn_ty = @fromBackingInt(@intCast(1)),
                 .source_fn_key = .{},
                 .mono_fn_ty = unit_ty,
                 .evidence_digest = Ast.fnEvidenceDigest(&.{}, &evidence_frames, 0),
@@ -2621,7 +2626,7 @@ test "monotype specialization cache reports malformed internal data as corruptio
 
     {
         const first_type_index: u32 = std.math.minInt(u32);
-        const unit_ty: Type.TypeId = @enumFromInt(first_type_index);
+        const unit_ty: Type.TypeId = @fromBackingInt(@intCast(first_type_index));
         const type_nodes = [_]Type.Content{.zst};
         const type_digests = [_]checked_names.TypeDigest{.{}};
         const exprs = [_]Ast.Expr{.{
@@ -2652,13 +2657,13 @@ test "monotype specialization cache reports malformed internal data as corruptio
     }) |bad_segments| {
         // Each hand-built pool below holds exactly one entry; this is its index.
         const sole_index: u32 = 0;
-        const unit_ty: Type.TypeId = @enumFromInt(sole_index);
+        const unit_ty: Type.TypeId = @fromBackingInt(@intCast(sole_index));
         const type_nodes = [_]Type.Content{.zst};
         const type_digests = [_]checked_names.TypeDigest{.{}};
         const exprs = [_]Ast.Expr{.{
             .ty = unit_ty,
             .data = .{ .field_access = .{
-                .receiver = @enumFromInt(sole_index),
+                .receiver = @fromBackingInt(@intCast(sole_index)),
                 .segments = bad_segments,
             } },
         }};
@@ -2684,7 +2689,7 @@ test "monotype specialization cache reports malformed internal data as corruptio
 test "monotype specialization cache rejects corrupt function evidence topology before mapping sections" {
     const empty_template = Ast.FnTemplate{
         .fn_def = .{ .checked_generated = testProcedureTemplate(1, 1) },
-        .source_fn_ty = @enumFromInt(1),
+        .source_fn_ty = @fromBackingInt(@intCast(1)),
         .source_fn_key = .{},
         // This helper exercises section-level evidence validation, which runs
         // before and does not inspect the function's Monotype reference.
@@ -2771,8 +2776,8 @@ test "monotype specialization cache validity includes module ids roots and confi
         .order = 0,
         .module_idx = 0,
         .kind = .runtime_entrypoint,
-        .source = .{ .def = @enumFromInt(1) },
-        .checked_type = @enumFromInt(2),
+        .source = .{ .def = @fromBackingInt(@intCast(1)) },
+        .checked_type = @fromBackingInt(@intCast(2)),
         .abi = .roc,
         .exposure = .exported,
     };
@@ -2797,7 +2802,7 @@ test "monotype specialization cache validity includes module ids roots and confi
     });
     try std.testing.expect(!std.mem.eql(u8, empty[0..], debug_names[0..]));
 
-    var builtin_data_id = [_]u8{0} ** 32;
+    var builtin_data_id = @as([32]u8, @splat(0));
     builtin_data_id[0] = 1;
     const builtin_data = computeValidityId(.{
         .root_module = root_module,
@@ -2832,8 +2837,8 @@ test "monotype specialization cache validity includes stored specialization iden
     second_source_digest.bytes[0] = 2;
     var mono_digest: checked_names.TypeDigest = .{};
     mono_digest.bytes[0] = 3;
-    const spec_ty: Type.TypeId = @enumFromInt(1);
-    const spec_fn: Ast.FnId = @enumFromInt(1);
+    const spec_ty: Type.TypeId = @fromBackingInt(@intCast(1));
+    const spec_fn: Ast.FnId = @fromBackingInt(@intCast(1));
 
     const first_spec = Ast.SpecRecord{
         .identity = .{
@@ -2946,11 +2951,11 @@ fn expectFnEvidenceMappingCorruption(
 }
 
 fn assertMappedSectionPayloadsContainNoRuntimeOwnedFields() void {
-    const fields = @typeInfo(MappedSections).@"struct".fields;
-    inline for (fields) |field| {
-        const pointer = @typeInfo(field.type).pointer;
+    const info = @typeInfo(MappedSections).@"struct";
+    inline for (info.field_names, info.field_types) |field_name, FieldType| {
+        const pointer = @typeInfo(FieldType).pointer;
         if (pointer.child == u8) continue;
-        assertNoRuntimeOwnedFields(pointer.child, "MappedSections." ++ field.name);
+        assertNoRuntimeOwnedFields(pointer.child, "MappedSections." ++ field_name);
     }
 }
 
@@ -2964,14 +2969,14 @@ fn assertNoRuntimeOwnedFields(comptime T: type, comptime path: []const u8) void 
         .array => |array| assertNoRuntimeOwnedFields(array.child, path ++ "[]"),
         .optional => |optional| assertNoRuntimeOwnedFields(optional.child, path ++ "?"),
         .@"struct" => |info| {
-            inline for (info.fields) |field| {
-                assertNoRuntimeOwnedFields(field.type, path ++ "." ++ field.name);
+            inline for (info.field_names, info.field_types) |field_name, FieldType| {
+                assertNoRuntimeOwnedFields(FieldType, path ++ "." ++ field_name);
             }
         },
         .@"union" => |info| {
             if (info.tag_type) |tag_type| assertFixedTagInteger(tag_type, path);
-            inline for (info.fields) |field| {
-                assertNoRuntimeOwnedFields(field.type, path ++ "." ++ field.name);
+            inline for (info.field_names, info.field_types) |field_name, FieldType| {
+                assertNoRuntimeOwnedFields(FieldType, path ++ "." ++ field_name);
             }
         },
         .pointer => @compileError(path ++ " contains pointer or slice type " ++ @typeName(T)),
@@ -2982,6 +2987,7 @@ fn assertNoRuntimeOwnedFields(comptime T: type, comptime path: []const u8) void 
         .frame,
         .@"anyframe",
         .vector,
+        .spirv,
         .type,
         => @compileError(path ++ " contains non-durable type " ++ @typeName(T)),
     }
@@ -3009,11 +3015,11 @@ fn testModuleDigest(byte: u8) checked_names.CheckedModuleDigest {
 fn testProcedureTemplate(proc_base: u32, template: u32) checked_names.ProcTemplate {
     var proc_template: checked_names.ProcTemplate = undefined;
     @field(proc_template, "arti" ++ "f" ++ "act") = .{};
-    proc_template.proc_base = @enumFromInt(proc_base);
-    proc_template.template = @enumFromInt(template);
+    proc_template.proc_base = @fromBackingInt(@intCast(proc_base));
+    proc_template.template = @fromBackingInt(@intCast(template));
     return proc_template;
 }
 
 fn zeroHash() [32]u8 {
-    return [_]u8{0} ** 32;
+    return @as([32]u8, @splat(0));
 }

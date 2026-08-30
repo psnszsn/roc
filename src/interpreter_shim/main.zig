@@ -154,7 +154,7 @@ fn evaluateEntrypointInView(
     arg_ptr: ?*anyopaque,
 ) ShimError!void {
     const entrypoint = entrypointForOrdinal(view, entry_idx) orelse {
-        if (builtin.mode == .Debug) {
+        if (builtin.mode == .debug) {
             std.debug.panic("LIR shim invariant violated: missing platform entrypoint ordinal {d}", .{entry_idx});
         }
         unreachable;

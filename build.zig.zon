@@ -1,7 +1,7 @@
 .{
     .name = .roc,
     .version = "0.0.0",
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0-dev.1884+841dd0eb8",
     // CPU baseline notes for each dependency.
     //
     // Dependencies fall into two groups that behave differently under `-Dcpu`:
@@ -31,7 +31,7 @@
             .hash = "afl_kit-0.1.0-NdJ3csgfAABGuiQ4P99kFuaVSy4DHMilISiGF_VKX3xl",
             .lazy = true,
         },
-        // The `roc_deps_*` archives below carry prebuilt LLVM, LLD, Binaryen and
+        // The `roc_deps_*` artifacts below carry prebuilt LLVM, LLD, Binaryen and
         // zlib. Every one of those libraries is plain baseline x86-64 except
         // LLVM's vendored BLAKE3, which does textbook runtime dispatch:
         // `blake3_dispatch.c` runs cpuid/xgetbv, caches the answer in
@@ -41,7 +41,7 @@
         // all, so they have nothing to dispatch and give up nothing by running
         // at baseline.
         //
-        // These archives also ship a libzstd, but roc does not link it: only
+        // These artifacts also ship a libzstd, but roc does not link it: only
         // `z` is linked by name from these prebuilts, and `llvm_libs` in
         // build.zig does not name zstd. Roc's zstd is the source dependency
         // below.
@@ -74,8 +74,7 @@
             .lazy = true,
         },
         .roc_deps_x86_64_linux_musl = .{
-            .url = "https://github.com/roc-lang/roc-bootstrap/releases/download/zig-0.16.0-binaryen/x86_64-linux-musl.tar.xz",
-            .hash = "N-V-__8AAGJLMhhn8pu3uyxtKTIlha8CxCjE6TNpLYvvj-cz",
+            .path = "../roc-bootstrap/out/x86_64-linux-musl-baseline",
             .lazy = true,
         },
         .roc_deps_x86_64_macos_none = .{
@@ -93,8 +92,7 @@
         // which is already the natural SSE2 lowering. A lower `-Dcpu` costs it
         // nothing.
         .bytebox = .{
-            .url = "https://github.com/lukewilliamboswell/bytebox/archive/88a4b79230eece88030e6779f69ed9683906c02a.tar.gz",
-            .hash = "bytebox-0.0.1-SXc2saRyDwDEw8AkDhp4Hfmd9ZhRmMnIzS7FfzDCmc8r",
+            .path = "vendor/bytebox",
         },
         // Used for `roc bundle`, `roc unbundle`, and downloading .tar.zst bundles.
         //

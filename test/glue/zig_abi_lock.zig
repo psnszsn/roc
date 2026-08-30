@@ -49,27 +49,33 @@ fn lockStruct(
         @compileError("generated " ++ what ++ " alignment differs from builtins");
     }
 
-    const generated_fields = @typeInfo(Generated).@"struct".fields;
-    const canonical_fields = @typeInfo(Canonical).@"struct".fields;
-    if (generated_fields.len != canonical_fields.len) {
+    const generated_info = @typeInfo(Generated).@"struct";
+    const canonical_info = @typeInfo(Canonical).@"struct";
+    if (generated_info.field_names.len != canonical_info.field_names.len) {
         @compileError("generated " ++ what ++ " field count differs from builtins");
     }
-    if (generated_fields.len != generated_field_names.len) {
+    if (generated_info.field_names.len != generated_field_names.len) {
         @compileError("generated " ++ what ++ " field list is out of date in zig_abi_lock.zig");
     }
 
-    inline for (generated_fields, canonical_fields, generated_field_names) |gf, cf, expected_name| {
-        if (!std.mem.eql(u8, gf.name, expected_name)) {
+    inline for (
+        generated_info.field_names,
+        generated_info.field_types,
+        canonical_info.field_names,
+        canonical_info.field_types,
+        generated_field_names,
+    ) |generated_name, generated_type, canonical_name, canonical_type, expected_name| {
+        if (!std.mem.eql(u8, generated_name, expected_name)) {
             @compileError("generated " ++ what ++ " field order changed: expected " ++
-                expected_name ++ ", found " ++ gf.name);
+                expected_name ++ ", found " ++ generated_name);
         }
-        if (@offsetOf(Generated, gf.name) != @offsetOf(Canonical, cf.name)) {
-            @compileError("generated " ++ what ++ "." ++ gf.name ++ " offset differs from builtins " ++
-                what ++ "." ++ cf.name);
+        if (@offsetOf(Generated, generated_name) != @offsetOf(Canonical, canonical_name)) {
+            @compileError("generated " ++ what ++ "." ++ generated_name ++ " offset differs from builtins " ++
+                what ++ "." ++ canonical_name);
         }
-        if (@sizeOf(gf.type) != @sizeOf(cf.type)) {
-            @compileError("generated " ++ what ++ "." ++ gf.name ++ " size differs from builtins " ++
-                what ++ "." ++ cf.name);
+        if (@sizeOf(generated_type) != @sizeOf(canonical_type)) {
+            @compileError("generated " ++ what ++ "." ++ generated_name ++ " size differs from builtins " ++
+                what ++ "." ++ canonical_name);
         }
     }
 }
@@ -79,26 +85,31 @@ fn lockStruct(
 /// identical after substituting `*RocHost` for `*RocOps` in the self-pointer
 /// position.
 fn lockRocHost() void {
-    const host_fields = @typeInfo(abi.RocHost).@"struct".fields;
-    const ops_fields = @typeInfo(RocOps).@"struct".fields;
+    const host_info = @typeInfo(abi.RocHost).@"struct";
+    const ops_info = @typeInfo(RocOps).@"struct";
 
     // RocOps = RocHost prefix + hosted_fns.
-    if (host_fields.len + 1 != ops_fields.len) {
+    if (host_info.field_names.len + 1 != ops_info.field_names.len) {
         @compileError("generated RocHost field count is not RocOps minus hosted_fns");
     }
-    if (!std.mem.eql(u8, ops_fields[ops_fields.len - 1].name, "hosted_fns")) {
+    if (!std.mem.eql(u8, ops_info.field_names[ops_info.field_names.len - 1], "hosted_fns")) {
         @compileError("RocOps no longer ends with hosted_fns; update ZigGlue's RocHost and this lock");
     }
 
-    inline for (host_fields, ops_fields[0..host_fields.len]) |hf, of| {
-        if (!std.mem.eql(u8, hf.name, of.name)) {
-            @compileError("generated RocHost field " ++ hf.name ++ " does not match RocOps field " ++ of.name);
+    inline for (
+        host_info.field_names,
+        host_info.field_types,
+        ops_info.field_names[0..host_info.field_names.len],
+        ops_info.field_types[0..host_info.field_names.len],
+    ) |host_name, host_type, ops_name, ops_type| {
+        if (!std.mem.eql(u8, host_name, ops_name)) {
+            @compileError("generated RocHost field " ++ host_name ++ " does not match RocOps field " ++ ops_name);
         }
-        if (@offsetOf(abi.RocHost, hf.name) != @offsetOf(RocOps, of.name)) {
-            @compileError("generated RocHost." ++ hf.name ++ " offset differs from RocOps");
+        if (@offsetOf(abi.RocHost, host_name) != @offsetOf(RocOps, ops_name)) {
+            @compileError("generated RocHost." ++ host_name ++ " offset differs from RocOps");
         }
-        if (hf.type != of.type and !fnPointersMatchModuloSelf(hf.type, of.type)) {
-            @compileError("generated RocHost." ++ hf.name ++ " signature differs from RocOps." ++ of.name);
+        if (host_type != ops_type and !fnPointersMatchModuloSelf(host_type, ops_type)) {
+            @compileError("generated RocHost." ++ host_name ++ " signature differs from RocOps." ++ ops_name);
         }
     }
 }
@@ -124,18 +135,18 @@ fn lockErasedCallable() void {
         @compileError("generated RocErasedCallableOnDrop signature differs from builtins.erased_callable");
     }
 
-    const generated_fields = @typeInfo(abi.RocErasedCallablePayload).@"struct".fields;
-    const canonical_fields = @typeInfo(erased_callable.Payload).@"struct".fields;
-    if (generated_fields.len != canonical_fields.len) {
+    const generated_info = @typeInfo(abi.RocErasedCallablePayload).@"struct";
+    const canonical_info = @typeInfo(erased_callable.Payload).@"struct";
+    if (generated_info.field_names.len != canonical_info.field_names.len) {
         @compileError("generated RocErasedCallablePayload field count differs from builtins");
     }
-    inline for (generated_fields, canonical_fields) |gf, cf| {
-        if (!std.mem.eql(u8, gf.name, cf.name)) {
-            @compileError("generated RocErasedCallablePayload field " ++ gf.name ++
-                " does not match builtins field " ++ cf.name);
+    inline for (generated_info.field_names, canonical_info.field_names) |generated_name, canonical_name| {
+        if (!std.mem.eql(u8, generated_name, canonical_name)) {
+            @compileError("generated RocErasedCallablePayload field " ++ generated_name ++
+                " does not match builtins field " ++ canonical_name);
         }
-        if (@offsetOf(abi.RocErasedCallablePayload, gf.name) != @offsetOf(erased_callable.Payload, cf.name)) {
-            @compileError("generated RocErasedCallablePayload." ++ gf.name ++ " offset differs from builtins");
+        if (@offsetOf(abi.RocErasedCallablePayload, generated_name) != @offsetOf(erased_callable.Payload, canonical_name)) {
+            @compileError("generated RocErasedCallablePayload." ++ generated_name ++ " offset differs from builtins");
         }
     }
     if (@sizeOf(abi.RocErasedCallablePayload) != @sizeOf(erased_callable.Payload)) {
@@ -154,14 +165,14 @@ fn fnPointersMatchModuloSelf(comptime Generated: type, comptime Canonical: type)
     const generated_info = @typeInfo(@typeInfo(Generated).pointer.child).@"fn";
     const canonical_info = @typeInfo(@typeInfo(Canonical).pointer.child).@"fn";
 
-    if (generated_info.params.len != canonical_info.params.len) return false;
+    if (generated_info.param_types.len != canonical_info.param_types.len) return false;
     if (generated_info.return_type != canonical_info.return_type) return false;
-    if (!std.meta.eql(generated_info.calling_convention, canonical_info.calling_convention)) return false;
+    if (!std.meta.eql(generated_info.attrs.@"callconv", canonical_info.attrs.@"callconv")) return false;
 
-    inline for (generated_info.params, canonical_info.params) |generated_param, canonical_param| {
-        if (canonical_param.type == *RocOps) {
-            if (generated_param.type != *abi.RocHost) return false;
-        } else if (generated_param.type != canonical_param.type) {
+    inline for (generated_info.param_types, canonical_info.param_types) |generated_param_type, canonical_param_type| {
+        if (canonical_param_type == *RocOps) {
+            if (generated_param_type != *abi.RocHost) return false;
+        } else if (generated_param_type != canonical_param_type) {
             return false;
         }
     }

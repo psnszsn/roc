@@ -100,8 +100,8 @@ const NominalDeclIndexEntry = struct {
     /// Total order over declaration keys: origin module identity index first,
     /// then statement.
     fn orderByKey(origin_module: base.ModuleIdentity.Idx, statement: u32, entry: @This()) std.math.Order {
-        const lhs_origin = @intFromEnum(origin_module);
-        const rhs_origin = @intFromEnum(entry.origin_module);
+        const lhs_origin = @backingInt(origin_module);
+        const rhs_origin = @backingInt(entry.origin_module);
         if (lhs_origin != rhs_origin) return std.math.order(lhs_origin, rhs_origin);
         return std.math.order(statement, entry.statement);
     }
@@ -125,8 +125,8 @@ pub const Slot = union(enum) {
         const data = std.mem.readInt(u32, buffer[1..5], .little);
 
         switch (tag) {
-            0 => return Slot{ .root = @enumFromInt(data) },
-            1 => return Slot{ .redirect = @enumFromInt(data) },
+            0 => return Slot{ .root = @fromBackingInt(@intCast(data)) },
+            1 => return Slot{ .redirect = @fromBackingInt(@intCast(data)) },
             else => return error.InvalidTag,
         }
     }
@@ -243,7 +243,7 @@ pub const Store = struct {
     }
 
     pub fn extendToVar(self: *Self, var_: Var) Allocator.Error!void {
-        const needed_len = @intFromEnum(var_) + 1;
+        const needed_len = @backingInt(var_) + 1;
         while (self.slots.backing.len() < needed_len) {
             // Create a placeholder flex variable for each new slot
             try self.fresh();
@@ -546,7 +546,7 @@ pub const Store = struct {
     /// value so rollback can restore it; a failed journal append is propagated
     /// rather than risk a type store the trail can no longer faithfully undo.
     fn setSlot(self: *Self, idx: SlotStore.Idx, val: Slot) Allocator.Error!void {
-        if (self.savepoint_active and @intFromEnum(idx) < self.savepoint_baseline_slots) {
+        if (self.savepoint_active and @backingInt(idx) < self.savepoint_baseline_slots) {
             try self.slot_trail.append(self.gpa, .{ .idx = idx, .old = self.slots.get(idx) });
         }
         self.slots.set(idx, val);
@@ -554,7 +554,7 @@ pub const Store = struct {
 
     /// In-place descriptor write. See setSlot.
     fn setDesc(self: *Self, idx: DescStore.Idx, val: Desc) Allocator.Error!void {
-        if (self.savepoint_active and @intFromEnum(idx) < self.savepoint_baseline_descs) {
+        if (self.savepoint_active and @backingInt(idx) < self.savepoint_baseline_descs) {
             try self.desc_trail.append(self.gpa, .{ .idx = idx, .old = self.descs.get(idx) });
         }
         self.descs.set(idx, val);
@@ -562,7 +562,7 @@ pub const Store = struct {
 
     /// In-place equivalence-class root metadata write. See setSlot.
     fn setRootMeta(self: *Self, idx: DescStore.Idx, val: RootMeta) Allocator.Error!void {
-        if (self.savepoint_active and @intFromEnum(idx) < self.savepoint_baseline_descs) {
+        if (self.savepoint_active and @backingInt(idx) < self.savepoint_baseline_descs) {
             try self.root_meta_trail.append(self.gpa, .{ .idx = idx, .old = self.getRootMeta(idx) });
         }
         self.root_metas.set(rootMetaIdx(idx), val);
@@ -570,7 +570,7 @@ pub const Store = struct {
 
     fn setUnionRank(self: *Self, storage_var: Var, rank: u8) Allocator.Error!void {
         const slot_idx = Self.varToSlotIdx(storage_var);
-        if (self.savepoint_active and @intFromEnum(slot_idx) < self.savepoint_baseline_slots) {
+        if (self.savepoint_active and @backingInt(slot_idx) < self.savepoint_baseline_slots) {
             try self.union_rank_trail.append(self.gpa, .{ .idx = slot_idx, .old = self.getUnionRank(storage_var) });
         }
         self.union_ranks.set(unionRankIdx(slot_idx), rank);
@@ -592,7 +592,7 @@ pub const Store = struct {
         const meta_idx = self.root_metas.appendAssumeCapacity(.{
             .checked_var = checked_var,
         });
-        std.debug.assert(@intFromEnum(meta_idx) == @intFromEnum(desc_idx));
+        std.debug.assert(@backingInt(meta_idx) == @backingInt(desc_idx));
         return desc_idx;
     }
 
@@ -644,7 +644,7 @@ pub const Store = struct {
         try self.union_ranks.items.ensureUnusedCapacity(self.gpa, 1);
         const slot_idx = self.slots.appendAssumeCapacity(.{ .redirect = var_ });
         const rank_idx = self.union_ranks.appendAssumeCapacity(0);
-        std.debug.assert(@intFromEnum(rank_idx) == @intFromEnum(slot_idx));
+        std.debug.assert(@backingInt(rank_idx) == @backingInt(slot_idx));
         return Self.slotIdxToVar(slot_idx);
     }
 
@@ -652,30 +652,30 @@ pub const Store = struct {
     pub fn register(self: *Self, desc: Desc) std.mem.Allocator.Error!Var {
         try self.slots.backing.items.ensureUnusedCapacity(self.gpa, 1);
         try self.union_ranks.items.ensureUnusedCapacity(self.gpa, 1);
-        const slot_idx: SlotStore.Idx = @enumFromInt(@as(u32, @intCast(self.slots.backing.len())));
+        const slot_idx: SlotStore.Idx = @fromBackingInt(@intCast(@as(u32, @intCast(self.slots.backing.len()))));
         const checked_var = Self.slotIdxToVar(slot_idx);
         const desc_idx = try self.appendClass(desc, checked_var);
         const inserted_slot_idx = self.slots.appendAssumeCapacity(.{ .root = desc_idx });
         const rank_idx = self.union_ranks.appendAssumeCapacity(0);
         std.debug.assert(inserted_slot_idx == slot_idx);
-        std.debug.assert(@intFromEnum(rank_idx) == @intFromEnum(slot_idx));
+        std.debug.assert(@backingInt(rank_idx) == @backingInt(slot_idx));
         return Self.slotIdxToVar(slot_idx);
     }
 
     /// Create a new variable with the provided content assuming there is capacity
     pub fn appendFromContentAssumeCapacity(self: *Self, content: Content, rank: Rank) Var {
-        const slot_idx: SlotStore.Idx = @enumFromInt(@as(u32, @intCast(self.slots.backing.len())));
+        const slot_idx: SlotStore.Idx = @fromBackingInt(@intCast(@as(u32, @intCast(self.slots.backing.len()))));
         const checked_var = Self.slotIdxToVar(slot_idx);
         const desc_idx = self.descs.appendAssumeCapacity(.{
             .content = content,
             .rank = rank,
         });
         const meta_idx = self.root_metas.appendAssumeCapacity(.{ .checked_var = checked_var });
-        std.debug.assert(@intFromEnum(meta_idx) == @intFromEnum(desc_idx));
+        std.debug.assert(@backingInt(meta_idx) == @backingInt(desc_idx));
         const inserted_slot_idx = self.slots.appendAssumeCapacity(.{ .root = desc_idx });
         const rank_idx = self.union_ranks.appendAssumeCapacity(0);
         std.debug.assert(inserted_slot_idx == slot_idx);
-        std.debug.assert(@intFromEnum(rank_idx) == @intFromEnum(slot_idx));
+        std.debug.assert(@backingInt(rank_idx) == @backingInt(slot_idx));
         return Self.slotIdxToVar(slot_idx);
     }
 
@@ -692,7 +692,7 @@ pub const Store = struct {
     /// (after the declared scheme was copied out of them) so the def's body
     /// check can generate the annotation again.
     pub fn resetVarToUnbound(self: *Self, target_var: Var, rank: Rank) Allocator.Error!void {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         const storage = self.resolveStorageRoot(target_var);
         const desc_idx = try self.appendClass(.{
             .content = .{ .flex = Flex.init() },
@@ -716,14 +716,14 @@ pub const Store = struct {
     /// over this function, which correctly propagates rank, unless you already
     /// know the two vars are of  the same rank.
     pub fn dangerousSetVarDesc(self: *Self, target_var: Var, desc: Desc) Allocator.Error!void {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         const resolved = self.resolveVar(target_var);
         try self.setDesc(resolved.desc_idx, desc);
     }
 
     /// Set a type variable to the provided content
     pub fn setVarContent(self: *Self, target_var: Var, content: Content) Allocator.Error!void {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         const resolved = self.resolveVar(target_var);
         var desc = resolved.desc;
         desc.content = content;
@@ -734,7 +734,7 @@ pub const Store = struct {
     /// Close an otherwise-unresolved variable to the empty tag union while
     /// retaining the checker's authoritative defaulting decision.
     pub fn setVarToEmptyTagUnionDefault(self: *Self, target_var: Var) Allocator.Error!void {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         const resolved = self.resolveVar(target_var);
         var desc = resolved.desc;
         desc.content = .{ .structure = .empty_tag_union };
@@ -749,7 +749,7 @@ pub const Store = struct {
     /// caller mirroring the marker into a durable record writes one entry per
     /// class rather than one per occurrence.
     pub fn markVarStaticDispatchRejected(self: *Self, target_var: Var) Allocator.Error!bool {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         const resolved = self.resolveVar(target_var);
         if (resolved.desc.flags.static_dispatch_rejected) return false;
         var desc = resolved.desc;
@@ -761,7 +761,7 @@ pub const Store = struct {
     /// Whether checking rejected a static-dispatch obligation on `target_var`'s
     /// equivalence class.
     pub fn varStaticDispatchRejected(self: *const Self, target_var: Var) bool {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
         return self.resolveVar(target_var).desc.flags.static_dispatch_rejected;
     }
 
@@ -805,8 +805,8 @@ pub const Store = struct {
     /// over this function, which correctly propagates rank, unless you already
     /// know the two vars are of the same rank.
     pub fn dangerousSetVarRedirect(self: *Self, comptime rule: RedirectRule, target_var: Var, redirect_to: Var) Allocator.Error!void {
-        std.debug.assert(@intFromEnum(target_var) < self.len());
-        std.debug.assert(@intFromEnum(redirect_to) < self.len());
+        std.debug.assert(@backingInt(target_var) < self.len());
+        std.debug.assert(@backingInt(redirect_to) < self.len());
         const target_storage = self.resolveStorageRoot(target_var);
         const redirect_storage = self.resolveStorageRoot(redirect_to);
         // Joining a class to itself is always an invalid invocation of a
@@ -814,8 +814,8 @@ pub const Store = struct {
         if (target_storage.storage_var == redirect_storage.storage_var) {
             if (std.debug.runtime_safety) {
                 std.debug.panic("self-redirect of equivalent vars {d} and {d} under rule {s}", .{
-                    @intFromEnum(target_var),
-                    @intFromEnum(redirect_to),
+                    @backingInt(target_var),
+                    @backingInt(redirect_to),
                     @tagName(rule),
                 });
             }
@@ -1100,7 +1100,7 @@ pub const Store = struct {
     /// Use this for index-based iteration when unification may trigger reallocations.
     pub fn getVarAt(self: *const Self, range: VarSafeList.Range, offset: u32) Var {
         std.debug.assert(offset < range.count);
-        const idx: VarSafeList.Idx = @enumFromInt(@intFromEnum(range.start) + offset);
+        const idx: VarSafeList.Idx = @fromBackingInt(@intCast(@backingInt(range.start) + offset));
         return self.vars.get(idx).*;
     }
 
@@ -1113,7 +1113,7 @@ pub const Store = struct {
     /// Use this for index-based iteration when checking can trigger reallocations.
     pub fn getRecordFieldAt(self: *const Self, range: RecordFieldSafeMultiList.Range, offset: u32) RecordField {
         std.debug.assert(offset < range.count);
-        const idx: RecordFieldSafeMultiList.Idx = @enumFromInt(@intFromEnum(range.start) + offset);
+        const idx: RecordFieldSafeMultiList.Idx = @fromBackingInt(@intCast(@backingInt(range.start) + offset));
         return self.record_fields.get(idx);
     }
 
@@ -1131,7 +1131,7 @@ pub const Store = struct {
     /// Use this for index-based iteration when checking can trigger reallocations.
     pub fn getTagAt(self: *const Self, range: TagSafeMultiList.Range, offset: u32) Tag {
         std.debug.assert(offset < range.count);
-        const idx: TagSafeMultiList.Idx = @enumFromInt(@intFromEnum(range.start) + offset);
+        const idx: TagSafeMultiList.Idx = @fromBackingInt(@intCast(@backingInt(range.start) + offset));
         return self.tags.get(idx);
     }
 
@@ -1144,7 +1144,7 @@ pub const Store = struct {
     /// Use this for index-based iteration when checking can trigger reallocations.
     pub fn getInterpolationPartAt(self: *const Self, range: InterpolationPartMetadata.SafeList.Range, offset: u32) InterpolationPartMetadata {
         std.debug.assert(offset < range.count);
-        const idx: InterpolationPartMetadata.SafeList.Idx = @enumFromInt(@intFromEnum(range.start) + offset);
+        const idx: InterpolationPartMetadata.SafeList.Idx = @fromBackingInt(@intCast(@backingInt(range.start) + offset));
         return self.interpolation_parts.get(idx).*;
     }
 
@@ -1574,7 +1574,7 @@ pub const Store = struct {
             try class_members.ensureTotalCapacity(self.gpa, @intCast(self.len()));
             var raw_var: u32 = 0;
             while (raw_var < self.len()) : (raw_var += 1) {
-                const candidate: Var = @enumFromInt(raw_var);
+                const candidate: Var = @fromBackingInt(@intCast(raw_var));
                 if (self.resolveStorageRoot(candidate).storage_var == a.storage_var) {
                     class_members.appendAssumeCapacity(candidate);
                 }
@@ -1642,19 +1642,19 @@ pub const Store = struct {
     // helpers //
 
     pub fn varToSlotIdx(var_: Var) SlotStore.Idx {
-        return @enumFromInt(@intFromEnum(var_));
+        return @fromBackingInt(@intCast(@backingInt(var_)));
     }
 
     fn rootMetaIdx(desc_idx: DescStore.Idx) RootMetaSafeMultiList.Idx {
-        return @enumFromInt(@intFromEnum(desc_idx));
+        return @fromBackingInt(@intCast(@backingInt(desc_idx)));
     }
 
     fn unionRankIdx(slot_idx: SlotStore.Idx) UnionRankSafeList.Idx {
-        return @enumFromInt(@intFromEnum(slot_idx));
+        return @fromBackingInt(@intCast(@backingInt(slot_idx)));
     }
 
     fn slotIdxToVar(slot_idx: SlotStore.Idx) Var {
-        return @enumFromInt(@intFromEnum(slot_idx));
+        return @fromBackingInt(@intCast(@backingInt(slot_idx)));
     }
 
     // serialization //
@@ -1834,23 +1834,23 @@ const SlotStore = struct {
     /// Insert a new slot into the store
     fn insert(self: *Self, gpa: Allocator, typ: Slot) std.mem.Allocator.Error!Idx {
         const safe_idx = try self.backing.append(gpa, typ);
-        return @enumFromInt(@intFromEnum(safe_idx));
+        return @fromBackingInt(@intCast(@backingInt(safe_idx)));
     }
 
     /// Insert a value into the store assuming there is capacity
     fn appendAssumeCapacity(self: *Self, typ: Slot) Idx {
         const safe_idx = self.backing.appendAssumeCapacity(typ);
-        return @enumFromInt(@intFromEnum(safe_idx));
+        return @fromBackingInt(@intCast(@backingInt(safe_idx)));
     }
 
     /// Set a value in the store
     pub fn set(self: *Self, idx: Idx, val: Slot) void {
-        self.backing.set(@enumFromInt(@intFromEnum(idx)), val);
+        self.backing.set(@fromBackingInt(@intCast(@backingInt(idx))), val);
     }
 
     /// Get a value from the store
     fn get(self: *const Self, idx: Idx) Slot {
-        return self.backing.get(@enumFromInt(@intFromEnum(idx))).*;
+        return self.backing.get(@fromBackingInt(@intCast(@backingInt(idx)))).*;
     }
 
     /// Serialize this SlotStore to the given CompactWriter
@@ -1943,23 +1943,23 @@ const DescStore = struct {
     /// Insert a value into the store
     fn insert(self: *Self, gpa: Allocator, typ: Desc) std.mem.Allocator.Error!Idx {
         const safe_idx = try self.backing.append(gpa, typ);
-        return @enumFromInt(@intFromEnum(safe_idx));
+        return @fromBackingInt(@intCast(@backingInt(safe_idx)));
     }
 
     /// Appends a value to the store assuming there is capacity
     fn appendAssumeCapacity(self: *Self, typ: Desc) Idx {
         const safe_idx = self.backing.appendAssumeCapacity(typ);
-        return @enumFromInt(@intFromEnum(safe_idx));
+        return @fromBackingInt(@intCast(@backingInt(safe_idx)));
     }
 
     /// Set a value in the store
     fn set(self: *Self, idx: Idx, val: Desc) void {
-        self.backing.set(@enumFromInt(@intFromEnum(idx)), val);
+        self.backing.set(@fromBackingInt(@intCast(@backingInt(idx))), val);
     }
 
     /// Get a value from the store
     fn get(self: *const Self, idx: Idx) Desc {
-        return self.backing.get(@enumFromInt(@intFromEnum(idx)));
+        return self.backing.get(@fromBackingInt(@intCast(@backingInt(idx))));
     }
 
     /// Serialize this DescStore to the given CompactWriter
@@ -2144,9 +2144,9 @@ test "dangerousSetVarRedirect requires a declared rule by signature" {
     // exhaustive so only declared members can be passed. Removing the rule
     // parameter fails this test.
     const fn_info = @typeInfo(@TypeOf(Store.dangerousSetVarRedirect)).@"fn";
-    try std.testing.expectEqual(4, fn_info.params.len);
-    try std.testing.expectEqual(Store.RedirectRule, fn_info.params[1].type.?);
-    comptime std.debug.assert(@typeInfo(Store.RedirectRule).@"enum".is_exhaustive);
+    try std.testing.expectEqual(4, fn_info.param_types.len);
+    try std.testing.expectEqual(Store.RedirectRule, fn_info.param_types[1].?);
+    comptime std.debug.assert(@typeInfo(Store.RedirectRule).@"enum".mode == .exhaustive);
 }
 
 test "savepoint clone cross-check is compiled in for test builds" {
@@ -2378,8 +2378,8 @@ test "nominal declaration table: register, lookup, upsert" {
     const backing_b = try store.fresh();
     const backing_c = try store.fresh();
 
-    const origin_0: base.ModuleIdentity.Idx = @enumFromInt(1);
-    const origin_1: base.ModuleIdentity.Idx = @enumFromInt(2);
+    const origin_0: base.ModuleIdentity.Idx = @fromBackingInt(@intCast(1));
+    const origin_1: base.ModuleIdentity.Idx = @fromBackingInt(@intCast(2));
 
     // Register out of key order to exercise sorted insertion.
     const idx_b = try store.registerNominalDecl(try testNominalDecl(origin_1, 5, backing_b));
@@ -2433,7 +2433,7 @@ test "nominal declaration table: CompactWriter roundtrip" {
     const formal = try original.freshFromContent(Content{ .rigid = Rigid.init(@bitCast(@as(u32, 7))) });
     const backing = try original.freshFromContent(Content{ .structure = .empty_record });
 
-    const origin: base.ModuleIdentity.Idx = @enumFromInt(3);
+    const origin: base.ModuleIdentity.Idx = @fromBackingInt(@intCast(3));
     var decl = try testNominalDecl(origin, 11, backing);
     decl.formals = try original.appendVars(&.{formal});
     _ = try original.registerNominalDecl(decl);

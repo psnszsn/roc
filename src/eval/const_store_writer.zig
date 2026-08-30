@@ -574,7 +574,7 @@ pub const Writer = struct {
         layout_idx: layout.Idx,
         value: Value,
     ) Allocator.Error!checked.ConstFnId {
-        const set = self.program.fn_sets.items[@intFromEnum(set_id)];
+        const set = self.program.fn_sets.items[@backingInt(set_id)];
         const tag_base = self.resolveTagBase(layout_idx, value);
         const variant = self.selectFnVariant(set, tag_base.layout_idx, tag_base.value);
         const captures = try self.storeCaptures(variant.captures, variant.payload_layout, tag_base.value);
@@ -595,7 +595,7 @@ pub const Writer = struct {
         set_id: LirProgram.ErasedFnsId,
         value: Value,
     ) Allocator.Error!checked.ConstFnId {
-        const set = self.program.erased_fns.items[@intFromEnum(set_id)];
+        const set = self.program.erased_fns.items[@backingInt(set_id)];
         const data_ptr = self.readErasedCallablePointer(value);
         const resolved = self.erased_callable_resolver.resolve(self.erased_callable_resolver.context, data_ptr);
         for (set.entries) |entry| {
@@ -860,7 +860,7 @@ pub const Writer = struct {
         layout_idx: layout.Idx,
         value: Value,
     ) Allocator.Error!void {
-        const set = self.program.fn_sets.items[@intFromEnum(set_id)];
+        const set = self.program.fn_sets.items[@backingInt(set_id)];
         const tag_base = self.resolveTagBase(layout_idx, value);
         const variant = self.selectFnVariant(set, tag_base.layout_idx, tag_base.value);
         try self.collectCaptureStrBackings(variant.captures, variant.payload_layout, tag_base.value);
@@ -871,7 +871,7 @@ pub const Writer = struct {
         set_id: LirProgram.ErasedFnsId,
         value: Value,
     ) Allocator.Error!void {
-        const set = self.program.erased_fns.items[@intFromEnum(set_id)];
+        const set = self.program.erased_fns.items[@backingInt(set_id)];
         const data_ptr = self.readErasedCallablePointer(value);
         const resolved = self.erased_callable_resolver.resolve(self.erased_callable_resolver.context, data_ptr);
         for (set.entries) |entry| {
@@ -1059,14 +1059,14 @@ pub const Writer = struct {
                 .ptr,
                 => 0,
             },
-            .plan = @intFromEnum(plan_id),
-            .layout = @intFromEnum(layout_idx),
+            .plan = @backingInt(plan_id),
+            .layout = @backingInt(layout_idx),
             .storage = storage,
         } else null;
     }
 
     fn constPlan(self: *const Writer, id: LirProgram.ConstPlanId) LirProgram.ConstPlan {
-        const raw = @intFromEnum(id);
+        const raw = @backingInt(id);
         if (raw >= self.program.const_plans.items.len) writerInvariant("const plan id is out of range");
         return self.program.const_plans.items[raw];
     }
@@ -1126,7 +1126,7 @@ fn checkedU32(value: usize, comptime message: []const u8) u32 {
 }
 
 fn writerInvariant(comptime message: []const u8) noreturn {
-    if (@import("builtin").mode == .Debug) {
+    if (@import("builtin").mode == .debug) {
         std.debug.panic("ConstStore writer invariant violated: {s}", .{message});
     }
     unreachable;
@@ -1208,7 +1208,7 @@ test "const store writer pointer memoization is scoped to one root" {
 
     var program = try LirProgram.Result.init(testing.allocator, .u64);
     defer program.deinit();
-    const str_plan: LirProgram.ConstPlanId = @enumFromInt(program.const_plans.items.len);
+    const str_plan: LirProgram.ConstPlanId = @fromBackingInt(@intCast(program.const_plans.items.len));
     try program.const_plans.append(testing.allocator, .str);
 
     var writer = Writer.init(testing.allocator, &artifact, &program);
@@ -1256,11 +1256,11 @@ test "const store writer stores 20KB scalar lists as shared blob" {
     var program = try LirProgram.Result.init(testing.allocator, .u64);
     defer program.deinit();
 
-    const str_plan: LirProgram.ConstPlanId = @enumFromInt(program.const_plans.items.len);
+    const str_plan: LirProgram.ConstPlanId = @fromBackingInt(@intCast(program.const_plans.items.len));
     try program.const_plans.append(testing.allocator, .str);
-    const scalar_plan: LirProgram.ConstPlanId = @enumFromInt(program.const_plans.items.len);
+    const scalar_plan: LirProgram.ConstPlanId = @fromBackingInt(@intCast(program.const_plans.items.len));
     try program.const_plans.append(testing.allocator, .scalar);
-    const list_plan: LirProgram.ConstPlanId = @enumFromInt(program.const_plans.items.len);
+    const list_plan: LirProgram.ConstPlanId = @fromBackingInt(@intCast(program.const_plans.items.len));
     try program.const_plans.append(testing.allocator, .{ .list = scalar_plan });
     const u8_list_layout = try program.layouts.insertLayout(layout.Layout.list(.u8));
     const u16_list_layout = try program.layouts.insertLayout(layout.Layout.list(.u16));

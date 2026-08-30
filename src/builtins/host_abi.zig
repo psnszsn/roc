@@ -75,18 +75,18 @@ pub const extern_host = struct {
 comptime {
     // extern_host and shim_symbols.runtime_set must list the same symbols in
     // the same order.
-    const decls = @typeInfo(extern_host).@"struct".decls;
-    if (decls.len != shim_symbols.runtime_set.len) {
+    const decl_names = @typeInfo(extern_host).@"struct".decl_names;
+    if (decl_names.len != shim_symbols.runtime_set.len) {
         @compileError("host_abi.extern_host is out of sync with shim_symbols.runtime_set");
     }
-    for (decls, shim_symbols.runtime_set) |decl, name| {
-        if (decl.name.len != name.len) {
-            @compileError("host_abi.extern_host declares " ++ decl.name ++
+    for (decl_names, shim_symbols.runtime_set) |decl_name, name| {
+        if (decl_name.len != name.len) {
+            @compileError("host_abi.extern_host declares " ++ decl_name ++
                 " where shim_symbols.runtime_set has " ++ name);
         }
-        for (decl.name, name) |decl_byte, name_byte| {
+        for (decl_name, name) |decl_byte, name_byte| {
             if (decl_byte != name_byte) {
-                @compileError("host_abi.extern_host declares " ++ decl.name ++
+                @compileError("host_abi.extern_host declares " ++ decl_name ++
                     " where shim_symbols.runtime_set has " ++ name);
             }
         }

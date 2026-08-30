@@ -220,7 +220,7 @@ pub const Generalizer = struct {
         if (rank_to_generalize == Rank.generalized) return;
 
         std.debug.assert(var_pool.current_rank == rank_to_generalize);
-        const rank_to_generalize_int = @intFromEnum(rank_to_generalize);
+        const rank_to_generalize_int = @backingInt(rank_to_generalize);
 
         // Reset internal state from any previous generalization
         self.reset();
@@ -248,7 +248,7 @@ pub const Generalizer = struct {
         // Process from lowest to highest rank so that lower ranks are finalized first,
         // ensuring we have accurate rank information when processing higher ranks.
         for (self.tmp_var_pool.slice(), 0..) |vars_at_rank, group_rank_int| {
-            const group_rank: Rank = @enumFromInt(group_rank_int);
+            const group_rank: Rank = @fromBackingInt(@intCast(group_rank_int));
             for (vars_at_rank.items) |var_| {
                 _ = try self.adjustRank(var_, group_rank);
             }
@@ -271,7 +271,7 @@ pub const Generalizer = struct {
         for (self.tmp_var_pool.ranks.items[rank_to_generalize_int].items) |rank_var| {
             const resolved = self.store.resolveVar(rank_var);
             if (resolved.is_root) {
-                const resolved_rank_int = @intFromEnum(resolved.desc.rank);
+                const resolved_rank_int = @backingInt(resolved.desc.rank);
                 // Adjustment only lowers ranks; a rank above the one being
                 // generalized means a reducer broke the invariant (see line ~122).
                 std.debug.assert(resolved_rank_int <= rank_to_generalize_int);
@@ -734,7 +734,7 @@ pub const VarPool = struct {
 
     // Ensure the var pool has ranks up to and including `next_rank`
     pub fn ensureRanksThrough(self: *Self, next_rank: Rank) std.mem.Allocator.Error!void {
-        const required_len = @intFromEnum(next_rank) + 1;
+        const required_len = @backingInt(next_rank) + 1;
         while (self.ranks.items.len < required_len) {
             try self.ranks.append(try VarArrayList.initCapacity(self.allocator, 16));
         }
@@ -742,24 +742,24 @@ pub const VarPool = struct {
 
     // Get a slice of ranks, up to and including the current rank
     pub fn slice(self: *Self) []const VarArrayList {
-        return self.ranks.items[0 .. @intFromEnum(self.current_rank) + 1];
+        return self.ranks.items[0 .. @backingInt(self.current_rank) + 1];
     }
 
     // Get a slice of ranks, up to, but not including, the current rank
     pub fn sliceExceptCurrentRank(self: *Self) []const VarArrayList {
-        return self.ranks.items[0..@intFromEnum(self.current_rank)];
+        return self.ranks.items[0..@backingInt(self.current_rank)];
     }
 
     pub fn pushRank(self: *Self) std.mem.Allocator.Error!void {
         self.current_rank = self.current_rank.next();
-        if (@intFromEnum(self.current_rank) >= self.ranks.items.len) {
+        if (@backingInt(self.current_rank) >= self.ranks.items.len) {
             try self.ranks.append(try VarArrayList.initCapacity(self.allocator, 16));
         }
     }
 
     pub fn popRank(self: *Self) void {
-        if (@intFromEnum(self.current_rank) > 0) {
-            self.ranks.items[@intFromEnum(self.current_rank)].clearRetainingCapacity();
+        if (@backingInt(self.current_rank) > 0) {
+            self.ranks.items[@backingInt(self.current_rank)].clearRetainingCapacity();
             self.current_rank = self.current_rank.prev();
         }
     }
@@ -768,53 +768,53 @@ pub const VarPool = struct {
     /// Both pools must be at the same current_rank.
     pub fn mergeFrom(self: *Self, other: *const VarPool) std.mem.Allocator.Error!void {
         std.debug.assert(self.current_rank == other.current_rank);
-        const upper = @intFromEnum(self.current_rank) + 1;
+        const upper = @backingInt(self.current_rank) + 1;
         for (0..upper) |rank_idx| {
             try self.ranks.items[rank_idx].appendSlice(other.ranks.items[rank_idx].items);
         }
     }
 
     pub fn addVarToRank(self: *Self, variable: Var, rank: Rank) Allocator.Error!void {
-        if (builtin.mode == .Debug) {
-            if (@intFromEnum(rank) > @intFromEnum(self.current_rank)) {
-                std.debug.panic("trying to add var at rank {}, but current rank is {}", .{ @intFromEnum(rank), @intFromEnum(self.current_rank) });
+        if (builtin.mode == .debug) {
+            if (@backingInt(rank) > @backingInt(self.current_rank)) {
+                std.debug.panic("trying to add var at rank {}, but current rank is {}", .{ @backingInt(rank), @backingInt(self.current_rank) });
             }
         }
-        try self.ranks.items[@intFromEnum(rank)].append(variable);
+        try self.ranks.items[@backingInt(rank)].append(variable);
     }
 
     pub fn addVarsToRank(self: *Self, variables: []Var, rank: Rank) Allocator.Error!void {
-        if (builtin.mode == .Debug) {
-            if (@intFromEnum(rank) > @intFromEnum(self.current_rank)) {
-                std.debug.panic("trying to add var at rank {}, but current rank is {}", .{ @intFromEnum(rank), @intFromEnum(self.current_rank) });
+        if (builtin.mode == .debug) {
+            if (@backingInt(rank) > @backingInt(self.current_rank)) {
+                std.debug.panic("trying to add var at rank {}, but current rank is {}", .{ @backingInt(rank), @backingInt(self.current_rank) });
             }
         }
-        try self.ranks.items[@intFromEnum(rank)].appendSlice(variables);
+        try self.ranks.items[@backingInt(rank)].appendSlice(variables);
     }
 
     /// Shrink the vars recorded for `rank` back to `new_len`, discarding
     /// entries appended after a speculative probe captured the length—
     /// the rollback counterpart to the `addVarToRank` calls the probe made.
     pub fn shrinkRank(self: *Self, rank: Rank, new_len: usize) void {
-        std.debug.assert(@intFromEnum(rank) <= @intFromEnum(self.current_rank));
-        std.debug.assert(new_len <= self.ranks.items[@intFromEnum(rank)].items.len);
-        self.ranks.items[@intFromEnum(rank)].shrinkRetainingCapacity(new_len);
+        std.debug.assert(@backingInt(rank) <= @backingInt(self.current_rank));
+        std.debug.assert(new_len <= self.ranks.items[@backingInt(rank)].items.len);
+        self.ranks.items[@backingInt(rank)].shrinkRetainingCapacity(new_len);
     }
 
     pub fn getVarsForRank(self: *Self, rank: Rank) []Var {
-        if (builtin.mode == .Debug) {
-            if (@intFromEnum(rank) > @intFromEnum(self.current_rank)) {
-                std.debug.panic("trying to get vars at rank {}, but current rank is {}", .{ @intFromEnum(rank), @intFromEnum(self.current_rank) });
+        if (builtin.mode == .debug) {
+            if (@backingInt(rank) > @backingInt(self.current_rank)) {
+                std.debug.panic("trying to get vars at rank {}, but current rank is {}", .{ @backingInt(rank), @backingInt(self.current_rank) });
             }
         }
-        return self.ranks.items[@intFromEnum(rank)].items;
+        return self.ranks.items[@backingInt(rank)].items;
     }
 };
 
 // helpers for tests //
 
 fn mkVar(n: u32) Var {
-    return @enumFromInt(n);
+    return @fromBackingInt(@intCast(n));
 }
 
 fn expectVarsEqual(actual: []Var, expected: []const Var) error{TestExpectedEqual}!void {
@@ -850,19 +850,19 @@ test "mergeFrom - vars at multiple ranks" {
     try pool_a.pushRank(); // 2
     try pool_a.pushRank(); // 3
     try pool_a.addVarToRank(mkVar(1), .outermost);
-    try pool_a.addVarToRank(mkVar(30), @enumFromInt(3));
+    try pool_a.addVarToRank(mkVar(30), @fromBackingInt(@intCast(3)));
 
     try pool_b.pushRank(); // 1
     try pool_b.pushRank(); // 2
     try pool_b.pushRank(); // 3
     try pool_b.addVarToRank(mkVar(10), .outermost);
-    try pool_b.addVarToRank(mkVar(20), @enumFromInt(2));
+    try pool_b.addVarToRank(mkVar(20), @fromBackingInt(@intCast(2)));
 
     try pool_a.mergeFrom(&pool_b);
 
     try expectVarsEqual(pool_a.getVarsForRank(.outermost), &.{ mkVar(1), mkVar(10) });
-    try expectVarsEqual(pool_a.getVarsForRank(@enumFromInt(2)), &.{mkVar(20)});
-    try expectVarsEqual(pool_a.getVarsForRank(@enumFromInt(3)), &.{mkVar(30)});
+    try expectVarsEqual(pool_a.getVarsForRank(@fromBackingInt(@intCast(2))), &.{mkVar(20)});
+    try expectVarsEqual(pool_a.getVarsForRank(@fromBackingInt(@intCast(3))), &.{mkVar(30)});
 }
 
 // Depth pin for rank adjustment. Generalization visits every var the

@@ -357,7 +357,7 @@ fn importedTypeModule(sibling_env: *const ModuleEnv) ?ImportedTypeModule {
     const type_node_idx = sibling_env.getExposedTypeNodeIndexById(type_ident_in_module) orelse return null;
     return .{
         .source_ident = type_ident_in_module,
-        .statement_idx = @enumFromInt(type_node_idx),
+        .statement_idx = @fromBackingInt(@intCast(type_node_idx)),
     };
 }
 
@@ -373,7 +373,7 @@ pub fn resolveSelectedType(
 ) ?can.CIR.Statement.Idx {
     const source_ident = sibling_env.common.findIdent(qualified_name) orelse return null;
     const type_node_idx = sibling_env.getExposedTypeNodeIndexById(source_ident) orelse return null;
-    return @enumFromInt(type_node_idx);
+    return @fromBackingInt(@intCast(type_node_idx));
 }
 
 fn importedSelectedType(
@@ -446,7 +446,7 @@ pub fn canonicalizeModuleWithSiblings(
         if (result.found_existing) {
             const existing = result.value_ptr.*;
             if (existing.env != pre.module_env or existing.selected_type_decl != pre.selected_type_decl) {
-                if (builtin.mode == .Debug) {
+                if (builtin.mode == .debug) {
                     std.debug.panic(
                         "canonicalization received conflicting environments for exact import '{s}'",
                         .{pre.import_name},

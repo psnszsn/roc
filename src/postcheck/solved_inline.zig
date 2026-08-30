@@ -23,7 +23,7 @@ pub const Plan = struct {
     pub fn bodyForFn(self: Plan, fn_id: Lifted.FnId) ?Lifted.ExprId {
         if (self.inline_bodies.len == 0) return null;
 
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         if (index >= self.inline_bodies.len) {
             Common.invariant("inline plan did not contain a lifted function");
         }
@@ -113,7 +113,7 @@ const InlineAnalyzer = struct {
         defer analyzer.stack.deinit(allocator);
 
         for (0..solved.lifted.fnCount()) |index| {
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             _ = try analyzer.inlineBody(fn_id);
         }
 
@@ -121,7 +121,7 @@ const InlineAnalyzer = struct {
         defer allocator.free(materialization_states);
         @memset(materialization_states, .unknown);
         for (0..solved.lifted.fnCount()) |index| {
-            const fn_id: Lifted.FnId = @enumFromInt(@as(u32, @intCast(index)));
+            const fn_id: Lifted.FnId = @fromBackingInt(@intCast(@as(u32, @intCast(index))));
             analyzer.resolveSingleUseMaterialization(fn_id, materialization_states);
         }
 
@@ -147,7 +147,7 @@ const InlineAnalyzer = struct {
     }
 
     fn inlineBody(self: *InlineAnalyzer, fn_id: Lifted.FnId) std.mem.Allocator.Error!?Lifted.ExprId {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         switch (self.decisions[index]) {
             .unknown => {},
             .visiting => {
@@ -233,7 +233,7 @@ const InlineAnalyzer = struct {
         fn_id: Lifted.FnId,
         states: []MaterializationState,
     ) void {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         const candidate = switch (self.decisions[index]) {
             .inline_body => |candidate| candidate,
             .never => {
@@ -272,7 +272,7 @@ const InlineAnalyzer = struct {
         fn_id: Lifted.FnId,
         states: []MaterializationState,
     ) bool {
-        const index = @intFromEnum(fn_id);
+        const index = @backingInt(fn_id);
         switch (self.decisions[index]) {
             .never => {
                 states[index] = .once;
@@ -339,7 +339,7 @@ const InlineAnalyzer = struct {
 
     fn solvedCapturesForFn(self: *const InlineAnalyzer, fn_id: Lifted.FnId) SolvedType.Span {
         const fn_symbol = self.solved.lifted.getFn(fn_id).symbol;
-        const fn_content = self.solved.types.rootContent(self.solved.fn_tys.items[@intFromEnum(fn_id)]);
+        const fn_content = self.solved.types.rootContent(self.solved.fn_tys.items[@backingInt(fn_id)]);
         if (fn_content != .func) Common.invariant("direct Lambda Mono function table contains a non-function type");
         const callable_content = self.solved.types.rootContent(fn_content.func.callable);
         const callable = if (callable_content == .lambda_set)
@@ -654,7 +654,7 @@ const InlineAnalyzer = struct {
         }
         const start = cycle_start orelse Common.invariant("inline cycle did not refer to a visiting function");
         for (self.stack.items[start..]) |fn_id| {
-            self.decisions[@intFromEnum(fn_id)] = .never;
+            self.decisions[@backingInt(fn_id)] = .never;
         }
     }
 };

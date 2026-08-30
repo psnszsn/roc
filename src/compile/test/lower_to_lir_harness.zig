@@ -308,7 +308,7 @@ fn lowerAppPathToLir(
         const store = &lowered.lir_result.store;
         const layouts = &lowered.lir_result.layouts;
         for (0..store.getProcSpecs().len) |index| {
-            try lir.DebugPrint.writeProc(gpa, store, layouts, @enumFromInt(@as(u32, @intCast(index))), writer);
+            try lir.DebugPrint.writeProc(gpa, store, layouts, @fromBackingInt(@intCast(@as(u32, @intCast(index)))), writer);
         }
     }
 

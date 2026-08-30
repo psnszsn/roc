@@ -99,6 +99,7 @@ comptime {
             .bpfeb,
             .bpfel,
             .csky,
+            .ez80,
             .hexagon,
             .hppa,
             .hppa64,
@@ -108,6 +109,7 @@ comptime {
             .loongarch32,
             .loongarch64,
             .m68k,
+            .m88k,
             .microblaze,
             .microblazeel,
             .mips,
@@ -328,7 +330,7 @@ fn signalHandler(sig: linux.SIG, _: *const linux.siginfo_t, ctx: ?*anyopaque) ca
         writeLiteral(stderr_fd, "Roc application overflowed its stack memory\n\n");
     } else {
         writeLiteral(stderr_fd, "Roc process terminated by signal ");
-        writeUnsigned(stderr_fd, @intFromEnum(sig));
+        writeUnsigned(stderr_fd, @backingInt(sig));
         writeLiteral(stderr_fd, "\n\n");
     }
 
@@ -357,6 +359,7 @@ fn signalHandler(sig: linux.SIG, _: *const linux.siginfo_t, ctx: ?*anyopaque) ca
             .bpfeb,
             .bpfel,
             .csky,
+            .ez80,
             .hexagon,
             .hppa,
             .hppa64,
@@ -366,6 +369,7 @@ fn signalHandler(sig: linux.SIG, _: *const linux.siginfo_t, ctx: ?*anyopaque) ca
             .loongarch32,
             .loongarch64,
             .m68k,
+            .m88k,
             .microblaze,
             .microblazeel,
             .mips,
