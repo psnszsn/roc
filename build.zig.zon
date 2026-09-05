@@ -74,7 +74,8 @@
             .lazy = true,
         },
         .roc_deps_x86_64_linux_musl = .{
-            .path = "../roc-bootstrap/out/x86_64-linux-musl-baseline",
+            .url = "https://github.com/roc-lang/roc-bootstrap/releases/download/llvm-21.1.8-scaling-2/x86_64-linux-musl.tar.xz",
+            .hash = "N-V-__8AAGRcMhjhLwO3ey8ICFyBlvCT3_7XhM1xrEzWIBRD",
             .lazy = true,
         },
         .roc_deps_x86_64_macos_none = .{
@@ -122,6 +123,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "vendor",
         "LICENSE",
         "legal_details",
     },

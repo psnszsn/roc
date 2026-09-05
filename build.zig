@@ -1338,6 +1338,7 @@ pub fn build(b: *std.Build) void {
 
         break :blk withSha256Floor(b, b.standardTargetOptions(.{ .default_target = default_target_query }), optimize);
     };
+    const interpreter_only = b.option(bool, "interpreter-only", "Expose the embedded compiler and interpreter without configuring CLI or native backend artifacts") orelse false;
     const strip_flag = b.option(bool, "strip", "Omit debug information");
     const no_bin = b.option(bool, "no-bin", "Skip emitting binaries (important for fast incremental compilation)") orelse false;
     const trace_eval = b.option(bool, "trace-eval", "Enable detailed evaluation tracing for debugging") orelse false;
@@ -1416,6 +1417,7 @@ pub fn build(b: *std.Build) void {
 
     // Create compile time build options
     const build_options = b.addOptions();
+    build_options.addOption(bool, "interpreter_only", interpreter_only);
     build_options.addOption(bool, "enable_tracy", flag_enable_tracy != null);
     build_options.addOption(bool, "trace_eval", trace_eval);
     build_options.addOption(bool, "trace_refcount", trace_refcount);
@@ -1785,6 +1787,8 @@ pub fn build(b: *std.Build) void {
         .{ "bytebox", bytebox.module("bytebox") },
     }) |entry| hpk_eval.addImport(entry[0], entry[1]);
     hpk_eval.addAssemblyFile(b.path("src/eval/host_trampoline.S"));
+
+    if (interpreter_only) return;
 
     const check_test_env_module = b.createModule(.{
         .root_source_file = b.path("src/check/test_env_pkg.zig"),

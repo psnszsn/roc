@@ -6,6 +6,7 @@
 
 const std = @import("std");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 const base = @import("base");
 const backend = @import("backend");
 const builtins = @import("builtins");
@@ -2463,7 +2464,7 @@ fn reportLiteralRootExpectFailure(
 }
 
 fn compilerHostMustUseInterpreterForCtfe() bool {
-    return builtin.target.os.tag == .freestanding or
+    return build_options.interpreter_only or builtin.target.os.tag == .freestanding or
         builtin.target.cpu.arch == .wasm32;
 }
 

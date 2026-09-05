@@ -18318,15 +18318,17 @@ order and forwards observations from the `.repl_expr` root to the REPL's
 structured event stream; observations from other compile-time roots are not
 misattributed to the current interactive expression.
 
-On native compiler hosts, every `compile_time_*` root uses the dev backend for
-compile-time evaluation: ordinary constants, selected hoisted constants,
+Unless built with `-Dinterpreter-only=true`, native compiler hosts use the dev
+backend for every `compile_time_*` root: ordinary constants, selected hoisted constants,
 expects, callable eval roots, numeral conversions, and quote conversions. The
 compile-time evaluator does not interpret Monotype IR, Lambda Solved IR,
 logical Lambda Mono expressions, or any source-level IR.
 
-The only interpreter path is for compiler hosts that cannot run generated native
+Interpreter-only embedding builds use the LIR interpreter for both compile-time
+roots and runtime evaluation without configuring CLI or backend artifacts. The
+interpreter is also used for compiler hosts that cannot run generated native
 code, currently wasm32 and freestanding compiler builds. This decision is made
-from the compiler's own build target. The Roc program target selected by
+from the explicit build option and the compiler's own build target. The Roc program target selected by
 `roc --target` does not affect the compile-time evaluation strategy. A native
 compiler host without host dev-backend code generation support is unsupported for
 compile-time evaluation; it must not silently use the interpreter.
