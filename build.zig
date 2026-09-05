@@ -1791,6 +1791,7 @@ pub fn build(b: *std.Build) void {
 
         break :blk withSha256Floor(b, b.standardTargetOptions(.{ .default_target = default_target_query }), optimize);
     };
+    const interpreter_only = b.option(bool, "interpreter-only", "Expose the embedded compiler and interpreter without configuring CLI or native backend artifacts") orelse false;
     const strip_flag = b.option(bool, "strip", "Omit debug information");
     const no_bin = b.option(bool, "no-bin", "Skip emitting binaries (important for fast incremental compilation)") orelse false;
     const trace_eval = b.option(bool, "trace-eval", "Enable detailed evaluation tracing for debugging") orelse false;
@@ -1884,6 +1885,7 @@ pub fn build(b: *std.Build) void {
 
     // Create compile time build options
     const build_options = b.addOptions();
+    build_options.addOption(bool, "interpreter_only", interpreter_only);
     build_options.addOption(bool, "enable_tracy", flag_enable_tracy != null);
     build_options.addOption(bool, "trace_eval", trace_eval);
     build_options.addOption(bool, "trace_refcount", trace_refcount);
@@ -2359,6 +2361,39 @@ pub fn build(b: *std.Build) void {
     roc_modules.lsp.addImport("compiled_builtins", compiled_builtins_module);
     roc_modules.lsp_unit.addImport("compiled_builtins", compiled_builtins_module);
     roc_modules.lsp_integration.addImport("compiled_builtins", compiled_builtins_module);
+
+    // hpk embeds only the compiler front end and LIR interpreter. Keep this
+    // module separate from eval so consumers do not inherit the LLVM and
+    // WebAssembly runner dependencies exposed by the general evaluation API.
+    const hpk_eval = b.addModule("hpk_eval", .{
+        .root_source_file = b.path("src/eval/hpk.zig"),
+    });
+    inline for (.{
+        .{ "tracy", roc_modules.tracy },
+        .{ "ctx", roc_modules.ctx },
+        .{ "collections", roc_modules.collections },
+        .{ "base", roc_modules.base },
+        .{ "types", roc_modules.types },
+        .{ "builtins", roc_modules.builtins },
+        .{ "parse", roc_modules.parse },
+        .{ "can", roc_modules.can },
+        .{ "check", roc_modules.check },
+        .{ "layout", roc_modules.layout },
+        .{ "static_data", roc_modules.static_data },
+        .{ "build_options", roc_modules.build_options },
+        .{ "reporting", roc_modules.reporting },
+        .{ "backend", roc_modules.backend },
+        .{ "lir", roc_modules.lir },
+        .{ "symbol", roc_modules.symbol },
+        .{ "roc_target", roc_modules.roc_target },
+        .{ "sljmp", roc_modules.sljmp },
+        .{ "ipc", roc_modules.ipc },
+        .{ "compiled_builtins", compiled_builtins_module },
+        .{ "bytebox", bytebox.module("bytebox") },
+    }) |entry| hpk_eval.addImport(entry[0], entry[1]);
+    hpk_eval.addAssemblyFile(b.path("src/eval/host_trampoline.S"));
+
+    if (interpreter_only) return;
 
     const check_test_env_module = b.createModule(.{
         .root_source_file = b.path("src/check/test_env_pkg.zig"),
