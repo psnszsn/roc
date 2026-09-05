@@ -74,7 +74,8 @@
             .lazy = true,
         },
         .roc_deps_x86_64_linux_musl = .{
-            .path = "../roc-bootstrap/out/x86_64-linux-musl-baseline",
+            .url = "https://github.com/roc-lang/roc-bootstrap/releases/download/zig-0.16.0-binaryen/x86_64-linux-musl.tar.xz",
+            .hash = "N-V-__8AAGJLMhhn8pu3uyxtKTIlha8CxCjE6TNpLYvvj-cz",
             .lazy = true,
         },
         .roc_deps_x86_64_macos_none = .{
@@ -122,6 +123,7 @@
         "build.zig",
         "build.zig.zon",
         "src",
+        "vendor",
         "LICENSE",
         "legal_details",
     },
