@@ -36,6 +36,7 @@ const os: Os = switch (builtin.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .dragonfly,

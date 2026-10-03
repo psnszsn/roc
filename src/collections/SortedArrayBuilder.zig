@@ -404,6 +404,7 @@ pub fn SortedArrayBuilder(comptime K: type, comptime V: type) type {
                     .entries = .{
                         .items = entries_ptr[0..@intCast(self.entries_len)],
                         .capacity = @intCast(self.entries_capacity),
+                        .pointer_stability = .{},
                     },
                     .sorted = self.sorted,
                     .deduplicated = self.deduplicated,

@@ -460,7 +460,7 @@ pub fn layoutVersionHash(comptime T: type, comptime version: u32) [32]u8 {
 /// its frozen backing is buffer-owned and never grown; this is the one shared adapter
 /// every sub-store's `deserialize` uses to re-form those fields.
 pub fn arrayListFromSlice(comptime T: type, slice: []T) std.ArrayList(T) {
-    return .{ .items = slice, .capacity = slice.len };
+    return .{ .items = slice, .capacity = slice.len, .pointer_stability = .{} };
 }
 
 /// A `(start, len)` range into a flat pool. `appendSpan` callers that don't have their

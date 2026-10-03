@@ -490,6 +490,7 @@ fn hostBytesAllocator(allocator: Allocator) Allocator {
         .illumos,
         .linux,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

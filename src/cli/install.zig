@@ -29,6 +29,7 @@ fn classifyInstallOs(os: std.Target.Os.Tag) InstallOs {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

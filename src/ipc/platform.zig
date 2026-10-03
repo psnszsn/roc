@@ -29,6 +29,7 @@ fn classifyPlatformOs(os: std.Target.Os.Tag) PlatformOs {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .driverkit,
@@ -238,9 +239,9 @@ pub fn getSystemPageSize() PageSizeError!usize {
             // stays for the libc-free shim children, which have no auxiliary
             // vector of their own to read; see `FdInfo.page_size`.
             const result: usize = if (comptime builtin.link_libc)
-                @intCast(std.c.getauxval(std.elf.AT_PAGESZ))
+                @intCast(std.c.getauxval(std.elf.AT.PAGESZ))
             else
-                std.os.linux.getauxval(std.elf.AT_PAGESZ);
+                std.os.linux.getauxval(std.elf.AT.PAGESZ);
             break :blk if (result != 0) result else 4096;
         },
         .macos, .ios, .tvos, .watchos => blk: {

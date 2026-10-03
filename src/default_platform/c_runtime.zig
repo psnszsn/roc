@@ -34,6 +34,7 @@ const c = switch (builtin.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .dragonfly,

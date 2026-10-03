@@ -69,6 +69,7 @@ pub const ObjectFormat = enum {
             .hurd,
             .illumos,
             .plan9,
+            .gba,
             .rtems,
             .serenity,
             .dragonfly,

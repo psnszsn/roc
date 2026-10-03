@@ -209,6 +209,7 @@ fn testHostNeedsLibc(options: TestHostOptions, target: ResolvedTarget) bool {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .driverkit,

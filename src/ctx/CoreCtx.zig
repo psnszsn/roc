@@ -1107,6 +1107,7 @@ fn osTerminalWidth(_: ?*anyopaque, std_io: std.Io) ?u16 {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

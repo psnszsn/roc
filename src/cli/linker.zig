@@ -785,6 +785,7 @@ fn buildLinkArgs(ctx: *CliCtx, config: LinkConfig) LinkError!std.array_list.Mana
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

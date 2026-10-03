@@ -31,6 +31,7 @@ fn cacheOs(os: std.Target.Os.Tag) CacheOs {
         .illumos,
         .linux,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

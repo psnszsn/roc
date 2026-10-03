@@ -31,6 +31,7 @@ fn classifyPlatformOs(os: std.Target.Os.Tag) PlatformOs {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

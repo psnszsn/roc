@@ -46,6 +46,7 @@ const DynLib = switch (builtin.target.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .dragonfly,

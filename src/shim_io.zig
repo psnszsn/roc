@@ -33,6 +33,7 @@ pub fn io() std.Io {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

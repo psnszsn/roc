@@ -38,6 +38,7 @@ pub const Format = enum {
             .hurd,
             .illumos,
             .plan9,
+            .gba,
             .rtems,
             .serenity,
             .dragonfly,

@@ -122,6 +122,7 @@ pub const Store = struct {
                     .items = .{
                         .items = items_ptr[0..@intCast(self.len)],
                         .capacity = @intCast(self.capacity),
+                        .pointer_stability = .{},
                     },
                 };
             }
@@ -182,6 +183,7 @@ pub const Store = struct {
                 .items = .{
                     .items = items,
                     .capacity = capacity,
+                    .pointer_stability = .{},
                 },
             };
         }

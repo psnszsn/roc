@@ -30,6 +30,7 @@ fn classifyHostOs(os: std.Target.Os.Tag) HostOs {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

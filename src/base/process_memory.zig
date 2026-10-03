@@ -45,6 +45,7 @@ pub fn currentBytes() ?u64 {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

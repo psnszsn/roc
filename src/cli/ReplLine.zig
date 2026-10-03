@@ -27,6 +27,7 @@ pub const SUPPORTED_OS = switch (builtin.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .driverkit,

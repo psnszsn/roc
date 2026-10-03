@@ -169,6 +169,7 @@ pub fn aarch64Target(os: std.Target.Os.Tag) Target {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

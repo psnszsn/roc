@@ -54,6 +54,7 @@ fn selfExePath(std_io: std.Io, buf: []u8) SelfExePathError![]const u8 {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

@@ -395,6 +395,7 @@ fn nativeRunnableTargetName() ?[]const u8 {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

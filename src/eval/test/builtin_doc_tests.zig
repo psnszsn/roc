@@ -30,6 +30,7 @@ const has_fork = switch (builtin.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .driverkit,

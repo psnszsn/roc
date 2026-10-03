@@ -525,6 +525,7 @@ fn hostArch() HostArch {
         .loongarch64,
         .m68k,
         .m88k,
+        .spork8,
         .microblaze,
         .microblazeel,
         .mips,

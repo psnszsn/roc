@@ -199,6 +199,7 @@ pub fn SafeList(comptime T: type) type {
                     .items = .{
                         .items = items_ptr[0..@intCast(self.len)],
                         .capacity = @intCast(self.capacity),
+                        .pointer_stability = .{},
                     },
                 };
             }

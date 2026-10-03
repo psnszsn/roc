@@ -347,6 +347,7 @@ fn classifyMemoryOs(os: std.Target.Os.Tag) MemoryOs {
         .hurd,
         .illumos,
         .plan9,
+        .gba,
         .rtems,
         .serenity,
         .dragonfly,

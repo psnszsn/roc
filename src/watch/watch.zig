@@ -292,6 +292,7 @@ const watcher_os: WatcherOs = switch (builtin.os.tag) {
     .hurd,
     .illumos,
     .plan9,
+    .gba,
     .rtems,
     .serenity,
     .driverkit,

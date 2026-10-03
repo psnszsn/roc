@@ -6014,7 +6014,7 @@ test "no Builtin module leaks in snapshots" {
     var snapshots_dir = try std.Io.Dir.cwd().openDir(std.testing.io, "test/snapshots", .{ .iterate = true });
     defer snapshots_dir.close(std.testing.io);
 
-    var files_with_builtin: std.array_list.Managed([]const u8) = .{ .allocator = allocator, .items = &.{}, .capacity = 0 };
+    var files_with_builtin: std.array_list.Managed([]const u8) = .{ .allocator = allocator, .items = &.{}, .capacity = 0, .pointer_stability = .{} };
     defer {
         for (files_with_builtin.items) |path| {
             allocator.free(path);
