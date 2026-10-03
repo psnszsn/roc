@@ -40,7 +40,7 @@ pub const Phase = enum {
     box_reuse,
 };
 
-const phase_count = std.meta.fields(Phase).len;
+const phase_count = @typeInfo(Phase).@"enum".field_names.len;
 
 /// Worker work only; inline execution leaves these counters zero.
 pub const ParallelMetrics = struct {

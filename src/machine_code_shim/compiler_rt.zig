@@ -15,6 +15,77 @@ pub const want_windows_arm_abi = false;
 pub const want_windows_v2u64_abi = false;
 /// Match the toolchain's runtime arithmetic rather than its test instrumentation.
 pub const test_safety = false;
+/// Match the toolchain's PowerPC conversion-symbol selection.
+pub const want_ppc_abi = builtin.cpu.arch.isPowerPC();
+/// Match the toolchain's 32-bit SPARC conversion-symbol selection.
+pub const want_sparc32_abi = builtin.cpu.arch == .sparc;
+/// Match the toolchain's 64-bit SPARC conversion-symbol selection.
+pub const want_sparc64_abi = builtin.cpu.arch == .sparc64;
+
+/// Supply the upstream float conversions' exact C-ABI representation contract.
+fn FloatAbi(comptime Float: type) type {
+    const bits = @typeInfo(Float).float.bits;
+    return switch (std.zig.target.compilerRtFloatAbi(&builtin.target, bits)) {
+        .hard => struct {
+            pub const Abi = Float;
+            pub inline fn toAbi(raw: Float) Abi {
+                return raw;
+            }
+            pub inline fn fromAbi(abi: Abi) Float {
+                return abi;
+            }
+        },
+        .soft => if (Float == f80)
+            struct {
+                pub const Abi = extern struct { mantissa: u64, exponent: u16 };
+                const Repr = packed struct { mantissa: u64, exponent: u16 };
+                pub inline fn toAbi(raw: f80) Abi {
+                    const repr: Repr = @bitCast(raw);
+                    return .{ .mantissa = repr.mantissa, .exponent = repr.exponent };
+                }
+                pub inline fn fromAbi(abi: Abi) f80 {
+                    const repr: Repr = .{ .mantissa = abi.mantissa, .exponent = abi.exponent };
+                    return @bitCast(repr);
+                }
+            }
+        else if (Float == f128)
+            struct {
+                pub const Abi = switch (builtin.cpu.arch.endian()) {
+                    .big => extern struct { hi: u64, lo: u64 },
+                    .little => extern struct { lo: u64, hi: u64 },
+                };
+                const Repr = packed struct { lo: u64, hi: u64 };
+                pub inline fn toAbi(raw: f128) Abi {
+                    const repr: Repr = @bitCast(raw);
+                    return .{ .lo = repr.lo, .hi = repr.hi };
+                }
+                pub inline fn fromAbi(abi: Abi) f128 {
+                    const repr: Repr = .{ .lo = abi.lo, .hi = abi.hi };
+                    return @bitCast(repr);
+                }
+            }
+        else
+            struct {
+                pub const Abi = @Int(.unsigned, @bitSizeOf(Float));
+                pub inline fn toAbi(raw: Float) Abi {
+                    return @bitCast(raw);
+                }
+                pub inline fn fromAbi(abi: Abi) Float {
+                    return @bitCast(abi);
+                }
+            },
+    };
+}
+/// The toolchain's `f16` conversion ABI on this target.
+pub const @"f16" = FloatAbi(f16);
+/// The toolchain's `f32` conversion ABI on this target.
+pub const @"f32" = FloatAbi(f32);
+/// The toolchain's `f64` conversion ABI on this target.
+pub const @"f64" = FloatAbi(f64);
+/// The toolchain's `f80` conversion ABI on this target.
+pub const @"f80" = FloatAbi(f80);
+/// The toolchain's `f128` conversion ABI on this target.
+pub const @"f128" = FloatAbi(f128);
 
 /// Upstream modules must not register their public compiler-rt exports.
 pub fn symbol(comptime _: *const anyopaque, comptime _: []const u8) void {}
@@ -58,22 +129,22 @@ const helpers = integer_helpers ++ (if (want_aeabi) arm_helpers else .{});
 // AAPCS libcalls use core registers even on hard-float targets. The upstream
 // public C wrappers use the target C convention, so adapt only the ABI here.
 fn ul2d(a: u64) callconv(.{ .arm_aapcs = .{} }) f64 {
-    return @import("compiler_rt/floatundidf.zig").__floatundidf(a);
+    return @import("compiler_rt/float_from_int.zig").f64_floatFromInt_u64(a);
 }
 fn ul2f(a: u64) callconv(.{ .arm_aapcs = .{} }) f32 {
-    return @import("compiler_rt/floatundisf.zig").__floatundisf(a);
+    return @import("compiler_rt/float_from_int.zig").f32_floatFromInt_u64(a);
 }
 fn d2lz(a: f64) callconv(.{ .arm_aapcs = .{} }) i64 {
-    return @import("compiler_rt/fixdfdi.zig").__fixdfdi(a);
+    return @import("compiler_rt/int_from_float.zig").i64_intFromFloat_f64(a);
 }
 fn d2ulz(a: f64) callconv(.{ .arm_aapcs = .{} }) u64 {
-    return @import("compiler_rt/fixunsdfdi.zig").__fixunsdfdi(a);
+    return @import("compiler_rt/int_from_float.zig").u64_intFromFloat_f64(a);
 }
 fn f2lz(a: f32) callconv(.{ .arm_aapcs = .{} }) i64 {
-    return @import("compiler_rt/fixsfdi.zig").__fixsfdi(a);
+    return @import("compiler_rt/int_from_float.zig").i64_intFromFloat_f32(a);
 }
 fn f2ulz(a: f32) callconv(.{ .arm_aapcs = .{} }) u64 {
-    return @import("compiler_rt/fixunssfdi.zig").__fixunssfdi(a);
+    return @import("compiler_rt/int_from_float.zig").u64_intFromFloat_f32(a);
 }
 
 /// Supply the upstream division implementation's exact integer-halving contract.

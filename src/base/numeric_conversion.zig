@@ -244,8 +244,8 @@ fn rebuildName(comptime conversion: Conversion) []const u8 {
 /// Split an op name into a number type and a direction. Returns null unless the
 /// prefix is a `NumType` and the name ends in `_to_str` or `_from_str`.
 fn stringConversionFromName(name: []const u8) ?StringConversion {
-    inline for (@typeInfo(StringDirection).@"enum".fields) |field| {
-        const direction: StringDirection = @fromBackingInt(@intCast(field.value));
+    inline for (@typeInfo(StringDirection).@"enum".field_values) |field_value| {
+        const direction: StringDirection = @fromBackingInt(@intCast(field_value));
         const affix = directionAffix(direction);
         if (std.mem.endsWith(u8, name, affix)) {
             const num = numTypeFromName(name[0 .. name.len - affix.len]) orelse return null;

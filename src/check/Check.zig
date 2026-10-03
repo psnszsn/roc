@@ -11743,8 +11743,9 @@ fn patternBindsNode(module: *const ModuleEnv, root: CIR.Pattern.Idx, node: CIR.N
     if (ModuleEnv.nodeIdxFrom(root) == node) return true;
     if (module.store.getPattern(root) == .assign or module.store.getPattern(root) == .var_assign) return false;
 
-    var stack_allocator_state = std.heap.stackFallback(2048, module.gpa);
-    const stack_allocator = stack_allocator_state.get();
+    var stack_allocator_state_buffer: [2048]u8 = undefined;
+    var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, module.gpa);
+    const stack_allocator = stack_allocator_state.allocator();
     var pending: std.ArrayList(CIR.Pattern.Idx) = .empty;
     defer pending.deinit(stack_allocator);
 
@@ -15459,8 +15460,9 @@ fn appendPredeclaredIdentitySlots(self: *Self, scheme_var: Var, var_: Var) Alloc
         try self.canonical_key_writer.appendIdentityVarsFromVar(var_, &self.predeclared_slot_vars);
         return;
     };
-    var stack_allocator_state = std.heap.stackFallback(256, self.gpa);
-    const stack_allocator = stack_allocator_state.get();
+    var stack_allocator_state_buffer: [256]u8 = undefined;
+    var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.gpa);
+    const stack_allocator = stack_allocator_state.allocator();
     const hole_roots = try stack_allocator.alloc(Var, holes.len);
     defer stack_allocator.free(hole_roots);
     for (holes, hole_roots) |hole, *hole_root| hole_root.* = self.types.resolveVar(hole).var_;
@@ -15689,7 +15691,11 @@ fn recordPredeclaredDispatchUse(
 fn resetAnnotationNodes(self: *Self, annotation_idx: CIR.Annotation.Idx) std.mem.Allocator.Error!void {
     try self.types.resetVarToUnbound(ModuleEnv.varFrom(annotation_idx), Rank.outermost);
 
-    const stack_allocator = self.gpa;
+    var stack_allocator_state_buffer: [1024]u8 = undefined;
+
+    var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.gpa);
+
+    const stack_allocator = stack_allocator_state.allocator();
     var nodes: std.ArrayList(CIR.TypeAnno.Idx) = .empty;
     defer nodes.deinit(stack_allocator);
     try self.collectAnnotationTypeAnnos(annotation_idx, &nodes, stack_allocator);
@@ -15788,8 +15794,9 @@ fn collectUnderscoreAnnoVars(
     annotation_idx: CIR.Annotation.Idx,
     out: *std.ArrayListUnmanaged(Var),
 ) std.mem.Allocator.Error!void {
-    var stack_allocator_state = std.heap.stackFallback(1024, self.gpa);
-    const stack_allocator = stack_allocator_state.get();
+    var stack_allocator_state_buffer: [1024]u8 = undefined;
+    var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.gpa);
+    const stack_allocator = stack_allocator_state.allocator();
     var nodes: std.ArrayList(CIR.TypeAnno.Idx) = .empty;
     defer nodes.deinit(stack_allocator);
     try self.collectAnnotationTypeAnnos(annotation_idx, &nodes, stack_allocator);
@@ -26057,8 +26064,9 @@ fn resumeTypeMethodCallCheck(self: *Self, task: *ExprTask, state: *OperandsCheck
         return .{ .child = .{ .expr = arg_expr_idxs[state.index - 1], .expected = frame.nested_expected.forStatement() } };
     }
 
-    var arg_vars_sfa = std.heap.stackFallback(16 * @sizeOf(Var), self.gpa);
-    const arg_vars_alloc = arg_vars_sfa.get();
+    var arg_vars_sfa_buffer: [16 * @sizeOf(Var)]u8 = undefined;
+    var arg_vars_sfa = std.heap.BufferFirstAllocator.init(&arg_vars_sfa_buffer, self.gpa);
+    const arg_vars_alloc = arg_vars_sfa.allocator();
     const arg_vars = try arg_vars_alloc.alloc(Var, arg_expr_idxs.len);
     defer arg_vars_alloc.free(arg_vars);
     for (arg_expr_idxs, 0..) |arg_expr_idx, i| {
@@ -29012,7 +29020,9 @@ fn mkReceiverDispatchFnVar(
     env: *Env,
     region: Region,
 ) Allocator.Error!Var {
-    const all_args_alloc = self.gpa;
+    var all_args_sfa_buffer: [16 * @sizeOf(Var)]u8 = undefined;
+    var all_args_sfa = std.heap.BufferFirstAllocator.init(&all_args_sfa_buffer, self.gpa);
+    const all_args_alloc = all_args_sfa.allocator();
     const all_args = try all_args_alloc.alloc(Var, arg_vars.len + 1);
     defer all_args_alloc.free(all_args);
     all_args[0] = receiver_var;
@@ -29105,7 +29115,9 @@ fn mkInterpolationMetadata(
     std.debug.assert(parts.len % 2 == 0);
 
     const interpolated_len = parts.len / 2;
-    const interpolated_parts_alloc = self.gpa;
+    var interpolated_parts_sfa_buffer: [8 * @sizeOf(InterpolationPartMetadata)]u8 = undefined;
+    var interpolated_parts_sfa = std.heap.BufferFirstAllocator.init(&interpolated_parts_sfa_buffer, self.gpa);
+    const interpolated_parts_alloc = interpolated_parts_sfa.allocator();
     var interpolated_parts = try std.ArrayList(InterpolationPartMetadata).initCapacity(interpolated_parts_alloc, interpolated_len);
     defer interpolated_parts.deinit(interpolated_parts_alloc);
 
@@ -43740,8 +43752,9 @@ fn stepDerivedMethodCall(self: *Self, task: *ExprTask, state: *CallCheck, env: *
     }
     if (try self.retireCallLikeExprWithErroneousOperands(expr_idx, expr_var, arg_expr_idxs)) return .done;
 
-    var arg_vars_sfa = std.heap.stackFallback(16 * @sizeOf(Var), self.gpa);
-    const arg_vars_alloc = arg_vars_sfa.get();
+    var arg_vars_sfa_buffer: [16 * @sizeOf(Var)]u8 = undefined;
+    var arg_vars_sfa = std.heap.BufferFirstAllocator.init(&arg_vars_sfa_buffer, self.gpa);
+    const arg_vars_alloc = arg_vars_sfa.allocator();
     const arg_vars = try arg_vars_alloc.alloc(Var, arg_expr_idxs.len);
     defer arg_vars_alloc.free(arg_vars);
     for (arg_expr_idxs, arg_vars) |arg_expr_idx, *arg_var| arg_var.* = ModuleEnv.varFrom(arg_expr_idx);

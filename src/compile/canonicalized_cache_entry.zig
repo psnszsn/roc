@@ -200,8 +200,8 @@ fn validateDiagnosticTags(
 /// Convert a stored integer into `E` only when it names one of `E`'s values, so
 /// a corrupt entry is rejected instead of producing an out-of-range enum.
 fn enumFromIntChecked(comptime E: type, value: u16) ?E {
-    inline for (@typeInfo(E).@"enum".fields) |field| {
-        if (value == field.value) return @field(E, field.name);
+    inline for (@typeInfo(E).@"enum".field_names, @typeInfo(E).@"enum".field_values) |field_name, field_value| {
+        if (value == field_value) return @field(E, field_name);
     }
     return null;
 }

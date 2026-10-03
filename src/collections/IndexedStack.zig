@@ -55,6 +55,7 @@ pub fn IndexedStack(comptime K: type) type {
                 .@"anyframe",
                 .vector,
                 .enum_literal,
+                .spirv,
                 => @compileError("IndexedStack keys must be integer IDs"),
             };
         }

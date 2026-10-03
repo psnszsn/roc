@@ -248,7 +248,7 @@ pub fn Snapshot(comptime T: type, comptime empty: T) type {
             if (std.meta.eql(self.get(index), value)) return;
             const required_depth = depthFor(index);
             while (self.depth < required_depth) {
-                var children = [_]?*const anyopaque{null} ** radix;
+                var children = @as([radix]?*const anyopaque, @splat(null));
                 children[0] = self.root;
                 const branch = try self.allocator.create(Branch);
                 branch.* = .{ .children = children };
@@ -265,7 +265,7 @@ pub fn Snapshot(comptime T: type, comptime empty: T) type {
             if (std.meta.eql(self.get(index), value)) return;
             const required_depth = depthFor(index);
             while (self.depth < required_depth) {
-                var children = [_]?*const anyopaque{null} ** radix;
+                var children = @as([radix]?*const anyopaque, @splat(null));
                 children[0] = self.root;
                 const branch = try self.allocator.create(Branch);
                 branch.* = .{ .children = children };
@@ -380,7 +380,7 @@ pub fn Snapshot(comptime T: type, comptime empty: T) type {
                 return leaf;
             }
 
-            var children = [_]?*const anyopaque{null} ** radix;
+            var children = @as([radix]?*const anyopaque, @splat(null));
             if (maybe_node) |node| {
                 const branch: *const Branch = @ptrCast(@alignCast(node));
                 children = branch.children;
@@ -424,7 +424,7 @@ pub fn Snapshot(comptime T: type, comptime empty: T) type {
                 @as(*Branch, @ptrCast(@alignCast(@constCast(node))))
             else blk: {
                 const fresh = try self.allocator.create(Branch);
-                fresh.* = .{ .children = [_]?*const anyopaque{null} ** radix };
+                fresh.* = .{ .children = @as([radix]?*const anyopaque, @splat(null)) };
                 break :blk fresh;
             };
             const shift: u5 = @intCast(leaf_bits + (depth - 1) * radix_bits);

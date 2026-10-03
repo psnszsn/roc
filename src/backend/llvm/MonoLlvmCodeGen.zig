@@ -131,7 +131,7 @@ fn getLlvmTriple(target: std.Target) []const u8 {
             .openbsd => "x86_64-unknown-openbsd",
             .netbsd => "x86_64-unknown-netbsd",
             .freestanding => "x86_64-unknown-unknown",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "x86_64-unknown-unknown",
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "x86_64-unknown-unknown",
         };
     }
     if (arch == .aarch64) {
@@ -149,7 +149,7 @@ fn getLlvmTriple(target: std.Target) []const u8 {
             .openbsd => "aarch64-unknown-openbsd",
             .netbsd => "aarch64-unknown-netbsd",
             .freestanding => "aarch64-unknown-unknown",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .driverkit, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "aarch64-unknown-unknown",
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .driverkit, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "aarch64-unknown-unknown",
         };
     }
     if (arch == .x86) {
@@ -162,7 +162,7 @@ fn getLlvmTriple(target: std.Target) []const u8 {
             else
                 "i686-unknown-linux-gnu",
             .freestanding => "i686-unknown-unknown",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "i686-unknown-unknown",
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "i686-unknown-unknown",
         };
     }
     if (arch == .arm or arch == .armeb or arch == .thumb or arch == .thumbeb) {
@@ -178,19 +178,19 @@ fn getLlvmTriple(target: std.Target) []const u8 {
             else
                 "arm-unknown-linux-gnueabihf",
             .freestanding => "arm-unknown-unknown",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "arm-unknown-unknown",
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "arm-unknown-unknown",
         };
     }
     if (arch == .wasm32) {
         return switch (target.os.tag) {
             .wasi => "wasm32-wasi",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "wasm32-unknown-unknown",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "wasm32-unknown-unknown",
         };
     }
     if (arch == .wasm64) {
         return switch (target.os.tag) {
             .wasi => "wasm64-wasi",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "wasm64-unknown-unknown",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .windows, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "wasm64-unknown-unknown",
         };
     }
     if (arch == .riscv32) return "riscv32-unknown-unknown";
@@ -205,7 +205,7 @@ fn getLlvmDataLayout(target: std.Target) []const u8 {
             .windows => "e-m:w-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
             .macos => "e-m:o-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
             .linux, .freebsd, .openbsd, .netbsd, .freestanding => "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => unsupportedLlvmDataLayout(target),
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => unsupportedLlvmDataLayout(target),
         };
     }
     if (target.cpu.arch == .aarch64) {
@@ -213,7 +213,7 @@ fn getLlvmDataLayout(target: std.Target) []const u8 {
             .windows => "e-m:w-p:64:64-i32:32-i64:64-i128:128-n32:64-S128-Fn32",
             .macos, .ios => "e-m:o-i64:64-i128:128-n32:64-S128-Fn32",
             .linux, .freebsd, .openbsd, .netbsd, .freestanding => "e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32",
-            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .driverkit, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => unsupportedLlvmDataLayout(target),
+            .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .driverkit, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => unsupportedLlvmDataLayout(target),
         };
     }
     return unsupportedLlvmDataLayout(target);
@@ -2561,7 +2561,9 @@ pub const MonoLlvmCodeGen = struct {
         if (self.target.os.tag != .macos) {
             return builder.strtabString(name) catch return error.OutOfMemory;
         }
-        const exact_name_alloc = self.allocator;
+        var exact_name_sfa_buffer: [128]u8 = undefined;
+        var exact_name_sfa = std.heap.BufferFirstAllocator.init(&exact_name_sfa_buffer, self.allocator);
+        const exact_name_alloc = exact_name_sfa.allocator();
         const exact_name = try std.fmt.allocPrint(exact_name_alloc, "\x01_{s}", .{name});
         defer exact_name_alloc.free(exact_name);
         return builder.strtabString(exact_name) catch return error.OutOfMemory;
@@ -2924,7 +2926,9 @@ pub const MonoLlvmCodeGen = struct {
     };
 
     fn compileStmt(self: *MonoLlvmCodeGen, stmt_id: CFStmtId) Error!void {
-        const wa = self.allocator;
+        var sfa_buffer: [64 * @sizeOf(StmtWork)]u8 = undefined;
+        var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+        const wa = sfa.allocator();
         var work = std.ArrayList(StmtWork).empty;
         defer work.deinit(wa);
         try work.append(wa, .{ .node = stmt_id });
@@ -11295,7 +11299,9 @@ pub const MonoLlvmCodeGen = struct {
     /// parent reads in its continuation.
     fn emitValueEqual(self: *MonoLlvmCodeGen, lhs_ptr: LlvmBuilder.Value, rhs_ptr: LlvmBuilder.Value, layout_idx: layout.Idx) Error!LlvmBuilder.Value {
         var result: LlvmBuilder.Value = undefined;
-        const wa = self.allocator;
+        var sfa_buffer: [64 * @sizeOf(EqWork)]u8 = undefined;
+        var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+        const wa = sfa.allocator();
         var work = std.ArrayList(EqWork).empty;
         defer work.deinit(wa);
         try work.append(wa, .{ .eval = .{ .lhs_ptr = lhs_ptr, .rhs_ptr = rhs_ptr, .layout_idx = layout_idx, .out = &result } });
@@ -13152,7 +13158,7 @@ pub const MonoLlvmCodeGen = struct {
 
         switch (self.target.os.tag) {
             .linux, .macos, .windows, .freebsd, .netbsd => {},
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => return error.CompilationFailed,
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => return error.CompilationFailed,
         }
         if (arg_ptrs.len != 1 or arg_layouts.len != 1 or arg_layouts[0] != .str or ret_layout != .zst) {
             return error.CompilationFailed;
@@ -13196,7 +13202,7 @@ pub const MonoLlvmCodeGen = struct {
             .linux => try self.emitLinuxWriteStdout(ptr, len),
             .freebsd, .netbsd => try self.emitX86_64BsdWriteStdout(ptr, len),
             .macos, .windows => try self.emitCWriteStdout(ptr, len),
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .rtems, .serenity, .dragonfly, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => return error.CompilationFailed,
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .plan9, .gba, .rtems, .serenity, .dragonfly, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => return error.CompilationFailed,
         }
     }
 

@@ -138,7 +138,9 @@ const EmitFrame = union(enum) {
 };
 
 fn emitFromFrame(self: *Self, first: EmitFrame) EmitError!void {
-    const stack_allocator = self.allocator;
+    var stack_allocator_state_buffer: [8192]u8 = undefined;
+    var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.allocator);
+    const stack_allocator = stack_allocator_state.allocator();
     var frames: std.ArrayList(EmitFrame) = .empty;
     defer frames.deinit(stack_allocator);
 

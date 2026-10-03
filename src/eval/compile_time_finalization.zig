@@ -316,10 +316,10 @@ pub const ProgramSession = struct {
             if (!std.meta.eql(@field(configured, @tagName(field)), @field(target, @tagName(field))))
                 finalizationInvariant("runtime policy differs from the compilation's declared consumer");
         }
-        inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".fields) |field| {
-            const expected = @field(self.runtime_roots, field.name);
-            const actual = @field(roots, field.name);
-            if (@typeInfo(field.type) == .pointer) {
+        inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_names, @typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_types) |field_name, field_type| {
+            const expected = @field(self.runtime_roots, field_name);
+            const actual = @field(roots, field_name);
+            if (@typeInfo(field_type) == .pointer) {
                 if (expected.len != actual.len) finalizationInvariant("runtime request differs from the declared consumer");
                 for (expected, actual) |a, b| {
                     if (!std.meta.eql(a, b)) finalizationInvariant("runtime root metadata differs from the declared consumer");
@@ -522,17 +522,17 @@ fn cloneRootRequests(allocator: Allocator, roots: lir.CheckedPipeline.RootReques
         .include_internal_static_data = roots.include_internal_static_data,
     };
     errdefer deinitRootRequests(allocator, owned);
-    inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".fields) |field| {
-        if (@typeInfo(field.type) == .pointer) {
-            @field(owned, field.name) = try allocator.dupe(@typeInfo(field.type).pointer.child, @field(roots, field.name));
+    inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_names, @typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_types) |field_name, field_type| {
+        if (@typeInfo(field_type) == .pointer) {
+            @field(owned, field_name) = try allocator.dupe(@typeInfo(field_type).pointer.child, @field(roots, field_name));
         }
     }
     return owned;
 }
 
 fn deinitRootRequests(allocator: Allocator, roots: lir.CheckedPipeline.RootRequestSet) void {
-    inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".fields) |field| {
-        if (@typeInfo(field.type) == .pointer) allocator.free(@field(roots, field.name));
+    inline for (@typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_names, @typeInfo(lir.CheckedPipeline.RootRequestSet).@"struct".field_types) |field_name, field_type| {
+        if (@typeInfo(field_type) == .pointer) allocator.free(@field(roots, field_name));
     }
 }
 
@@ -1227,8 +1227,8 @@ pub const TimingSnapshot = struct {
 
 test "shared lowering timing preserves full snapshots through aggregation" {
     var lowering: lir.CheckedPipeline.TimingSnapshot = .{};
-    inline for (std.meta.fields(lir.CheckedPipeline.TimingSnapshot), 0..) |field, i| {
-        if (field.type == u64) @field(lowering, field.name) = i + 1;
+    inline for (@typeInfo(lir.CheckedPipeline.TimingSnapshot).@"struct".field_names, @typeInfo(lir.CheckedPipeline.TimingSnapshot).@"struct".field_types, 0..) |field_name, field_type, i| {
+        if (field_type == u64) @field(lowering, field_name) = i + 1;
     }
     lowering.monotype_parallel.specialization_tasks_submitted = 11;
     lowering.monotype_parallel.peak_worker_lanes_used = 4;

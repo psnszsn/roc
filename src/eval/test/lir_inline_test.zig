@@ -2875,13 +2875,13 @@ test "issue 11144 nested lambdas in one large body specialize in linear work" {
     }
     // Compare deltas to remove fixed module work. A linear delta doubles;
     // quadratic work approaches four times the preceding delta.
-    inline for (std.meta.fields(Counts)) |field| {
-        const small = @field(counts[0], field.name);
-        const medium = @field(counts[1], field.name);
-        const large = @field(counts[2], field.name);
+    inline for (@typeInfo(Counts).@"struct".field_names) |field_name| {
+        const small = @field(counts[0], field_name);
+        const medium = @field(counts[1], field_name);
+        const large = @field(counts[2], field_name);
         const linear = small <= medium and medium <= large and
             large - medium <= ((medium - small) *| 5) / 2;
-        if (!linear) std.debug.print("issue 11144 {s} grew nonlinearly: {d}->{d}->{d}\n", .{ field.name, small, medium, large });
+        if (!linear) std.debug.print("issue 11144 {s} grew nonlinearly: {d}->{d}->{d}\n", .{ field_name, small, medium, large });
         try std.testing.expect(linear);
     }
 }

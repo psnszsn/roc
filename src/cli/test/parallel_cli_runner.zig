@@ -96,7 +96,7 @@ const Suite = enum(u8) {
     }
 };
 
-const suite_count = @typeInfo(Suite).@"enum".fields.len;
+const suite_count = @typeInfo(Suite).@"enum".field_names.len;
 const all_suites = [_]Suite{ .platforms, .subcommands, .echo, .glue, .snapshot_programs };
 
 const SuiteSelection = struct {
@@ -13460,7 +13460,7 @@ fn printResults(
     var build_durations: std.ArrayListUnmanaged(u64) = .empty;
     var run_durations: std.ArrayListUnmanaged(u64) = .empty;
     var opt_durations = [_]std.ArrayListUnmanaged(u64){ .empty, .empty, .empty, .empty };
-    var suite_durations = [_]std.ArrayListUnmanaged(u64){.empty} ** suite_count;
+    var suite_durations = @as([suite_count]std.ArrayListUnmanaged(u64), @splat(.empty));
     defer durations.deinit(gpa);
     defer build_durations.deinit(gpa);
     defer run_durations.deinit(gpa);

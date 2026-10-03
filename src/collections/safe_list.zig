@@ -226,6 +226,7 @@ pub fn SafeList(comptime T: type) type {
                     .items = .{
                         .items = fresh_items[0..item_len],
                         .capacity = item_capacity,
+                        .pointer_stability = .{},
                     },
                 };
             }
@@ -341,6 +342,7 @@ pub fn SafeList(comptime T: type) type {
                 .items = .{
                     .items = @constCast(written),
                     .capacity = items.len,
+                    .pointer_stability = .{},
                 },
             };
 
@@ -463,9 +465,8 @@ pub fn SafeMultiList(comptime T: type) type {
         /// trusted on faith: `writeCompactedColumns` asserts every derived column offset
         /// against the pointers the real `slice()` hands back, so a change in std's
         /// layout fails loudly instead of writing a silently transposed blob.
-        const column_order: [std.meta.fields(T).len]usize = blk: {
-            const fields = std.meta.fields(T);
-            var order: [fields.len]usize = undefined;
+        const column_order: [@typeInfo(T).@"struct".field_names.len]usize = blk: {
+            var order: [@typeInfo(T).@"struct".field_names.len]usize = undefined;
             for (&order, 0..) |*slot, i| slot.* = i;
             // Insertion sort: stable, so equal alignments keep declaration order.
             var i: usize = 1;
@@ -481,8 +482,8 @@ pub fn SafeMultiList(comptime T: type) type {
         };
 
         fn fieldAlignment(comptime field_index: usize) comptime_int {
-            const info = std.meta.fields(T)[field_index];
-            return info.alignment orelse @alignOf(info.type);
+            const info = @typeInfo(T).@"struct";
+            return info.field_attrs[field_index].@"align" orelse @alignOf(info.field_types[field_index]);
         }
 
         /// Append this list's live rows to `writer` as `std.MultiArrayList`'s own column
@@ -510,11 +511,11 @@ pub fn SafeMultiList(comptime T: type) type {
                 // The block itself is padded to the largest field alignment below.
                 var block_align: usize = 1;
                 for (column_order) |field_index| {
-                    if (@sizeOf(std.meta.fields(T)[field_index].type) == 0) continue;
+                    if (@sizeOf(@typeInfo(T).@"struct".field_types[field_index]) == 0) continue;
                     const field_align = fieldAlignment(field_index);
                     if (columnBytesBefore(field_index) % field_align != 0) {
                         @compileError("SafeMultiList(" ++ @typeName(T) ++ ") column '" ++
-                            std.meta.fields(T)[field_index].name ++
+                            @typeInfo(T).@"struct".field_names[field_index] ++
                             "' would need alignment padding in the compacted layout");
                     }
                     if (field_align > block_align) block_align = field_align;
@@ -531,7 +532,7 @@ pub fn SafeMultiList(comptime T: type) type {
 
             const slice = list.items.slice();
             inline for (column_order) |field_index| {
-                const FieldType = std.meta.fields(T)[field_index].type;
+                const FieldType = @typeInfo(T).@"struct".field_types[field_index];
                 if (@sizeOf(FieldType) > 0) {
                     // `column_order` must agree with the layout std actually produced:
                     // this column starts `capacity * columnBytesBefore` into the source
@@ -560,7 +561,7 @@ pub fn SafeMultiList(comptime T: type) type {
                 var total: usize = 0;
                 for (column_order) |candidate| {
                     if (candidate == field_index) break :blk total;
-                    total += @sizeOf(std.meta.fields(T)[candidate].type);
+                    total += @sizeOf(@typeInfo(T).@"struct".field_types[candidate]);
                 }
                 unreachable;
             };

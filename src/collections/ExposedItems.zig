@@ -245,6 +245,7 @@ pub const ExposedItems = struct {
                 .entries = .{
                     .items = if (entries_offset) |offset| offset else entries[0..0],
                     .capacity = entries.len,
+                    .pointer_stability = .{},
                 },
                 .sorted = self.items.sorted,
             },

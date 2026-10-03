@@ -1301,8 +1301,9 @@ fn normalizeMaterializedEvidence(
     };
     // Shallow contract nesting keeps its frames in place, so an unchanged
     // vector allocates nothing.
-    var frame_fallback = std.heap.stackFallback(8 * @sizeOf(Frame), arena);
-    const frame_allocator = frame_fallback.get();
+    var frame_fallback_buffer: [8 * @sizeOf(Frame)]u8 = undefined;
+    var frame_fallback = std.heap.BufferFirstAllocator.init(&frame_fallback_buffer, arena);
+    const frame_allocator = frame_fallback.allocator();
     var frames = std.ArrayList(Frame).empty;
     defer frames.deinit(frame_allocator);
     try frames.append(frame_allocator, .{ .contract = contract });
@@ -16702,24 +16703,24 @@ const SealedNestedSpec = struct {
 };
 
 fn assertCoordinatorIntentGraphFree(comptime T: type) void {
-    inline for (std.meta.fields(T)) |field| {
-        if (field.type == NodeId or
-            field.type == InstGraph or
-            field.type == GraphTypeFinals or
-            field.type == Type.Store.TypeRelocation or
-            field.type == ArgumentClassSnapshot)
+    inline for (@typeInfo(T).@"struct".field_names, @typeInfo(T).@"struct".field_types) |field_name, field_type| {
+        if (field_type == NodeId or
+            field_type == InstGraph or
+            field_type == GraphTypeFinals or
+            field_type == Type.Store.TypeRelocation or
+            field_type == ArgumentClassSnapshot)
         {
-            @compileError(@typeName(T) ++ "." ++ field.name ++ " retains graph-qualified state");
+            @compileError(@typeName(T) ++ "." ++ field_name ++ " retains graph-qualified state");
         }
-        if (@typeInfo(field.type) == .pointer) {
-            const child = @typeInfo(field.type).pointer.child;
+        if (@typeInfo(field_type) == .pointer) {
+            const child = @typeInfo(field_type).pointer.child;
             if (child == NodeId or
                 child == InstGraph or
                 child == GraphTypeFinals or
                 child == Type.Store.TypeRelocation or
                 child == ArgumentClassSnapshot)
             {
-                @compileError(@typeName(T) ++ "." ++ field.name ++ " retains graph-qualified storage");
+                @compileError(@typeName(T) ++ "." ++ field_name ++ " retains graph-qualified storage");
             }
         }
     }
@@ -64337,16 +64338,16 @@ test "draft specialization lookup preserves family evidence and request identity
 
         // Every family qualifier and evidence byte contributes to identity.
         // Growing the prefix table must also preserve previously issued IDs.
-        inline for (std.meta.fields(Family)) |field| {
-            const changes = if (@typeInfo(field.type) == .array) @typeInfo(field.type).array.len else 1;
+        inline for (@typeInfo(Family).@"struct".field_names, @typeInfo(Family).@"struct".field_types) |field_name, field_type| {
+            const changes = if (@typeInfo(field_type) == .array) @typeInfo(field_type).array.len else 1;
             for (0..changes) |byte| {
                 var different_family = family;
-                if (@typeInfo(field.type) == .array) {
-                    @field(different_family, field.name)[byte] = 1;
-                } else if (field.type == u32) {
-                    @field(different_family, field.name) = 1;
-                } else if (field.type == bool) {
-                    @field(different_family, field.name) = true;
+                if (@typeInfo(field_type) == .array) {
+                    @field(different_family, field_name)[byte] = 1;
+                } else if (field_type == u32) {
+                    @field(different_family, field_name) = 1;
+                } else if (field_type == bool) {
+                    @field(different_family, field_name) = true;
                 } else {
                     @compileError("unsupported specialization family qualifier");
                 }
@@ -69703,9 +69704,9 @@ test "issue 11737: independent call selects its own nested contract without copy
 /// Write `src` into `dest`, copying only the active variant's payload.
 fn writeActiveVariant(comptime U: type, dest: *U, src: U) void {
     const tag = std.meta.activeTag(src);
-    inline for (@typeInfo(U).@"union".fields) |field| {
-        if (tag == @field(std.meta.Tag(U), field.name)) {
-            dest.* = @unionInit(U, field.name, @field(src, field.name));
+    inline for (@typeInfo(U).@"union".field_names) |field_name| {
+        if (tag == @field(std.meta.Tag(U), field_name)) {
+            dest.* = @unionInit(U, field_name, @field(src, field_name));
             return;
         }
     }

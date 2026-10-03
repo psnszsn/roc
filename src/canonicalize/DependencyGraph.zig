@@ -1249,7 +1249,11 @@ const DemandAnalyzer = struct {
     fn patternBinds(self: *DemandAnalyzer, root: CIR.Pattern.Idx, needle: CIR.Pattern.Idx) bool {
         if (root == needle) return true;
 
-        const stack_allocator = self.allocator;
+        var stack_allocator_state_buffer: [2048]u8 = undefined;
+
+        var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.allocator);
+
+        const stack_allocator = stack_allocator_state.allocator();
         var pending: std.ArrayList(CIR.Pattern.Idx) = .empty;
         defer pending.deinit(stack_allocator);
 
@@ -2078,7 +2082,11 @@ const TarjanState = struct {
             next_dependency: usize,
         };
 
-        const stack_allocator = self.allocator;
+        var stack_allocator_state_buffer: [4096]u8 = undefined;
+
+        var stack_allocator_state = std.heap.BufferFirstAllocator.init(&stack_allocator_state_buffer, self.allocator);
+
+        const stack_allocator = stack_allocator_state.allocator();
         var dfs_stack: std.ArrayList(DfsFrame) = .empty;
         defer dfs_stack.deinit(stack_allocator);
 

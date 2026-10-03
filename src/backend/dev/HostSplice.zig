@@ -516,8 +516,8 @@ test "comptime hook bindings are explicit for every private ABI symbol" {
         .image_base = 4096,
         .stubs_start = 32,
     };
-    inline for (@typeInfo(ComptimeHook).@"enum".fields) |field| {
-        const name = "roc__comptime_" ++ field.name;
+    inline for (@typeInfo(ComptimeHook).@"enum".field_names) |field_name| {
+        const name = "roc__comptime_" ++ field_name;
         // Even an image definition cannot mask a missing private binding.
         try symbols.put(name, 8);
         try std.testing.expectEqual(Binding.unresolved, try binder.classify(name));
@@ -525,9 +525,9 @@ test "comptime hook bindings are explicit for every private ABI symbol" {
         try std.testing.expectEqual(@as(usize, 0), targets.count());
     }
     splice.setComptimeHooks(hooks);
-    inline for (@typeInfo(ComptimeHook).@"enum".fields) |field| {
-        const name = "roc__comptime_" ++ field.name;
-        const target = @intFromPtr(@field(hooks, field.name));
+    inline for (@typeInfo(ComptimeHook).@"enum".field_names) |field_name| {
+        const name = "roc__comptime_" ++ field_name;
+        const target = @intFromPtr(@field(hooks, field_name));
         try std.testing.expectEqual(Binding.compiler_function, try binder.classify(name));
         const index = targets.getIndex(target).?;
         try std.testing.expectEqual(@as(?usize, 4096 + 32 + index * stub_size), binder.address(name));
@@ -557,8 +557,8 @@ test "comptime hook bindings are explicit for every private ABI symbol" {
         try std.testing.expect(Hooks.exited);
     }
     splice.setComptimeHooks(null);
-    inline for (@typeInfo(ComptimeHook).@"enum".fields) |field| {
-        const name = "roc__comptime_" ++ field.name;
+    inline for (@typeInfo(ComptimeHook).@"enum".field_names) |field_name| {
+        const name = "roc__comptime_" ++ field_name;
         try std.testing.expectEqual(Binding.unresolved, try binder.classify(name));
         try std.testing.expectEqual(null, binder.address(name));
     }

@@ -474,7 +474,7 @@ fn putInt(comptime T: type, bytes: []u8, offset: usize, value: T) void {
 
 test "ELF parser checks weak imports, hidden exports, and missing tables" {
     const name = "__clear_cache";
-    var bytes = [_]u8{0} ** (64 + 3 * 64 + 2 * 24 + 1 + name.len + 1);
+    var bytes = @as([64 + 3 * 64 + 2 * 24 + 1 + name.len + 1]u8, @splat(0));
     @memcpy(bytes[0..6], "\x7fELF\x02\x01");
     putInt(u16, &bytes, 16, 1); // ET_REL
     putInt(u64, &bytes, 40, 64);
@@ -520,7 +520,7 @@ test "ELF32 parser preserves the symbol contract and rejects out-of-bounds secti
     const table = 52 + 3 * 40;
     const sym = table + 16;
     const strings = table + 32;
-    var bytes = [_]u8{0} ** (strings + name.len + 2);
+    var bytes = @as([strings + name.len + 2]u8, @splat(0));
     @memcpy(bytes[0..6], "\x7fELF\x01\x01");
     putInt(u16, &bytes, 16, 1); // ET_REL
     putInt(u32, &bytes, 32, 52);
@@ -560,7 +560,7 @@ test "ELF32 parser preserves the symbol contract and rejects out-of-bounds secti
 
 test "Mach-O parser checks private externs and weak references" {
     const name = "___clear_cache"; // Includes Mach-O's leading underscore.
-    var bytes = [_]u8{0} ** (32 + 24 + 16 + 1 + name.len + 1);
+    var bytes = @as([32 + 24 + 16 + 1 + name.len + 1]u8, @splat(0));
     putInt(u32, &bytes, 0, std.macho.MH_MAGIC_64);
     putInt(u32, &bytes, 12, std.macho.MH_OBJECT);
     putInt(u32, &bytes, 16, 1);
@@ -586,7 +586,7 @@ test "Mach-O parser checks private externs and weak references" {
 
 test "COFF parser checks weak externs and skips auxiliary records" {
     const name = "__clear_cache";
-    var bytes = [_]u8{0} ** (20 + 36 + 4 + name.len + 1);
+    var bytes = @as([20 + 36 + 4 + name.len + 1]u8, @splat(0));
     putInt(u16, &bytes, 0, 0xaa64);
     putInt(u32, &bytes, 8, 20);
     putInt(u32, &bytes, 12, 2);

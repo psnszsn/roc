@@ -3188,7 +3188,7 @@ var empty_view_var_names: canonical.NameInterner = .{};
 // Builtin identity selects its declaration directly, independently of the
 // declaring module's source statement numbering. Zero means absent; stored
 // declaration ids are offset by one so the index is compact serializable POD.
-const BuiltinNominalDeclarationIndex = [@typeInfo(CheckedBuiltinNominal).@"enum".fields.len]u32;
+const BuiltinNominalDeclarationIndex = [@typeInfo(CheckedBuiltinNominal).@"enum".field_names.len]u32;
 const empty_builtin_nominal_declarations: BuiltinNominalDeclarationIndex = @splat(0);
 
 /// Borrowed, read-only view over a `CheckedTypeStore`'s relocated slices plus its
@@ -4302,12 +4302,12 @@ pub const CheckedTypeStore = struct {
 
     fn borrowForPairing(source: *const CheckedTypeStore) CheckedTypeStore {
         var result: CheckedTypeStore = .{};
-        inline for (@typeInfo(BorrowedColumn).@"enum".fields) |field| {
-            @field(result, field.name) = @field(source, field.name);
+        inline for (@typeInfo(BorrowedColumn).@"enum".field_names) |field_name| {
+            @field(result, field_name) = @field(source, field_name);
         }
         result.root_index_count = source.root_index_count;
         result.builtin_nominal_declarations = source.builtin_nominal_declarations;
-        result.borrowed_columns = std.EnumSet(BorrowedColumn).initFull();
+        result.borrowed_columns = std.EnumSet(BorrowedColumn).full;
         return result;
     }
 
@@ -5417,8 +5417,8 @@ pub const CheckedTypeStore = struct {
         self.identity_origins.deinit(allocator);
         self.synthetic_variable_roots.deinit(allocator);
         if (!self.serialized) {
-            inline for (@typeInfo(BorrowedColumn).@"enum".fields) |field| {
-                if (!self.borrowed_columns.contains(@field(BorrowedColumn, field.name))) @field(self, field.name).deinit(allocator);
+            inline for (@typeInfo(BorrowedColumn).@"enum".field_names) |field_name| {
+                if (!self.borrowed_columns.contains(@field(BorrowedColumn, field_name))) @field(self, field_name).deinit(allocator);
             }
         }
         self.* = .{};
@@ -26769,7 +26769,7 @@ fn copyPairingColumns(comptime T: type, source: T, allocator: Allocator) Allocat
         const pointer = @typeInfo(T).pointer;
         comptime std.debug.assert(pointer.size == .slice);
         artifact_serialize.assertRelocatablePod(pointer.child);
-        const result = try allocator.alignedAlloc(pointer.child, .fromByteUnits(pointer.alignment orelse @alignOf(pointer.child)), source.len);
+        const result = try allocator.alignedAlloc(pointer.child, .fromByteUnits(pointer.attrs.@"align" orelse @alignOf(pointer.child)), source.len);
         @memcpy(result, source);
         return result;
     } else if (comptime @typeInfo(T) == .@"struct") {
@@ -26780,23 +26780,23 @@ fn copyPairingColumns(comptime T: type, source: T, allocator: Allocator) Allocat
             return result;
         } else if (comptime @hasDecl(T, "Serialized")) {
             var result: T = source;
-            inline for (@typeInfo(T).@"struct".fields) |field| {
+            inline for (@typeInfo(T).@"struct".field_names, @typeInfo(T).@"struct".field_types, @typeInfo(T).@"struct".field_attrs) |field_name, field_type, field_attrs| {
                 const transient = comptime blk: {
                     if (@hasDecl(T, "serde_transient_fields")) for (T.serde_transient_fields) |name| {
-                        if (pairingFieldNameEql(name, field.name)) break :blk true;
+                        if (pairingFieldNameEql(name, field_name)) break :blk true;
                     };
                     break :blk false;
                 };
                 if (comptime transient) {
-                    @field(result, field.name) = if (field.defaultValue()) |value| value else field.type.init(allocator);
-                } else if (comptime field.type == Allocator) {
-                    @field(result, field.name) = allocator;
-                } else if (comptime pairingFieldNameEql(field.name, "serialized")) {
-                    @field(result, field.name) = false;
-                } else if (comptime pairingFieldNameEql(field.name, "supports_inserts")) {
-                    @field(result, field.name) = true;
+                    @field(result, field_name) = if (field_attrs.defaultValue(field_type)) |value| value else field_type.init(allocator);
+                } else if (comptime field_type == Allocator) {
+                    @field(result, field_name) = allocator;
+                } else if (comptime pairingFieldNameEql(field_name, "serialized")) {
+                    @field(result, field_name) = false;
+                } else if (comptime pairingFieldNameEql(field_name, "supports_inserts")) {
+                    @field(result, field_name) = true;
                 } else {
-                    @field(result, field.name) = try copyPairingColumns(field.type, @field(source, field.name), allocator);
+                    @field(result, field_name) = try copyPairingColumns(field_type, @field(source, field_name), allocator);
                 }
             }
             return result;
@@ -26869,9 +26869,9 @@ pub const PlatformPairing = struct {
             self.has_dependent_evaluation = artifact.root_requests.compile_time_requests.len != 0;
             var delta = artifact.checked_types;
             const empty_types = CheckedTypeStore{};
-            inline for (@typeInfo(CheckedTypeStore.BorrowedColumn).@"enum".fields) |field| {
-                if (artifact.checked_types.borrowed_columns.contains(@field(CheckedTypeStore.BorrowedColumn, field.name))) {
-                    @field(delta, field.name) = @field(empty_types, field.name);
+            inline for (@typeInfo(CheckedTypeStore.BorrowedColumn).@"enum".field_names) |field_name| {
+                if (artifact.checked_types.borrowed_columns.contains(@field(CheckedTypeStore.BorrowedColumn, field_name))) {
+                    @field(delta, field_name) = @field(empty_types, field_name);
                 }
             }
             try self.checked_types.serialize(&delta, gpa, writer);
@@ -26921,9 +26921,9 @@ pub const PlatformPairing = struct {
             result.evaluation_state = .finalized;
             result.checking_context_identity.platform_app_relation = .{ .bytes = self.relation };
             result.checked_types = self.checked_types.deserialize(address);
-            inline for (@typeInfo(CheckedTypeStore.BorrowedColumn).@"enum".fields) |field| {
-                const bit = @backingInt(@field(CheckedTypeStore.BorrowedColumn, field.name));
-                if (self.borrowed_types & (@as(u16, 1) << bit) != 0) @field(result.checked_types, field.name) = @field(platform.checked_types, field.name);
+            inline for (@typeInfo(CheckedTypeStore.BorrowedColumn).@"enum".field_names) |field_name| {
+                const bit = @backingInt(@field(CheckedTypeStore.BorrowedColumn, field_name));
+                if (self.borrowed_types & (@as(u16, 1) << bit) != 0) @field(result.checked_types, field_name) = @field(platform.checked_types, field_name);
             }
             result.checked_procedure_templates.templates = artifact_serialize.arrayListFromSlice(CheckedProcedureTemplate, self.templates.deserialize(address));
             result.checked_bodies.stored_exprs = artifact_serialize.arrayListFromSlice(StoredCheckedExpr, self.body_exprs.deserialize(address));
@@ -39038,29 +39038,29 @@ fn isSliceField(comptime FT: type) bool {
 fn expectAllSliceStoreRoundTrips(comptime Store: type) artifact_serialize.TestError!void {
     const gpa = std.testing.allocator;
     var store: Store = .{};
-    inline for (std.meta.fields(Store)) |field| {
-        const slice = comptime isSliceField(field.type);
-        const Elem = std.meta.Child(if (slice) field.type else @FieldType(field.type, "items"));
+    inline for (@typeInfo(Store).@"struct".field_names, @typeInfo(Store).@"struct".field_types) |field_name, field_type| {
+        const slice = comptime isSliceField(field_type);
+        const Elem = std.meta.Child(if (slice) field_type else @FieldType(field_type, "items"));
         // Give lists spare capacity to prove serialization only writes live rows.
         const buf = try gpa.alloc(Elem, if (slice) 3 else 7);
         artifact_serialize.poisonSlice(Elem, buf, 0x5A);
         artifact_serialize.zeroSlicePadding(Elem, buf);
-        @field(store, field.name) = if (slice) buf else .{ .items = buf[0..3], .capacity = buf.len };
+        @field(store, field_name) = if (slice) buf else .{ .items = buf[0..3], .capacity = buf.len, .pointer_stability = .{} };
     }
-    defer inline for (std.meta.fields(Store)) |field| {
-        if (comptime isSliceField(field.type)) {
-            gpa.free(@field(store, field.name));
+    defer inline for (@typeInfo(Store).@"struct".field_names, @typeInfo(Store).@"struct".field_types) |field_name, field_type| {
+        if (comptime isSliceField(field_type)) {
+            gpa.free(@field(store, field_name));
         } else {
-            @field(store, field.name).deinit(gpa);
+            @field(store, field_name).deinit(gpa);
         }
     };
 
     const rt = try artifact_serialize.roundTripForTest(gpa, Store, &store);
     defer gpa.free(rt.buffer);
-    inline for (std.meta.fields(Store)) |field| {
-        const slice = comptime isSliceField(field.type);
-        const before = if (slice) @field(store, field.name) else @field(store, field.name).items;
-        const after = if (slice) @field(rt.loaded, field.name) else @field(rt.loaded, field.name).items;
+    inline for (@typeInfo(Store).@"struct".field_names, @typeInfo(Store).@"struct".field_types) |field_name, field_type| {
+        const slice = comptime isSliceField(field_type);
+        const before = if (slice) @field(store, field_name) else @field(store, field_name).items;
+        const after = if (slice) @field(rt.loaded, field_name) else @field(rt.loaded, field_name).items;
         try artifact_serialize.expectSlicesByteEqual(std.meta.Child(@TypeOf(before)), before, after);
     }
 }

@@ -443,8 +443,8 @@ pub const BoxyBuiltinFn = enum {
     /// must match a `pub fn` in `src/eval/boxy_abi.zig`.
     /// The wrapper whose C symbol is `name`, or null.
     pub fn fromSymbolName(name: []const u8) ?BoxyBuiltinFn {
-        inline for (@typeInfo(BoxyBuiltinFn).@"enum".fields) |field| {
-            const boxy_fn: BoxyBuiltinFn = @fromBackingInt(@intCast(field.value));
+        inline for (@typeInfo(BoxyBuiltinFn).@"enum".field_values) |field_value| {
+            const boxy_fn: BoxyBuiltinFn = @fromBackingInt(@intCast(field_value));
             if (std.mem.eql(u8, name, comptime boxy_fn.symbolName())) return boxy_fn;
         }
         return null;
@@ -12978,7 +12978,11 @@ pub fn LirCodeGen(comptime target: RocTarget) type {
                 list_finish: *EqListState,
             };
 
-            const wa = self.allocator;
+            var sfa_buffer: [32 * @sizeOf(EqWork)]u8 = undefined;
+
+            var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+
+            const wa = sfa.allocator();
             var work = std.ArrayList(EqWork).empty;
             defer work.deinit(wa);
 
@@ -16627,7 +16631,9 @@ pub fn LirCodeGen(comptime target: RocTarget) type {
             const proc_spec = self.store.getProcSpec(call.proc);
             const arg_refs = self.store.getLocalSpan(call.args);
             const param_refs = self.store.getLocalSpan(proc_spec.args);
-            const args_alloc = self.allocator;
+            var args_sfa_buffer: [8 * (@sizeOf(ValueLocation) + @sizeOf(layout.Idx))]u8 = undefined;
+            var args_sfa = std.heap.BufferFirstAllocator.init(&args_sfa_buffer, self.allocator);
+            const args_alloc = args_sfa.allocator();
             var arg_locs = try args_alloc.alloc(ValueLocation, arg_refs.len);
             defer args_alloc.free(arg_locs);
             var arg_layouts = try args_alloc.alloc(layout.Idx, arg_refs.len);
@@ -16741,7 +16747,9 @@ pub fn LirCodeGen(comptime target: RocTarget) type {
 
             const arg_refs = self.store.getLocalSpan(call_args);
 
-            const args_alloc = self.allocator;
+            var args_sfa_buffer: [8 * (@sizeOf(ValueLocation) + @sizeOf(layout.Idx))]u8 = undefined;
+            var args_sfa = std.heap.BufferFirstAllocator.init(&args_sfa_buffer, self.allocator);
+            const args_alloc = args_sfa.allocator();
             var arg_layouts = try args_alloc.alloc(layout.Idx, arg_refs.len);
             defer args_alloc.free(arg_layouts);
             var arg_locs = try args_alloc.alloc(ValueLocation, arg_refs.len);
@@ -22837,7 +22845,9 @@ pub fn LirCodeGen(comptime target: RocTarget) type {
 
             // Most control-flow graphs are shallow, so keep the work stack in a
             // small on-stack buffer and only spill to the heap for deep nesting.
-            const wa = self.allocator;
+            var sfa_buffer: [64 * @sizeOf(StmtWork)]u8 = undefined;
+            var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+            const wa = sfa.allocator();
             var work = std.ArrayList(StmtWork).empty;
             defer work.deinit(wa);
             try work.append(wa, .{ .node = root_stmt_id });

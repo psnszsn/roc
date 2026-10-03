@@ -822,14 +822,14 @@ pub const InterfaceConstraints = struct {
             if (T == names.RecordFieldNameId) return self.text(ns.recordFieldLabelText(value));
             if (T == names.TagNameId) return self.text(ns.tagLabelText(value));
             switch (@typeInfo(T)) {
-                .@"struct" => |info| inline for (info.fields) |field| {
-                    try self.write(field.type, @field(value, field.name));
+                .@"struct" => |info| inline for (info.field_names, info.field_types) |field_name, field_type| {
+                    try self.write(field_type, @field(value, field_name));
                 },
                 .@"union" => |info| {
                     try self.write(info.tag_type.?, std.meta.activeTag(value));
-                    inline for (info.fields) |field| {
-                        if (std.meta.activeTag(value) == @field(info.tag_type.?, field.name)) {
-                            try self.write(field.type, @field(value, field.name));
+                    inline for (info.field_names, info.field_types) |field_name, field_type| {
+                        if (std.meta.activeTag(value) == @field(info.tag_type.?, field_name)) {
+                            try self.write(field_type, @field(value, field_name));
                             return;
                         }
                     }
@@ -882,6 +882,7 @@ pub const InterfaceConstraints = struct {
                 .@"anyframe",
                 .vector,
                 .enum_literal,
+                .spirv,
                 .type,
                 => @compileError("unsupported interface identity scalar " ++ @typeName(T)),
             }
@@ -1137,9 +1138,9 @@ pub const InterfaceConstraints = struct {
                 return;
             }
             switch (@typeInfo(T)) {
-                .@"struct" => |info| inline for (info.fields) |field| try collectCaptureRefs(allocator, field.type, @field(value, field.name), out),
-                .@"union" => |info| inline for (info.fields) |field| {
-                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field.name)) try collectCaptureRefs(allocator, field.type, @field(value, field.name), out);
+                .@"struct" => |info| inline for (info.field_names, info.field_types) |field_name, field_type| try collectCaptureRefs(allocator, field_type, @field(value, field_name), out),
+                .@"union" => |info| inline for (info.field_names, info.field_types) |field_name, field_type| {
+                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field_name)) try collectCaptureRefs(allocator, field_type, @field(value, field_name), out);
                 },
                 .optional => |info| if (value) |actual| try collectCaptureRefs(allocator, info.child, actual, out),
                 .pointer => |info| switch (info.size) {
@@ -1167,6 +1168,7 @@ pub const InterfaceConstraints = struct {
                 .@"anyframe",
                 .vector,
                 .enum_literal,
+                .spirv,
                 => {},
             }
         }
@@ -1272,9 +1274,9 @@ pub const InterfaceConstraints = struct {
                 .sealed_only => if (value != .sealed) try items.add(.{ .decided = false }),
             };
             switch (@typeInfo(T)) {
-                .@"struct" => |info| inline for (info.fields) |field| try addScanLeaves(items, field.type, @field(value, field.name), kinds),
-                .@"union" => |info| inline for (info.fields) |field| {
-                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field.name)) try addScanLeaves(items, field.type, @field(value, field.name), kinds);
+                .@"struct" => |info| inline for (info.field_names, info.field_types) |field_name, field_type| try addScanLeaves(items, field_type, @field(value, field_name), kinds),
+                .@"union" => |info| inline for (info.field_names, info.field_types) |field_name, field_type| {
+                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field_name)) try addScanLeaves(items, field_type, @field(value, field_name), kinds);
                 },
                 .optional => |info| if (value) |actual| try addScanLeaves(items, info.child, actual, kinds),
                 .pointer => |info| switch (info.size) {
@@ -1302,6 +1304,7 @@ pub const InterfaceConstraints = struct {
                 .@"anyframe",
                 .vector,
                 .enum_literal,
+                .spirv,
                 => {},
             }
         }
@@ -1436,13 +1439,13 @@ pub const InterfaceConstraints = struct {
         return switch (@typeInfo(T)) {
             .@"struct" => |info| blk: {
                 var result: T = undefined;
-                inline for (info.fields) |field| @field(result, field.name) = try mapValue(context, field.type, @field(value, field.name));
+                inline for (info.field_names, info.field_types) |field_name, field_type| @field(result, field_name) = try mapValue(context, field_type, @field(value, field_name));
                 break :blk result;
             },
             .@"union" => |info| blk: {
-                inline for (info.fields) |field| {
-                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field.name)) {
-                        break :blk @unionInit(T, field.name, try mapValue(context, field.type, @field(value, field.name)));
+                inline for (info.field_names, info.field_types) |field_name, field_type| {
+                    if (std.meta.activeTag(value) == @field(info.tag_type.?, field_name)) {
+                        break :blk @unionInit(T, field_name, try mapValue(context, field_type, @field(value, field_name)));
                     }
                 }
                 unreachable;
@@ -1487,6 +1490,7 @@ pub const InterfaceConstraints = struct {
             .@"anyframe",
             .vector,
             .enum_literal,
+            .spirv,
             => try context.scalar(T, value),
         };
     }
@@ -6465,8 +6469,9 @@ pub const InstGraph = struct {
         const row = root_content.record;
         // The row lists below live only for this call and are usually short,
         // so they start in a buffer on this frame.
-        var stack_first = std.heap.stackFallback(2048, self.allocator);
-        const row_allocator = stack_first.get();
+        var stack_first_buffer: [2048]u8 = undefined;
+        var stack_first = std.heap.BufferFirstAllocator.init(&stack_first_buffer, self.allocator);
+        const row_allocator = stack_first.allocator();
         var fields = std.ArrayList(InstField).empty;
         defer fields.deinit(row_allocator);
         try fields.appendSlice(row_allocator, row.fields);
@@ -6571,8 +6576,9 @@ pub const InstGraph = struct {
     ) Allocator.Error!void {
         // The row lists below live only for this call and are usually short,
         // so they start in a buffer on this frame.
-        var stack_first = std.heap.stackFallback(2048, self.allocator);
-        const row_allocator = stack_first.get();
+        var stack_first_buffer: [2048]u8 = undefined;
+        var stack_first = std.heap.BufferFirstAllocator.init(&stack_first_buffer, self.allocator);
+        const row_allocator = stack_first.allocator();
         const flat_left = try self.flattenTagRow(left);
         const flat_right = try self.flattenTagRow(right);
 
@@ -6700,8 +6706,9 @@ pub const InstGraph = struct {
     ) Allocator.Error!void {
         // The row lists below live only for this call and are usually short,
         // so they start in a buffer on this frame.
-        var stack_first = std.heap.stackFallback(2048, self.allocator);
-        const row_allocator = stack_first.get();
+        var stack_first_buffer: [2048]u8 = undefined;
+        var stack_first = std.heap.BufferFirstAllocator.init(&stack_first_buffer, self.allocator);
+        const row_allocator = stack_first.allocator();
         const flat_left = try self.flattenRecordRow(left);
         const flat_right = try self.flattenRecordRow(right);
 

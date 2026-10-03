@@ -3888,7 +3888,11 @@ fn compileBuiltinInternalRcHelper(self: *Self, helper_key: RcHelperKey, atomicit
         return func_idx;
     }
 
-    const wa = self.allocator;
+    var sfa_buffer: [64 * @sizeOf(RcHelperKey)]u8 = undefined;
+
+    var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+
+    const wa = sfa.allocator();
 
     // Pre-order reservation of every transitively-needed helper slot.
     var to_emit = std.ArrayList(RcHelperKey).empty;
@@ -4391,7 +4395,9 @@ fn emitListEqLoop(
 /// `compareCompositeByLayout`/`compareTagUnionByLayout`/`compareFieldByLayout`/
 /// `emitListEqLoop` functions.
 fn runEqWork(self: *Self, initial: EqWork) Allocator.Error!void {
-    const wa = self.allocator;
+    var sfa_buffer: [64 * @sizeOf(EqWork)]u8 = undefined;
+    var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+    const wa = sfa.allocator();
     var work = std.ArrayList(EqWork).empty;
     defer work.deinit(wa);
     try work.append(wa, initial);
@@ -4485,7 +4491,9 @@ fn expandComposite(self: *Self, work: *std.ArrayList(EqWork), wa: Allocator, lhs
             // Collect the non-zero-size fields in source order, then push their
             // child frames (and the `i32_and` glue that follows all but the first)
             // in reverse so popping reproduces the original left-to-right emission.
-            const ta = self.allocator;
+            var sfa_buffer: [16 * @sizeOf(u32)]u8 = undefined;
+            var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+            const ta = sfa.allocator();
             var fields = std.ArrayList(u32).empty;
             defer fields.deinit(ta);
 
@@ -9672,7 +9680,9 @@ fn generateCFStmt(self: *Self, stmt_id: CFStmtId) Allocator.Error!void {
 
 /// Explicit work-stack driver for the CFStmt walker (stack-safe; no recursion).
 fn generateCFStmtUntil(self: *Self, stmt_id: CFStmtId, stop: ?CFStmtId) Allocator.Error!void {
-    const wa = self.allocator;
+    var sfa_buffer: [64 * @sizeOf(StmtWork)]u8 = undefined;
+    var sfa = std.heap.BufferFirstAllocator.init(&sfa_buffer, self.allocator);
+    const wa = sfa.allocator();
     var work = std.ArrayList(StmtWork).empty;
     defer work.deinit(wa);
     try work.append(wa, .{ .node = .{ .stmt_id = stmt_id, .stop = stop } });

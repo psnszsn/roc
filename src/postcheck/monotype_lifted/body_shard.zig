@@ -146,17 +146,17 @@ const Relocation = struct {
         const info = @typeInfo(T);
         if (comptime std.meta.activeTag(info) == .@"struct") {
             var result = item;
-            inline for (std.meta.fields(T)) |field| {
-                @field(result, field.name) = self.member(T, field.name, @field(item, field.name));
+            inline for (@typeInfo(T).@"struct".field_names) |field_name| {
+                @field(result, field_name) = self.member(T, field_name, @field(item, field_name));
             }
             return result;
         }
         if (comptime std.meta.activeTag(info) == .@"union") {
             const Tag = info.@"union".tag_type orelse return item;
             const active = std.meta.activeTag(item);
-            inline for (info.@"union".fields) |field| {
-                if (active == @field(Tag, field.name)) {
-                    return @unionInit(T, field.name, self.member(T, field.name, @field(item, field.name)));
+            inline for (info.@"union".field_names) |field_name| {
+                if (active == @field(Tag, field_name)) {
+                    return @unionInit(T, field_name, self.member(T, field_name, @field(item, field_name)));
                 }
             }
             unreachable;

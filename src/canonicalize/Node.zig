@@ -1394,13 +1394,13 @@ test "Payload: assigning a variant defines all 16 bytes, whatever the memory hel
     // cache writes all 16 verbatim. This is the property that makes that safe: the same
     // logical variant value, written over two different poison patterns, produces the
     // same 16 bytes. A variant that stopped short of 16 bytes fails here.
-    inline for (@typeInfo(Payload).@"union".fields) |variant| {
+    inline for (@typeInfo(Payload).@"union".field_names, @typeInfo(Payload).@"union".field_types) |variant_name, variant_type| {
         var over_ones: [@sizeOf(Payload)]u8 align(@alignOf(Payload)) = undefined;
         var over_fives: [@sizeOf(Payload)]u8 align(@alignOf(Payload)) = undefined;
         @memset(&over_ones, 0xAA);
         @memset(&over_fives, 0x55);
 
-        const value = @unionInit(Payload, variant.name, std.mem.zeroes(variant.type));
+        const value = @unionInit(Payload, variant_name, std.mem.zeroes(variant_type));
         @as(*Payload, @ptrCast(&over_ones)).* = value;
         @as(*Payload, @ptrCast(&over_fives)).* = value;
 

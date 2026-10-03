@@ -844,7 +844,7 @@ test "timing counter groups retain every Monotype graph diagnostic" {
     });
     defer reporter.deinit();
     reporter.start();
-    var counters = [_]Counter{.{ .name = "Graph diagnostic", .count = 0 }} ** 27;
+    var counters = @as([27]Counter, @splat(.{ .name = "Graph diagnostic", .count = 0 }));
     counters[26] = .{ .name = "Generated-private guard returns", .count = 12345 };
     reporter.recordCounters("Monotype type graph", &counters);
     reporter.finish();
@@ -865,7 +865,7 @@ test "timing counters beyond the first 24 are printed" {
     defer reporter.deinit();
     reporter.start();
 
-    var counters = [_]Counter{.{ .name = "Earlier counter", .count = 0 }} ** 28;
+    var counters = @as([28]Counter, @splat(.{ .name = "Earlier counter", .count = 0 }));
     counters[25] = .{ .name = "Union-find resolutions", .count = 123456789 };
     counters[27] = .{ .name = "Final counter", .count = 987654321 };
     reporter.recordCounters("Monotype graph", &counters);

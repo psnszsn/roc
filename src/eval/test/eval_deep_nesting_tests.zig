@@ -38,7 +38,12 @@ const loop_depth = 300;
 const codec_chain_depth = 100;
 
 fn repeat(comptime text: []const u8, comptime count: usize) []const u8 {
-    return text ** count;
+    const repeated: [text.len * count]u8 = comptime blk: {
+        var result: [text.len * count]u8 = undefined;
+        for (0..count) |index| @memcpy(result[index * text.len ..][0..text.len], text);
+        break :blk result;
+    };
+    return &repeated;
 }
 
 /// A custom parser whose where-clause asks for its argument's parser, applied

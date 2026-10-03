@@ -87,8 +87,8 @@ pub const UniquenessMetrics = struct {
     local_visits: u64 = 0,
 
     pub fn add(self: *UniquenessMetrics, other: UniquenessMetrics) void {
-        inline for (std.meta.fields(UniquenessMetrics)) |field| {
-            @field(self, field.name) +|= @field(other, field.name);
+        inline for (@typeInfo(UniquenessMetrics).@"struct".field_names) |field_name| {
+            @field(self, field_name) +|= @field(other, field_name);
         }
     }
 };

@@ -7,6 +7,13 @@
 //! reconstructs compiler data.
 
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    @setEvalBranchQuota(1000 + 2 * count);
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const base = @import("base");
 const collections = @import("collections");
 const core = @import("lir_core");
@@ -920,9 +927,9 @@ comptime {
     // `facts` are transient worker state, not serialized, and default to
     // null or empty in views. The layout store's `digest_cache` is a memo
     // each view starts empty.
-    std.debug.assert(@typeInfo(LirStore).@"struct".fields.len == 36);
-    std.debug.assert(@typeInfo(layout_mod.Store).@"struct".fields.len == 16);
-    std.debug.assert(@typeInfo(base.StringLiteral.Store).@"struct".fields.len == 1);
+    std.debug.assert(@typeInfo(LirStore).@"struct".field_names.len == 36);
+    std.debug.assert(@typeInfo(layout_mod.Store).@"struct".field_names.len == 16);
+    std.debug.assert(@typeInfo(base.StringLiteral.Store).@"struct".field_names.len == 1);
 }
 
 /// Fill the reserved LIR image header in a contiguous buffer.
@@ -1431,7 +1438,7 @@ test "boxy sidecar blob carries only the names its tables reach" {
 
     // Adding unrelated literals must not change any sidecar byte or identity.
     _ = try lowered.store.insertString("count");
-    _ = try lowered.store.insertStringViewAligned("unrelated backing" ** 4096, 0, 17, 16);
+    _ = try lowered.store.insertStringViewAligned(&repeatBytes("unrelated backing", 4096), 0, 17, 16);
     var after = try buildSidecarBlob(gpa, &lowered);
     defer after.deinit(gpa);
     try std.testing.expectEqualSlices(u8, blob.bytes, after.bytes);

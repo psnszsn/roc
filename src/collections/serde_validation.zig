@@ -286,9 +286,9 @@ pub fn isFullyDefined(comptime T: type) bool {
                 // scrubbable instead. An untagged union is defined only when every
                 // variant covers the whole union.
                 if (u.tag_type != null) break :u false;
-                for (u.fields) |f| {
-                    if (@sizeOf(f.type) != @sizeOf(T)) break :u false;
-                    if (!isFullyDefined(f.type)) break :u false;
+                for (u.field_types) |f_type| {
+                    if (@sizeOf(f_type) != @sizeOf(T)) break :u false;
+                    if (!isFullyDefined(f_type)) break :u false;
                 }
                 break :u true;
             },
@@ -306,6 +306,7 @@ pub fn isFullyDefined(comptime T: type) bool {
             .frame,
             .@"anyframe",
             .enum_literal,
+            .spirv,
             => false,
         };
     };
@@ -323,10 +324,10 @@ fn fieldsCoverEveryByte(comptime T: type) bool {
 fn byteCoverageMask(comptime T: type) [@sizeOf(T)]bool {
     return comptime blk: {
         var covered = @as([@sizeOf(T)]bool, @splat(false));
-        for (@typeInfo(T).@"struct".fields) |field| {
-            if (@sizeOf(field.type) == 0) continue;
-            const start = @offsetOf(T, field.name);
-            for (start..start + @sizeOf(field.type)) |i| covered[i] = true;
+        for (@typeInfo(T).@"struct".field_names, @typeInfo(T).@"struct".field_types) |field_name, field_type| {
+            if (@sizeOf(field_type) == 0) continue;
+            const start = @offsetOf(T, field_name);
+            for (start..start + @sizeOf(field_type)) |i| covered[i] = true;
         }
         break :blk covered;
     };
@@ -334,8 +335,8 @@ fn byteCoverageMask(comptime T: type) [@sizeOf(T)]bool {
 
 fn allFieldsFullyDefined(comptime T: type) bool {
     return comptime blk: {
-        for (@typeInfo(T).@"struct".fields) |field| {
-            if (!isFullyDefined(field.type)) break :blk false;
+        for (@typeInfo(T).@"struct".field_types) |field_type| {
+            if (!isFullyDefined(field_type)) break :blk false;
         }
         break :blk true;
     };
@@ -371,21 +372,21 @@ pub fn assertFullyDefined(comptime T: type, comptime path: []const u8) void {
                         " uncovered by any field, so it is implicit padding that serialization would write undefined. " ++
                         "Declare it as an explicitly zero-defaulted reserved field (e.g. `_reserved: u32 = 0`).",
                 );
-                for (s.fields) |field| assertFullyDefined(field.type, path ++ "." ++ field.name);
+                for (s.field_names, s.field_types) |field_name, field_type| assertFullyDefined(field_type, path ++ "." ++ field_name);
             },
             .@"union" => |u| {
                 if (u.tag_type != null) @compileError(
                     "serialized type '" ++ path ++ "' (" ++ @typeName(T) ++
                         ") is a tagged union, whose discriminant and inactive-variant bytes are not fully defined.",
                 );
-                for (u.fields) |f| {
-                    if (@sizeOf(f.type) != @sizeOf(T)) @compileError(
+                for (u.field_names, u.field_types) |f_name, f_type| {
+                    if (@sizeOf(f_type) != @sizeOf(T)) @compileError(
                         "serialized union '" ++ path ++ "' (" ++ @typeName(T) ++ ") is " ++ digits(@sizeOf(T)) ++
-                            " bytes but variant '" ++ f.name ++ "' is only " ++ digits(@sizeOf(f.type)) ++
+                            " bytes but variant '" ++ f_name ++ "' is only " ++ digits(@sizeOf(f_type)) ++
                             "; the remaining bytes have no discriminant that could tell serialization to scrub them. " ++
                             "Give every variant an explicitly zero-defaulted reserved field so it fills the union exactly.",
                     );
-                    assertFullyDefined(f.type, path ++ "." ++ f.name);
+                    assertFullyDefined(f_type, path ++ "." ++ f_name);
                 }
             },
             .optional => @compileError("serialized type '" ++ path ++ "' (" ++ @typeName(T) ++
@@ -404,6 +405,7 @@ pub fn assertFullyDefined(comptime T: type, comptime path: []const u8) void {
             .frame,
             .@"anyframe",
             .enum_literal,
+            .spirv,
             => @compileError("serialized type '" ++ path ++ "' (" ++ @typeName(T) ++
                 ") has no defined byte representation: " ++ @tagName(@typeInfo(T))),
         }
@@ -432,7 +434,7 @@ pub fn assertScrubbable(comptime T: type, comptime path: []const u8) void {
                 // An extern struct's layout is fixed by declaration, so an inter-field
                 // gap is the author's to close; an auto struct's gaps are memset instead.
                 if (s.layout == .@"extern" and !fieldsCoverEveryByte(T)) assertFullyDefined(T, path);
-                for (s.fields) |field| assertScrubbable(field.type, path ++ "." ++ field.name);
+                for (s.field_names, s.field_types) |field_name, field_type| assertScrubbable(field_type, path ++ "." ++ field_name);
             },
             .@"union" => |u| {
                 if (u.tag_type == null) {
@@ -443,7 +445,7 @@ pub fn assertScrubbable(comptime T: type, comptime path: []const u8) void {
                 // The discriminant needs no width requirement: the scrubber rewrites it
                 // zero-extended from its masked value, so even a sub-byte tag's storage
                 // byte is deterministic.
-                for (u.fields) |f| assertScrubbable(f.type, path ++ "." ++ f.name);
+                for (u.field_names, u.field_types) |f_name, f_type| assertScrubbable(f_type, path ++ "." ++ f_name);
             },
             .type,
             .void,
@@ -459,6 +461,7 @@ pub fn assertScrubbable(comptime T: type, comptime path: []const u8) void {
             .frame,
             .@"anyframe",
             .enum_literal,
+            .spirv,
             => assertFullyDefined(T, path),
             .float, .vector, .bool, .pointer => assertFullyDefined(T, path),
         }

@@ -205,6 +205,7 @@ pub const Store = struct {
                 .items = .{
                     .items = items_ptr[0..data_ref.len],
                     .capacity = data_ref.capacity,
+                    .pointer_stability = .{},
                 },
             };
         }

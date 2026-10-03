@@ -7279,7 +7279,9 @@ fn recordTypeDependenciesFromAnnoWorklist(
     root: AST.TypeAnno.Idx,
     mode: TypeDependencyWalkMode,
 ) std.mem.Allocator.Error!void {
-    const pending_allocator = self.gpa;
+    var pending_allocator_state_buffer: [4096]u8 = undefined;
+    var pending_allocator_state = std.heap.BufferFirstAllocator.init(&pending_allocator_state_buffer, self.gpa);
+    const pending_allocator = pending_allocator_state.allocator();
     var pending: std.ArrayList(TypeDependencyWalkItem) = .empty;
     defer pending.deinit(pending_allocator);
 

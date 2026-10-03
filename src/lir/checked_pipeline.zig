@@ -446,8 +446,8 @@ pub const Timing = struct {
         self.solved_lir_parallel_mutex.lockUncancelable(self.std_io);
         defer self.solved_lir_parallel_mutex.unlock(self.std_io);
         // All Solved-LIR metrics count completed work, not peaks or durations.
-        inline for (std.meta.fields(SolvedLirParallelMetrics)) |field| {
-            @field(self.solved_lir_parallel, field.name) +|= @field(parallel, field.name);
+        inline for (@typeInfo(SolvedLirParallelMetrics).@"struct".field_names) |field_name| {
+            @field(self.solved_lir_parallel, field_name) +|= @field(parallel, field_name);
         }
     }
 
@@ -593,22 +593,22 @@ fn timingNowNs(std_io: std.Io) i64 {
 test "pipeline timing aggregates Solved-LIR counters with saturation and fresh reset" {
     var timing = Timing.init(std.testing.io);
     var first: SolvedLirParallelMetrics = .{};
-    inline for (std.meta.fields(SolvedLirParallelMetrics), 0..) |field, i| {
-        @field(first, field.name) = i + 1;
+    inline for (@typeInfo(SolvedLirParallelMetrics).@"struct".field_names, 0..) |field_name, i| {
+        @field(first, field_name) = i + 1;
     }
     timing.addSolvedLirParallel(first);
     var aggregate = Timing.init(std.testing.io);
     aggregate.addSnapshot(timing.snapshot());
     aggregate.addSnapshot(timing.snapshot());
     const doubled = aggregate.snapshot();
-    inline for (std.meta.fields(SolvedLirParallelMetrics), 0..) |field, i| {
-        try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.solved_lir_parallel, field.name));
-        @field(first, field.name) = std.math.maxInt(u64);
+    inline for (@typeInfo(SolvedLirParallelMetrics).@"struct".field_names, 0..) |field_name, i| {
+        try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.solved_lir_parallel, field_name));
+        @field(first, field_name) = std.math.maxInt(u64);
     }
     aggregate.addSolvedLirParallel(first);
     const saturated = aggregate.snapshot();
-    inline for (std.meta.fields(SolvedLirParallelMetrics)) |field| {
-        try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.solved_lir_parallel, field.name));
+    inline for (@typeInfo(SolvedLirParallelMetrics).@"struct".field_names) |field_name| {
+        try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.solved_lir_parallel, field_name));
     }
     try std.testing.expectEqual(@as(u64, 0), saturated.lir_gen_ns);
     aggregate = Timing.init(std.testing.io);
@@ -654,20 +654,20 @@ test "pipeline timing aggregates SpecConstr totals and preserves peaks" {
     aggregate.addSnapshot(timing.snapshot());
     aggregate.addSnapshot(timing.snapshot());
     const doubled = aggregate.snapshot().spec_constr_parallel;
-    inline for (std.meta.fields(SpecConstrParallelMetrics)) |field| {
-        if (comptime std.mem.eql(u8, field.name, "peak_retained_shards")) {
-            try std.testing.expectEqual(@field(first, field.name), @field(doubled, field.name));
-        } else if (field.type == u64) {
-            try std.testing.expectEqual(2 * @field(first, field.name), @field(doubled, field.name));
+    inline for (@typeInfo(SpecConstrParallelMetrics).@"struct".field_names, @typeInfo(SpecConstrParallelMetrics).@"struct".field_types) |field_name, field_type| {
+        if (comptime std.mem.eql(u8, field_name, "peak_retained_shards")) {
+            try std.testing.expectEqual(@field(first, field_name), @field(doubled, field_name));
+        } else if (field_type == u64) {
+            try std.testing.expectEqual(2 * @field(first, field_name), @field(doubled, field_name));
         } else {
-            for (@field(first, field.name), @field(doubled, field.name)) |value, total| {
+            for (@field(first, field_name), @field(doubled, field_name)) |value, total| {
                 try std.testing.expectEqual(2 * value, total);
             }
         }
-        if (field.type == u64) {
-            @field(first, field.name) = std.math.maxInt(u64);
+        if (field_type == u64) {
+            @field(first, field_name) = std.math.maxInt(u64);
         } else {
-            @memset(&@field(first, field.name), std.math.maxInt(u64));
+            @memset(&@field(first, field_name), std.math.maxInt(u64));
         }
     }
     aggregate.addSpecConstrParallel(first);
@@ -701,31 +701,31 @@ test "pipeline timing preserves explicit SpecConstr metrics output" {
 test "pipeline timing aggregates ARC counters with saturation and fresh reset" {
     var timing = Timing.init(std.testing.io);
     var first: ArcParallelMetrics = .{};
-    inline for (std.meta.fields(ArcParallelMetrics), 0..) |field, i| {
-        if (field.type == u64) @field(first, field.name) = i + 1;
+    inline for (@typeInfo(ArcParallelMetrics).@"struct".field_names, @typeInfo(ArcParallelMetrics).@"struct".field_types, 0..) |field_name, field_type, i| {
+        if (field_type == u64) @field(first, field_name) = i + 1;
     }
-    inline for (std.meta.fields(Arc.UniquenessMetrics), 0..) |field, i| @field(first.uniqueness, field.name) = i + 1;
+    inline for (@typeInfo(Arc.UniquenessMetrics).@"struct".field_names, 0..) |field_name, i| @field(first.uniqueness, field_name) = i + 1;
     timing.addArcParallel(first);
     var aggregate = Timing.init(std.testing.io);
     aggregate.addSnapshot(timing.snapshot());
     aggregate.addSnapshot(timing.snapshot());
     const doubled = aggregate.snapshot();
-    inline for (std.meta.fields(ArcParallelMetrics), 0..) |field, i| {
-        if (field.type == u64) {
-            try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.arc_parallel, field.name));
-            @field(first, field.name) = std.math.maxInt(u64);
+    inline for (@typeInfo(ArcParallelMetrics).@"struct".field_names, @typeInfo(ArcParallelMetrics).@"struct".field_types, 0..) |field_name, field_type, i| {
+        if (field_type == u64) {
+            try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.arc_parallel, field_name));
+            @field(first, field_name) = std.math.maxInt(u64);
         }
     }
-    inline for (std.meta.fields(Arc.UniquenessMetrics), 0..) |field, i| {
-        try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.arc_parallel.uniqueness, field.name));
-        @field(first.uniqueness, field.name) = std.math.maxInt(u64);
+    inline for (@typeInfo(Arc.UniquenessMetrics).@"struct".field_names, 0..) |field_name, i| {
+        try std.testing.expectEqual(@as(u64, 2 * (i + 1)), @field(doubled.arc_parallel.uniqueness, field_name));
+        @field(first.uniqueness, field_name) = std.math.maxInt(u64);
     }
     aggregate.addArcParallel(first);
     const saturated = aggregate.snapshot();
-    inline for (std.meta.fields(ArcParallelMetrics)) |field| {
-        if (field.type == u64) try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.arc_parallel, field.name));
+    inline for (@typeInfo(ArcParallelMetrics).@"struct".field_names, @typeInfo(ArcParallelMetrics).@"struct".field_types) |field_name, field_type| {
+        if (field_type == u64) try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.arc_parallel, field_name));
     }
-    inline for (std.meta.fields(Arc.UniquenessMetrics)) |field| try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.arc_parallel.uniqueness, field.name));
+    inline for (@typeInfo(Arc.UniquenessMetrics).@"struct".field_names) |field_name| try std.testing.expectEqual(std.math.maxInt(u64), @field(saturated.arc_parallel.uniqueness, field_name));
     try std.testing.expectEqual(@as(u64, 0), saturated.arc_ns);
     aggregate = Timing.init(std.testing.io);
     try std.testing.expectEqualDeep(ArcParallelMetrics{}, aggregate.snapshot().arc_parallel);
@@ -893,15 +893,15 @@ pub const Observers = struct {
 
     pub fn fromTarget(target: TargetConfig) Observers {
         var observers = Observers{};
-        inline for (@typeInfo(Observers).@"struct".fields) |field| {
-            @field(observers, field.name) = @field(target, field.name);
+        inline for (@typeInfo(Observers).@"struct".field_names) |field_name| {
+            @field(observers, field_name) = @field(target, field_name);
         }
         return observers;
     }
 
     fn applyTo(self: Observers, target: *TargetConfig) void {
-        inline for (@typeInfo(Observers).@"struct".fields) |field| {
-            @field(target, field.name) = @field(self, field.name);
+        inline for (@typeInfo(Observers).@"struct".field_names) |field_name| {
+            @field(target, field_name) = @field(self, field_name);
         }
     }
 };
@@ -919,15 +919,15 @@ pub const SolvedPolicy = struct {
 
     pub fn fromTarget(target: TargetConfig) SolvedPolicy {
         var policy: SolvedPolicy = undefined;
-        inline for (@typeInfo(SolvedPolicy).@"struct".fields) |field| {
-            @field(policy, field.name) = @field(target, field.name);
+        inline for (@typeInfo(SolvedPolicy).@"struct".field_names) |field_name| {
+            @field(policy, field_name) = @field(target, field_name);
         }
         return policy;
     }
 
     pub fn applyTo(self: SolvedPolicy, target: *TargetConfig) void {
-        inline for (@typeInfo(SolvedPolicy).@"struct".fields) |field| {
-            @field(target, field.name) = @field(self, field.name);
+        inline for (@typeInfo(SolvedPolicy).@"struct".field_names) |field_name| {
+            @field(target, field_name) = @field(self, field_name);
         }
     }
 };
@@ -952,15 +952,15 @@ pub const LirPolicy = struct {
 
     pub fn fromTarget(target: TargetConfig) LirPolicy {
         var policy: LirPolicy = undefined;
-        inline for (@typeInfo(LirPolicy).@"struct".fields) |field| {
-            @field(policy, field.name) = @field(target, field.name);
+        inline for (@typeInfo(LirPolicy).@"struct".field_names) |field_name| {
+            @field(policy, field_name) = @field(target, field_name);
         }
         return policy;
     }
 
     fn applyTo(self: LirPolicy, target: *TargetConfig) void {
-        inline for (@typeInfo(LirPolicy).@"struct".fields) |field| {
-            @field(target, field.name) = @field(self, field.name);
+        inline for (@typeInfo(LirPolicy).@"struct".field_names) |field_name| {
+            @field(target, field_name) = @field(self, field_name);
         }
     }
 };

@@ -910,10 +910,10 @@ test "tokens are sorted and never overlap" {
 
 test "every advertised token type and modifier has an index" {
     const capabilities = @import("lsp").capabilities;
-    inline for (@typeInfo(SemanticType).@"enum".fields) |field| {
-        try std.testing.expectEqualStrings(field.name, capabilities.TOKEN_TYPES[field.value]);
+    inline for (@typeInfo(SemanticType).@"enum".field_names, @typeInfo(SemanticType).@"enum".field_values) |field_name, field_value| {
+        try std.testing.expectEqualStrings(field_name, capabilities.TOKEN_TYPES[field_value]);
     }
-    try std.testing.expectEqual(@typeInfo(SemanticType).@"enum".fields.len, capabilities.TOKEN_TYPES.len);
+    try std.testing.expectEqual(@typeInfo(SemanticType).@"enum".field_names.len, capabilities.TOKEN_TYPES.len);
     try std.testing.expectEqualStrings("declaration", capabilities.TOKEN_MODIFIERS[0]);
     try std.testing.expectEqual(@as(u32, 1), semantic_tokens.modifier_declaration);
 }

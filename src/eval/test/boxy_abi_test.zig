@@ -6,6 +6,13 @@
 //! value bytes, and checks refcount balance through the allocation tracker.
 
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    @setEvalBranchQuota(1000 + 2 * count);
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const backend = @import("backend");
 const base = @import("base");
 const check = @import("check");
@@ -419,7 +426,7 @@ test "boxy residual tags preserve runtime source and target spans while growing"
         .payload_layout = .u64,
         .payload_count = 1,
     };
-    runtime.runtime_boxy_tag_variants = .{ .items = variants, .capacity = variants.len };
+    runtime.runtime_boxy_tag_variants = .{ .items = variants, .capacity = variants.len, .pointer_stability = .{} };
     const source = BoxyTypeDesc{
         .payload_layout = union_layout,
         .contains_refcounted = false,
@@ -2136,7 +2143,7 @@ test "boxy abi standalone sidecar preserves producer tag identities after litera
     const compiled = blk: {
         var lowered = try LirProgram.Result.init(allocator, base.target.TargetUsize.native);
         defer lowered.deinit();
-        _ = try lowered.store.insertStringViewAligned("folded constant payload" ** 1024, 0, 23, 4);
+        _ = try lowered.store.insertStringViewAligned(&repeatBytes("folded constant payload", 1024), 0, 23, 4);
         const only = try lowered.store.insertBoxyName("Only");
         const missing = try lowered.store.insertBoxyName("Missing");
         const union_layout = try lowered.layouts.putTagUnion(&.{ .u64, .zst });

@@ -4,6 +4,13 @@
 //! raw source text into a structured AST representation that subsequent compiler phases can process.
 
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    @setEvalBranchQuota(1000 + 2 * count);
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const base = @import("base");
 const tracy = @import("tracy");
 
@@ -1296,7 +1303,7 @@ test "a dotted upper where alias candidate without a colon is a parse error" {
 
 test "bidi source rejection and omitted diagnostics survive the parser boundary" {
     const gpa = std.testing.allocator;
-    const source = "# " ++ "\u{202e}" ** 140;
+    const source = "# " ++ repeatBytes("\u{202e}", 140);
     var env = try CommonEnv.init(gpa, source);
     defer env.deinit(gpa);
     const ast = try file(gpa, &env);

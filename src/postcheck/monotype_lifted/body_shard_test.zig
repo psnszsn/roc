@@ -317,14 +317,14 @@ fn equalPrograms(expected: *const Ast.Program, expected_ids: PrefixIds, actual: 
     try testing.expectEqual(expected.names.recordFieldLabelCount(), actual.names.recordFieldLabelCount());
     try testing.expectEqual(expected.names.tagLabelCount(), actual.names.tagLabelCount());
     try testing.expectEqualDeep(expected.types.get(expected_ids.ty), actual.types.get(actual_ids.ty));
-    inline for (@typeInfo(Ast.ProgramView).@"struct".fields) |field| {
-        if (comptime !std.mem.eql(u8, field.name, "names") and
-            !std.mem.eql(u8, field.name, "types") and
-            !std.mem.eql(u8, field.name, "proc_debug_names") and
-            !std.mem.eql(u8, field.name, "next_symbol") and
-            !std.mem.eql(u8, field.name, "string_literals"))
+    inline for (@typeInfo(Ast.ProgramView).@"struct".field_names) |field_name| {
+        if (comptime !std.mem.eql(u8, field_name, "names") and
+            !std.mem.eql(u8, field_name, "types") and
+            !std.mem.eql(u8, field_name, "proc_debug_names") and
+            !std.mem.eql(u8, field_name, "next_symbol") and
+            !std.mem.eql(u8, field_name, "string_literals"))
         {
-            try testing.expectEqualDeep(@field(a, field.name), @field(b, field.name));
+            try testing.expectEqualDeep(@field(a, field_name), @field(b, field_name));
         }
     }
     try testing.expectEqual(a.string_literals.len, b.string_literals.len);

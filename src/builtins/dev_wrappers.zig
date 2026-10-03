@@ -7,6 +7,13 @@
 //! - Object file generation (roc build --opt=dev) via symbol references
 
 const std = @import("std");
+
+fn repeatBytes(comptime bytes: []const u8, comptime count: usize) [bytes.len * count]u8 {
+    @setEvalBranchQuota(1000 + 2 * count);
+    var result: [bytes.len * count]u8 = undefined;
+    inline for (0..count) |index| @memcpy(result[index * bytes.len ..][0..bytes.len], bytes);
+    return result;
+}
 const builtin = @import("builtin");
 const str = @import("str.zig");
 const list = @import("list.zig");
@@ -2923,7 +2930,7 @@ test "numeric prefix wrappers return an owned rest slice and borrow the input" {
     try std.testing.expectEqual(@as(usize, 0), numPrefixRecordRestStr(&record).len());
     try std.testing.expect(source_str.isUnique());
 
-    const bytes = @as([8]u8, @splat( '5', 0x0D, 0xFF, 'x', 'y', 'z' ));
+    const bytes = repeatBytes(&.{ '5', 0x0D, 0xFF, 'x', 'y', 'z' }, 8);
     const source_list = RocList.fromSlice(u8, &bytes, false, ops);
     defer source_list.decref(@alignOf(u8), @sizeOf(u8), false, null, list.rcNone, ops);
     roc_builtins_int_from_utf8_prefix(&record, source_list.bytes, source_list.length, source_list.capacity_or_alloc_ptr, 1, false, &num_prefix_test_layout);

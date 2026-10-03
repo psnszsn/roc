@@ -1168,7 +1168,7 @@ test "rc effect conformance: every executed op matches its row" {
         failures += reportFindings("zeroed box cell");
     }
 
-    var gaps = rc_conformance.OpSet.initEmpty();
+    var gaps = rc_conformance.OpSet.empty;
     rc_conformance.coverageGaps(covered, exemptOps(), &gaps);
     if (gaps.count() > 0) {
         var it = gaps.iterator();

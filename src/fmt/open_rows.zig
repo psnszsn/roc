@@ -928,8 +928,8 @@ const ReachAnalysis = struct {
                 .@"fn" => |func| {
                     try self.pushSlice(ast.store.typeAnnoSlice(func.args), bit(.nested));
                     var returns: u4 = 0;
-                    inline for (std.meta.fields(Reach)) |field| {
-                        const reach: Reach = @fromBackingInt(@intCast(field.value));
+                    inline for (@typeInfo(Reach).@"enum".field_values) |field_value| {
+                        const reach: Reach = @fromBackingInt(@intCast(field_value));
                         if (item.reaches & bit(reach) != 0) returns |= bit(base.annotation_positions.functionReturnReach(reach));
                     }
                     try self.push(func.ret, returns);
@@ -960,8 +960,8 @@ const ReachAnalysis = struct {
                         .invalid => self.invalid = true,
                         .builtin => try self.pushSlice(args, bit(.nested)),
                         .declaration => |target| {
-                            inline for (std.meta.fields(Reach)) |field| {
-                                const reach: Reach = @fromBackingInt(@intCast(field.value));
+                            inline for (@typeInfo(Reach).@"enum".field_values) |field_value| {
+                                const reach: Reach = @fromBackingInt(@intCast(field_value));
                                 if (item.reaches & bit(reach) != 0) {
                                     const target_index = (try self.register(.{ .declaration = target, .reach = reach })) orelse {
                                         self.invalid = true;

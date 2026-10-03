@@ -92,8 +92,8 @@ pub const ParallelMetrics = struct {
     uniqueness: UniquenessMetrics = .{},
 
     pub fn add(self: *ParallelMetrics, other: ParallelMetrics) void {
-        inline for (std.meta.fields(ParallelMetrics)) |field| {
-            if (field.type == u64) @field(self, field.name) +|= @field(other, field.name);
+        inline for (@typeInfo(ParallelMetrics).@"struct".field_names, @typeInfo(ParallelMetrics).@"struct".field_types) |field_name, field_type| {
+            if (field_type == u64) @field(self, field_name) +|= @field(other, field_name);
         }
         self.uniqueness.add(other.uniqueness);
     }
@@ -1584,7 +1584,7 @@ const SolveTask = union(enum) {
 fn settleGrownList(comptime T: type, allocator: Allocator, growth_allocator: Allocator, grown: *std.ArrayList(T)) Allocator.Error!std.ArrayList(T) {
     const exact = try allocator.dupe(T, grown.items);
     grown.deinit(growth_allocator);
-    return .{ .items = exact, .capacity = exact.len };
+    return .{ .items = exact, .capacity = exact.len, .pointer_stability = .{} };
 }
 
 fn cloneOwnedSetWith(allocator: Allocator, source: *const OwnedSet) ResourceError!OwnedSet {
@@ -5969,7 +5969,7 @@ const Inserter = struct {
         // outcomes. Such a root receipt makes the outcome convention mandatory
         // for its position: the argument carries the root's only unit and the
         // root is read again on the restoring paths.
-        var root_receipts = [_]?LIR.LocalId{null} ** arc_sig.tracked_param_count;
+        var root_receipts = @as([arc_sig.tracked_param_count]?LIR.LocalId, @splat(null));
         var any_root_receipt = false;
         if (outcome_refinement) |refinement| {
             for (0..@min(GuardedList.borrowLen(locals), arc_sig.tracked_param_count)) |position| {
@@ -10039,7 +10039,7 @@ test "ARC grouped raw liveness agrees with exhaustive resource queries" {
             try f.assignRefLocal(locals[index], locals[index % 3], use);
     }
     const proc = try f.addProc(&.{}, body, .i64);
-    var rc = [_]bool{true} ** (locals.len + 1);
+    var rc = @as([(locals.len + 1)]bool, @splat(true));
     rc[locals.len] = false;
     var solution = try arc_solve.solve(testing.allocator, &f.store, &f.layouts, &rc, &.{}, &.{}, true);
     defer solution.deinit();

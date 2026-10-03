@@ -7839,7 +7839,7 @@ test "bidi tokenizer errors prevent every AST formatting entrypoint from writing
 
 test "carriage return migration survives diagnostic overflow without hiding other errors" {
     const gpa = std.testing.allocator;
-    const prefix = "value = " ++ "\r" ** 140;
+    const prefix = "value = " ++ @as([140]u8, @splat('\r'));
     const migrated = try moduleFmtsStable(gpa, prefix ++ "42\n", false);
     defer gpa.free(migrated);
     try std.testing.expectEqualStrings("value = 42\n", migrated);

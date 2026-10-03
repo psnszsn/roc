@@ -908,9 +908,9 @@ pub const Program = struct {
             .fn_def_captures = self.fn_def_captures.len(),
             .comptime_value_roots = self.comptime_value_roots.len(),
         };
-        inline for (std.meta.fields(SpecConstrAnalysisMark)) |field| {
-            if (comptime !std.mem.eql(u8, field.name, "body_patch")) {
-                @field(mark, field.name) += self.prefixLen(field.name);
+        inline for (@typeInfo(SpecConstrAnalysisMark).@"struct".field_names) |field_name| {
+            if (comptime !std.mem.eql(u8, field_name, "body_patch")) {
+                @field(mark, field_name) += self.prefixLen(field_name);
             }
         }
         if (self.body_prefix) |prefix| mark.body_patch = prefix.patch;
@@ -990,9 +990,9 @@ pub const Program = struct {
             Common.invariant("SpecConstr analysis removed a durable lifted function");
         }
         var mark = virtual_mark;
-        inline for (std.meta.fields(SpecConstrAnalysisMark)) |field| {
-            if (comptime !std.mem.eql(u8, field.name, "body_patch")) {
-                @field(mark, field.name) = self.ownedIndex(field.name, @field(mark, field.name));
+        inline for (@typeInfo(SpecConstrAnalysisMark).@"struct".field_names) |field_name| {
+            if (comptime !std.mem.eql(u8, field_name, "body_patch")) {
+                @field(mark, field_name) = self.ownedIndex(field_name, @field(mark, field_name));
             }
         }
         if (self.body_prefix) |*prefix| prefix.patch = mark.body_patch.?;

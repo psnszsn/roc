@@ -173,8 +173,8 @@ fn fnPointersMatchModuloSelf(comptime Generated: type, comptime Canonical: type)
     const generated_info = @typeInfo(@typeInfo(Generated).pointer.child).@"fn";
     const canonical_info = @typeInfo(@typeInfo(Canonical).pointer.child).@"fn";
 
-    if (generated_info.params.len != canonical_info.params.len) return false;
-    if (generated_info.is_var_args != canonical_info.is_var_args) return false;
+    if (generated_info.param_types.len != canonical_info.param_types.len) return false;
+    if (generated_info.attrs.varargs != canonical_info.attrs.varargs) return false;
     if (generated_info.return_type != canonical_info.return_type) return false;
     if (!std.meta.eql(generated_info.attrs.@"callconv", canonical_info.attrs.@"callconv")) return false;
 

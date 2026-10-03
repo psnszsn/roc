@@ -9297,8 +9297,9 @@ const Lowerer = struct {
         };
         // Most results nest a few types deep, so the stack starts in a
         // buffer on this frame and moves to the heap only past it.
-        var stack_first = std.heap.stackFallback(24 * @sizeOf(Frame), self.allocator);
-        const frame_allocator = stack_first.get();
+        var stack_first_buffer: [24 * @sizeOf(Frame)]u8 = undefined;
+        var stack_first = std.heap.BufferFirstAllocator.init(&stack_first_buffer, self.allocator);
+        const frame_allocator = stack_first.allocator();
         var frames: std.ArrayList(Frame) = .empty;
         defer frames.deinit(frame_allocator);
         try frames.ensureTotalCapacityPrecise(frame_allocator, 24);

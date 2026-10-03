@@ -34,11 +34,11 @@ pub const Metrics = struct {
 
     /// Combine work counters while preserving the maximum retained wave size.
     pub fn add(self: *Metrics, other: Metrics) void {
-        inline for (@typeInfo(Metrics).@"struct".fields) |field| {
-            if (comptime std.mem.eql(u8, field.name, "peak_inflight_fragments")) {
-                @field(self, field.name) = @max(@field(self, field.name), @field(other, field.name));
+        inline for (@typeInfo(Metrics).@"struct".field_names) |field_name| {
+            if (comptime std.mem.eql(u8, field_name, "peak_inflight_fragments")) {
+                @field(self, field_name) = @max(@field(self, field_name), @field(other, field_name));
             } else {
-                @field(self, field.name) +|= @field(other, field.name);
+                @field(self, field_name) +|= @field(other, field_name);
             }
         }
     }

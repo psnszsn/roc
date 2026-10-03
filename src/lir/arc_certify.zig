@@ -1557,7 +1557,7 @@ test "certifier join attribution visits each constraint edge once" {
 }
 
 test "certifier join attribution rejects inconsistent and undetermined intersections" {
-    var left = [_]LocalSummary{.{ .class = .owned, .repr = 0, .balance = 2, .condition = no_dense, .condition_mask = 0 }} ** 4;
+    var left = @as([4]LocalSummary, @splat(.{ .class = .owned, .repr = 0, .balance = 2, .condition = no_dense, .condition_mask = 0 }));
     var right = left;
     // Two crossing two-element classes have no forcing equation.
     left[2].repr = 2;

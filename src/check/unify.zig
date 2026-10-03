@@ -4963,9 +4963,9 @@ pub fn structurallyIncompatiblePair(
 /// Write `src` into `dest`, copying only the active variant's payload.
 fn writeActiveVariant(comptime U: type, dest: *U, src: U) void {
     const tag = std.meta.activeTag(src);
-    inline for (@typeInfo(U).@"union".fields) |field| {
-        if (tag == @field(std.meta.Tag(U), field.name)) {
-            dest.* = @unionInit(U, field.name, @field(src, field.name));
+    inline for (@typeInfo(U).@"union".field_names) |field_name| {
+        if (tag == @field(std.meta.Tag(U), field_name)) {
+            dest.* = @unionInit(U, field_name, @field(src, field_name));
             return;
         }
     }

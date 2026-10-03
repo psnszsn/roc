@@ -703,7 +703,7 @@ const BuiltinsObjects = struct {
     pub fn filename(target: RocTarget) []const u8 {
         return switch (target.toOsTag()) {
             .windows => "roc_builtins.obj",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins.o",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins.o",
         };
     }
 
@@ -711,7 +711,7 @@ const BuiltinsObjects = struct {
     pub fn filenameExtern(target: RocTarget) []const u8 {
         return switch (target.toOsTag()) {
             .windows => "roc_builtins_extern.obj",
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins_extern.o",
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => "roc_builtins_extern.o",
         };
     }
 };
@@ -4466,7 +4466,7 @@ const HotShimChild = struct {
                 _ = std.os.windows.ntdll.NtTerminateProcess(pid, @fromBackingInt(@intCast(1)));
             },
             .wasi => {},
-            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => std.posix.kill(pid, .KILL) catch {},
+            .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => std.posix.kill(pid, .KILL) catch {},
         }
     }
 };
@@ -4742,6 +4742,7 @@ fn finishHotReloadRebuild(
             error.Canceled,
             error.CurrentDirUnlinked,
             error.NameTooLong,
+            error.PathExceedsLimit,
             error.OutOfMemory,
             error.Unexpected,
             => |e| return e,
@@ -8598,7 +8599,7 @@ fn defaultBuildPlatformSource(args: cli_args.BuildArgs) []const u8 {
 
     return switch (RocTarget.detectNative().toOsTag()) {
         .macos, .windows, .openbsd => echo_platform.build_c_platform_main_source,
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => echo_platform.build_platform_main_source,
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => echo_platform.build_platform_main_source,
     };
 }
 
@@ -9079,7 +9080,7 @@ test "pack withholds an entry whose stable references reach a constant holding a
             .relocations = &.{.{ .offset = 0, .name = "roc__d0", .scope = .program, .kind = .{ .data = .rel32 } }},
             .data = &.{.{
                 .name = "roc__d0",
-                .bytes = "\x00" ** 8,
+                .bytes = &@as([8]u8, @splat(0)),
                 .alignment = 8,
                 .symbol_offset = 0,
                 .relocations = &.{.{ .offset = 0, .name = "roc__pcallback", .addend = 0, .function = true }},
@@ -9132,7 +9133,7 @@ test "pack offers an entry that carries its program data and withholds one that 
             },
             .data = &.{.{
                 .name = "roc__d0",
-                .bytes = "\x00" ** 8,
+                .bytes = &@as([8]u8, @splat(0)),
                 .alignment = 8,
                 .symbol_offset = 0,
                 .program_local_name = true,
@@ -10178,11 +10179,11 @@ fn nativeEmissionCounters(metrics: backend.dev.NativeProcCompiler.Metrics) [12]p
 
 test "native artifact counters preserve every measured field" {
     var metrics: backend.dev.NativeProcCompiler.Metrics = .{};
-    inline for (std.meta.fields(@TypeOf(metrics)), 1..) |field, value| {
-        @field(metrics, field.name) = value;
+    inline for (@typeInfo(@TypeOf(metrics)).@"struct".field_names, 1..) |field_name, value| {
+        @field(metrics, field_name) = value;
     }
     const counters = nativeEmissionCounters(metrics);
-    try std.testing.expectEqual(std.meta.fields(@TypeOf(metrics)).len, counters.len);
+    try std.testing.expectEqual(@typeInfo(@TypeOf(metrics)).@"struct".field_names.len, counters.len);
     for (counters, 1..) |counter, value| {
         try std.testing.expectEqual(@as(u64, @intCast(value)), counter.count);
     }
@@ -10199,7 +10200,7 @@ test "dev backend timing labels name the backend and emitted instruction format"
 fn noTargetLibcallsForLlvmBuild(target: RocTarget) bool {
     return switch (target.toOsTag()) {
         .macos, .windows => false,
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => true,
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .wasi, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => true,
     };
 }
 
@@ -14917,6 +14918,7 @@ fn readWatchInputsFileAfterChild(ctx: *CliCtx, file_path: []const u8, extra_path
             error.Unexpected,
             error.Canceled,
             error.NameTooLong,
+            error.PathExceedsLimit,
             error.CurrentDirUnlinked,
             => try ctx.io.stderr().print("Error: failed to resolve an explicit watch path while reading source input state from {s}: {}\n", .{ file_path, err }),
         }
@@ -15323,7 +15325,7 @@ fn terminateWatchChild(child: *WatchChild) void {
             _ = std.os.windows.ntdll.NtTerminateProcess(child.id, @fromBackingInt(@intCast(1)));
         },
         .wasi => {},
-        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => {
+        .freestanding, .other, .contiki, .fuchsia, .hermit, .managarm, .haiku, .hurd, .illumos, .linux, .plan9, .gba, .rtems, .serenity, .dragonfly, .freebsd, .netbsd, .openbsd, .driverkit, .ios, .maccatalyst, .macos, .tvos, .visionos, .watchos, .uefi, .@"3ds", .ps3, .ps4, .ps5, .psp, .wiiu, .@"switch", .psx, .tios, .ashetos, .vita, .emscripten, .amdhsa, .amdpal, .cuda, .mesa3d, .nvcl, .opencl, .opengl, .vulkan => {
             std.posix.kill(child.id, .KILL) catch {};
         },
     }
@@ -17324,7 +17326,7 @@ fn solvedLirParallelCounters(parallel: lir.CheckedPipeline.SolvedLirParallelMetr
     };
 }
 
-const spec_constr_counter_count = 7 + 2 * std.meta.fields(lir.CheckedPipeline.SpecConstrPhase).len;
+const spec_constr_counter_count = 7 + 2 * @typeInfo(lir.CheckedPipeline.SpecConstrPhase).@"enum".field_names.len;
 
 fn specConstrParallelCounters(parallel: lir.CheckedPipeline.SpecConstrParallelMetrics) [spec_constr_counter_count]progress.Counter {
     var rows: [spec_constr_counter_count]progress.Counter = undefined;
@@ -17437,8 +17439,8 @@ test "post-check diagnostics preserve labeled ARC counts" {
         "Uniqueness statement rows",
         "Uniqueness local rows",
     };
-    try std.testing.expectEqual(std.meta.fields(lir.CheckedPipeline.ArcParallelMetrics).len - 1 +
-        std.meta.fields(@FieldType(lir.CheckedPipeline.ArcParallelMetrics, "uniqueness")).len, rows.len);
+    try std.testing.expectEqual(@typeInfo(lir.CheckedPipeline.ArcParallelMetrics).@"struct".field_names.len - 1 +
+        @typeInfo(@FieldType(lir.CheckedPipeline.ArcParallelMetrics, "uniqueness")).@"struct".field_names.len, rows.len);
     for (rows, names, 0..) |row, name, index| {
         try std.testing.expectEqualStrings(name, row.name);
         try std.testing.expectEqual(@as(u64, index + 1), row.count);
@@ -17446,7 +17448,7 @@ test "post-check diagnostics preserve labeled ARC counts" {
     for (arcParallelCounters(.{})) |row| try std.testing.expectEqual(@as(u64, 0), row.count);
 }
 
-const lir_pass_counter_count = 5 + 2 * std.meta.fields(lir.CheckedPipeline.LirPassPhase).len;
+const lir_pass_counter_count = 5 + 2 * @typeInfo(lir.CheckedPipeline.LirPassPhase).@"enum".field_names.len;
 
 fn lirPassParallelCounters(parallel: lir.CheckedPipeline.LirPassParallelMetrics) [lir_pass_counter_count]progress.Counter {
     var rows: [lir_pass_counter_count]progress.Counter = undefined;
@@ -17605,7 +17607,7 @@ test "post-check diagnostics preserve labeled Solved-LIR counts" {
         "Worker literal tasks committed",
         "Worker loop tasks committed",
     };
-    try std.testing.expectEqual(std.meta.fields(lir.CheckedPipeline.SolvedLirParallelMetrics).len, rows.len);
+    try std.testing.expectEqual(@typeInfo(lir.CheckedPipeline.SolvedLirParallelMetrics).@"struct".field_names.len, rows.len);
     for (rows, names, 1..) |row, name, count| {
         try std.testing.expectEqualStrings(name, row.name);
         try std.testing.expectEqual(@as(u64, @intCast(count)), row.count);
@@ -17640,7 +17642,7 @@ test "post-check diagnostics preserve labeled LIR pass counts" {
         "Range proving",
         "Box reuse",
     };
-    try std.testing.expectEqual(std.meta.fields(lir.CheckedPipeline.LirPassPhase).len, phase_names.len);
+    try std.testing.expectEqual(@typeInfo(lir.CheckedPipeline.LirPassPhase).@"enum".field_names.len, phase_names.len);
     inline for (phase_names, 0..) |name, index| {
         try std.testing.expectEqualStrings(name ++ " tasks", rows[5 + 2 * index].name);
         try std.testing.expectEqualStrings(name ++ " rewrites", rows[6 + 2 * index].name);
@@ -17816,8 +17818,8 @@ test "shared lowering reporting preserves counters for runtime reuse and continu
         var shared_input = shared;
         if (case.counters_only) {
             shared_input.total_ns = 0;
-            inline for (std.meta.fields(lir.CheckedPipeline.TimingSnapshot)) |field| {
-                if (field.type == u64) @field(shared_input.lowering, field.name) = 0;
+            inline for (@typeInfo(lir.CheckedPipeline.TimingSnapshot).@"struct".field_names, @typeInfo(lir.CheckedPipeline.TimingSnapshot).@"struct".field_types) |field_name, field_type| {
+                if (field_type == u64) @field(shared_input.lowering, field_name) = 0;
             }
             shared_input.static_data_ns = 0;
             shared_input.code_generation_ns = 0;
@@ -18033,6 +18035,7 @@ fn handleProcessFileError(err: ProcessFileError, stderr: anytype, path: []const 
         error.OperationUnsupported,
         error.OutOfMemory,
         error.PathAlreadyExists,
+        error.PathExceedsLimit,
         error.PermissionDenied,
         error.PipeBusy,
         error.ProcessAlreadyExec,

@@ -303,19 +303,19 @@ pub fn zeroValuePadding(comptime V: type, ptr: [*]u8) void {
         // bytes are fully defined has nothing to zero, and a field that is neither
         // defined nor scrubbable is a compile error at the serialization boundary, so it
         // cannot reach here.
-        inline for (vinfo.@"struct".fields) |field| {
-            const FType = field.type;
+        inline for (vinfo.@"struct".field_names, vinfo.@"struct".field_types) |field_name, field_type| {
+            const FType = field_type;
             if (@sizeOf(FType) > 0 and comptime !serde_validation.isFullyDefined(FType)) {
-                zeroValuePadding(FType, ptr + @offsetOf(V, field.name));
+                zeroValuePadding(FType, ptr + @offsetOf(V, field_name));
             }
         }
     } else if (vinfo == .@"struct" and vinfo.@"struct".layout == .@"extern") {
         // An extern struct has no implicit gaps (proven at the serialization boundary),
         // but a field may still need scrubbing.
-        inline for (vinfo.@"struct".fields) |field| {
-            const FType = field.type;
+        inline for (vinfo.@"struct".field_names, vinfo.@"struct".field_types) |field_name, field_type| {
+            const FType = field_type;
             if (@sizeOf(FType) > 0 and comptime !serde_validation.isFullyDefined(FType)) {
-                zeroValuePadding(FType, ptr + @offsetOf(V, field.name));
+                zeroValuePadding(FType, ptr + @offsetOf(V, field_name));
             }
         }
     } else if (vinfo == .int or vinfo == .@"enum" or
@@ -562,9 +562,9 @@ fn writeLeafwiseForTest(comptime V: type, ptr: [*]u8, value: V) void {
                 @as(*align(1) V, @ptrCast(ptr)).* = value;
                 return;
             }
-            inline for (st.fields) |f| {
-                if (@sizeOf(f.type) > 0) {
-                    writeLeafwiseForTest(f.type, ptr + @offsetOf(V, f.name), @field(value, f.name));
+            inline for (st.field_names, st.field_types) |f_name, f_type| {
+                if (@sizeOf(f_type) > 0) {
+                    writeLeafwiseForTest(f_type, ptr + @offsetOf(V, f_name), @field(value, f_name));
                 }
             }
         },
@@ -595,6 +595,7 @@ fn writeLeafwiseForTest(comptime V: type, ptr: [*]u8, value: V) void {
         .frame,
         .@"anyframe",
         .enum_literal,
+        .spirv,
         => @as(*align(1) V, @ptrCast(ptr)).* = value,
     }
 }
@@ -809,7 +810,7 @@ test "byteDetermination: implicit padding in a fixed layout is not silently acce
         try std.testing.expect(!serde_validation.isFullyDefined(Short));
 
         const Filled = extern union {
-            small: extern struct { v: u8, _reserved: [@sizeOf(u64) - 1]u8 = .{0} ** (@sizeOf(u64) - 1) },
+            small: extern struct { v: u8, _reserved: [@sizeOf(u64) - 1]u8 = @splat(0) },
             large: u64,
         };
         comptime std.debug.assert(@sizeOf(Filled) == @sizeOf(Short));
